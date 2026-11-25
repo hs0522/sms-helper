@@ -1950,8 +1950,14 @@
     syncLine('연결됨 · Gist ' + shortId(store.sync.gistId) + ' · 마지막 동기화 ' + timeLabel(store.sync.lastSync));
   }
 
+  // 기기에서 한 번도 안 바뀐 저장값(updatedAt 0)도 처음 올릴 때 시각을 붙여 둔다
+  function stampedSnapshot() {
+    if (!store.sync.updatedAt) store.sync.updatedAt = Date.now();
+    return SYNC.snapshot(store);
+  }
+
   function pushSnapshot() {
-    return SYNC.updateGist(store.sync.token, store.sync.gistId, SYNC.snapshot(store)).then(function () {
+    return SYNC.updateGist(store.sync.token, store.sync.gistId, stampedSnapshot()).then(function () {
       markSynced();
       return true;
     });
@@ -2016,7 +2022,7 @@
     syncLine('GitHub에 연결하는 중…');
     var job;
     if (!gistId) {
-      job = SYNC.createGist(token, SYNC.snapshot(store)).then(function (data) {
+      job = SYNC.createGist(token, stampedSnapshot()).then(function (data) {
         if (!data || !data.id) throw new Error('비공개 Gist를 만들지 못했어요');
         store.sync.gistId = data.id;
         $('#set-gh-gist').value = data.id;

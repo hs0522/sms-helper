@@ -3267,6 +3267,7 @@ class AppTest(unittest.TestCase):
         self.assertIs(posts[0]['body']['public'], False, '비공개(Secret) Gist로 만든다')
         content = json.loads(posts[0]['body']['files']['smshelper-backup.json']['content'])
         self.assertEqual(content['custom'][0]['title'], '동기화 문구')
+        self.assertGreater(content['updatedAt'], 0, '처음 올릴 때도 시각을 붙여 다른 기기가 받아 갈 수 있게')
         self.assertNotIn('ghp_testtoken1234', posts[0]['body']['files']['smshelper-backup.json']['content'],
                          '토큰은 Gist에 올라가지 않는다')
 
