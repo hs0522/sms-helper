@@ -1487,7 +1487,7 @@ class AppTest(unittest.TestCase):
         self.wait(120)
 
     def test_time_range_helper(self):
-        # 방문 희망 시간 — 날짜 + 시작 시각 ~ 끝 시각(비우면 한 시각) + 추가
+        # 방문 희망 시간 — 날짜칸 + 시작~종료 + 초기화·저장, 저장하면 미리보기 본문에 바로 한 줄
         self.pick('t3')
         self.page.click('#fields [data-seg="ver"][data-value="detail"]')
         self.wait(120)
@@ -1500,41 +1500,47 @@ class AppTest(unittest.TestCase):
         self.page.click('#calpop [data-cal-day="5"]')
         self.wait(150)
 
-        # ① 끝 시각을 비워 두고 추가 → 한 시각(11월 26일 (목) 오후 2:15 꼴)
+        # ① 끝 시각을 비워 두고 저장 → 한 시각(12월 5일 (토) 오후 2:15 꼴)
         self.range_time('start', 'pm', '2', '15')
-        self.page.click('#fields [data-range-add="times"]')
+        self.page.click('#fields [data-range-save="times"]')
         self.wait(150)
         body = self.text()
         self.assertIn('* 12월 5일 (토) 오후 2:15', body)
-        ta = self.page.query_selector('#fields [data-field="times"]')
-        self.assertEqual(ta.input_value(), '12월 5일 (토) 오후 2:15')
-        self.assertNotIn('~', ta.input_value())
+        self.assertNotIn('* 12월 5일 (토) 오후 2:15 ~', body)
 
-        # ② 시작·끝을 모두 넣고 추가 → 범위
+        # ② 시작·끝을 모두 넣고 저장 → 범위가 다음 줄에 붙는다
         self.range_time('end', 'pm', '3', '30')
-        self.page.click('#fields [data-range-add="times"]')
+        self.page.click('#fields [data-range-save="times"]')
         self.wait(150)
         body = self.text()
-        self.assertIn('* 12월 5일 (토) 오후 2:15 ~ 오후 3:30', body)
-        lines = self.page.query_selector('#fields [data-field="times"]').input_value().split('\n')
-        self.assertEqual(lines, ['12월 5일 (토) 오후 2:15', '12월 5일 (토) 오후 2:15 ~ 오후 3:30'])
+        self.assertIn('* 12월 5일 (토) 오후 2:15\n* 12월 5일 (토) 오후 2:15 ~ 오후 3:30', body)
         self.assertNotIn('마포래미안푸르지오', body)
 
-        # ③ 시각을 비우고 날짜만 추가 → 날짜 한 줄
+        # ③ 시각을 비우고 저장 → 날짜 한 줄
         self.range_time('start', None, '', None)
         self.range_time('end', None, '', None)
-        self.page.click('#fields [data-range-add="times"]')
+        self.page.click('#fields [data-range-save="times"]')
         self.wait(150)
-        self.assertIn('* 12월 5일 (토)', self.text())
+        self.assertIn('* 12월 5일 (토)\n', self.text())
 
-        # 날짜 없이 추가하면 안내하고 아무것도 넣지 않는다
-        self.page.click('#fields .date-clear')
+        # ④ 날짜 없이 저장하면 안내하고 본문은 그대로
+        self.page.click('#fields [data-clear-date="times__range"]')
         self.wait(120)
-        before = self.page.query_selector('#fields [data-field="times"]').input_value()
-        self.page.click('#fields [data-range-add="times"]')
+        before = self.text()
+        self.page.click('#fields [data-range-save="times"]')
         self.wait(150)
         self.assertIn('날짜를 먼저 골라 주세요', self.page.inner_text('#toast'))
-        self.assertEqual(self.page.query_selector('#fields [data-field="times"]').input_value(), before)
+        self.assertEqual(self.text(), before)
+
+        # ⑤ 초기화 → 날짜·시각 입력과 저장해 둔 시간대가 함께 비워진다
+        self.page.click('#fields [data-range-reset="times"]')
+        self.wait(150)
+        self.assertEqual(self.page.inner_text('#fields [data-time-chip="start"]').strip(), '시작 시각')
+        self.assertEqual(self.page.inner_text('#fields [data-time-chip="end"]').strip(), '종료 시각')
+        self.assertIn('날짜', self.page.inner_text('#fields [data-date="times__range"]'))
+        body = self.text()
+        self.assertIn('(방문 희망 시간)', body)
+        self.assertNotIn('12월 5일', body)
 
     def test_visit_line_formatter(self):
         # 문자에 들어가는 한 줄 표기 — 끝 시각이 없으면 한 시각만
@@ -1679,38 +1685,44 @@ class AppTest(unittest.TestCase):
         self.page.click('#calpop [data-cal-close]')
         self.assertFalse(self.page.is_visible('#calpop'))
 
-    def test_visit_time_row_one_line(self):
-        # 방문 희망 시간 — 날짜 아래 한 줄에 시작 ~ 종료 + 추가
+    def test_visit_time_box_layout(self):
+        # 방문 희망 시간 — 날짜칸·시작~종료 반반·우측 하단 초기화·저장 세 줄
         self.pick('t3')
         self.page.click('#fields [data-seg="ver"][data-value="detail"]')
         self.wait(200)
         geo = self.js("""() => {
           const q = s => document.querySelector(s).getBoundingClientRect();
+          const box = q('#fields .range-add'), d = q('#fields [data-date="times__range"]');
           const a = q('#fields [data-time-chip="start"]'), t = q('#fields .range-tilde');
-          const b = q('#fields [data-time-chip="end"]'), c = q('#fields [data-range-add]');
-          const box = q('#fields .range-add');
-          return { start: {l: a.left, t: a.top, r: a.right, w: a.width, h: a.height, b: a.bottom},
-                   tilde: {l: t.left, t: t.top, r: t.right, c: (t.top + t.bottom) / 2,
-                           e: (t.top + t.bottom) / 2},
-                   end: {l: b.left, t: b.top, r: b.right, w: b.width, h: b.height},
-                   add: {l: c.left, t: c.top, r: c.right, w: c.width},
-                   box: {l: box.left, r: box.right, w: box.width, h: box.height} };
+          const b = q('#fields [data-time-chip="end"]');
+          const r = q('#fields [data-range-reset]'), s = q('#fields [data-range-save]');
+          const o = e => ({l: e.left, r: e.right, t: e.top, b: e.bottom, w: e.width, h: e.height});
+          return {box: o(box), date: o(d), start: o(a), end: o(b), reset: o(r), save: o(s),
+                  tilde: {l: t.left, r: t.right, c: (t.top + t.bottom) / 2}};
         }""")
-        # 한 줄 — 시작·종료·추가는 윗변 Y가 같고, '~'는 세로 가운데가 같다 (줄바꿈 없음)
-        for key in ('end', 'add'):
-            self.assertAlmostEqual(geo[key]['t'], geo['start']['t'], delta=1.0, msg=f'{key}가 같은 줄에 없다')
-        self.assertAlmostEqual(geo['tilde']['c'], (geo['start']['t'] + geo['start']['b']) / 2, delta=2.0,
-                               msg="'~'가 같은 줄 가운데에 없다")
-        # 왼쪽→오른쪽 차례: 시작 · ~ · 종료 · 추가
+        # 1줄 — 날짜 칸이 박스 폭을 거의 다 쓴다 (양옆 여백·테두리만 남는다)
+        box = geo['box']
+        self.assertGreater(geo['date']['w'], box['w'] * 0.9, '날짜 칸이 전체 폭')
+        self.assertLessEqual(geo['date']['b'], geo['start']['t'] + 0.5, '날짜가 시각 줄 위')
+        # 2줄 — 시작 · ~ · 종료가 한 줄, 시작·종료는 반반
+        self.assertAlmostEqual(geo['end']['t'], geo['start']['t'], delta=1.0)
         self.assertLess(geo['start']['r'], geo['tilde']['l'])
         self.assertLess(geo['tilde']['r'], geo['end']['l'])
-        self.assertLess(geo['end']['r'], geo['add']['l'])
-        # 시작·종료는 반반
         self.assertAlmostEqual(geo['start']['w'], geo['end']['w'], delta=1.0, msg='시작·종료 칸이 반반')
-        self.assertGreater(geo['start']['w'], geo['box']['w'] * 0.34)
-        # 줄 전체가 박스 안에 들어간다
-        self.assertLessEqual(geo['add']['r'], geo['box']['r'] + 0.5)
-        self.assertLessEqual(geo['box']['h'], 38 * 3 + 20, '날짜 줄 + 시각 줄만큼만')
+        self.assertGreater(geo['start']['w'], box['w'] * 0.42, '추가 버튼 없이 두 칸이 폭을 나눠 쓴다')
+        self.assertAlmostEqual(geo['tilde']['c'], (geo['start']['t'] + geo['start']['b']) / 2, delta=2.0)
+        self.assertLessEqual(geo['end']['r'], box['r'] + 0.5, '시각 줄이 박스 안에')
+        # 3줄 — 아래쪽 오른쪽에 초기화 · 저장, 다른 버튼 없음
+        self.assertGreaterEqual(geo['reset']['t'], geo['start']['b'] - 0.5, '버튼은 시각 줄 아래')
+        self.assertAlmostEqual(geo['reset']['t'], geo['save']['t'], delta=1.0)
+        self.assertLess(geo['reset']['r'], geo['save']['l'], '초기화가 저장 왼쪽')
+        self.assertGreater(geo['reset']['l'], box['l'] + box['w'] / 2, '오른쪽에 붙어 있다')
+        self.assertLessEqual(geo['save']['r'], box['r'] + 0.5)
+        self.assertEqual(self.js("""() => document.querySelectorAll(
+            '#fields [data-range-add], #fields .range-times .add-btn, #fields .range-add textarea').length"""), 0)
+        self.assertEqual(self.js("""() => [...document.querySelectorAll('#fields .range-foot button')]
+            .map(b => b.textContent.trim())"""), ['초기화', '저장'])
+        self.assertLess(geo['box']['h'], 160, '날짜 · 시각 · 버튼 세 줄 높이만큼만')
 
         # 시작 칸을 누르면 그 칸 폭 그대로 위아래로 펼쳐진 휠 (큰 모달 아님)
         self.page.click('#fields [data-time-chip="start"]')
@@ -1730,6 +1742,10 @@ class AppTest(unittest.TestCase):
         self.assertEqual(info['cols'], 3)
         self.assertAlmostEqual(info['h'], info['itemH'] * 3, delta=1.5)
         self.assertIn('mandatory', info['snap'])
+        # 휠 위에 '시작 시각 · 종료 시각' 제목 줄이 없다 — 바로 휠부터
+        self.assertEqual(self.js("() => document.querySelectorAll('#wheelpop .wheelpop-head').length"), 0)
+        for word in ('시작 시각', '종료 시각'):
+            self.assertNotIn(word, self.page.inner_text('#wheelpop'))
 
         # 고르는 즉시 칸 글자가 바뀐다 (팝업은 열린 채)
         self.pick_time('#wheelpop', 'pm', '2', '15')
@@ -1767,6 +1783,30 @@ class AppTest(unittest.TestCase):
         self.wait(200)
         self.assertFalse(self.page.is_visible('#wheelpop'))
 
+    def test_times_box_has_no_example_or_tags(self):
+        # 방문 희망 시간 — 예시 textarea·도움말·시간대 태그 목록 없이 날짜칸·시간칸·초기화/저장뿐
+        self.pick('t3')
+        self.page.click('#fields [data-seg="ver"][data-value="detail"]')
+        self.wait(150)
+        box = self.js("""() => {
+          const b = document.querySelector('#fields .time-box');
+          return {text: b.innerText,
+                  areas: document.querySelectorAll('#fields textarea').length,
+                  phs: [...document.querySelectorAll('#fields textarea')].map(t => t.placeholder),
+                  chips: b.querySelectorAll('.time-chip').length,
+                  h: +b.getBoundingClientRect().height.toFixed(1)};
+        }""")
+        self.assertEqual(box['areas'], 0, '예시 textarea 가 남아 있으면 안 된다')
+        self.assertEqual(box['phs'], [])
+        self.assertNotIn('예:', box['text'])
+        self.assertNotIn('한 줄에 시간대 하나', box['text'])
+        self.assertNotIn('추가', box['text'])
+        self.assertEqual(box['chips'], 2, '시작 · 종료 두 칸만')
+        self.assertLess(box['h'], 160, '빈 박스나 태그 목록 없이 세 줄만')
+        # 양식 라벨은 그대로 남고, 미리보기에는 아직 넣은 시간대가 없다
+        self.assertIn('방문 희망 시간', self.page.inner_text('#fields'))
+        self.assertIn('(방문 희망 시간)', self.text())
+
     def test_t3_t4_time_box_same(self):
         # 소유자 집보기 문의(t3) · 공동중개 집보기 문의(t4) — 같은 날짜 + 휠 시간 박스
         BOX_JS = """() => {
@@ -1788,13 +1828,15 @@ class AppTest(unittest.TestCase):
                     self.wait(180)
                 seen[(tid, ver)] = self.js(BOX_JS)
                 if (tid, ver) == ('t3', 'detail'):
-                    # 방문 희망 시간도 같은 박스 안에 날짜 칸 + 시각 한 줄
+                    # 방문 희망 시간도 같은 박스 안에 날짜 칸 + 시각 한 줄 + 초기화/저장
                     self.assertIsNotNone(self.page.query_selector('#fields .time-box [data-time-chip="start"]'))
                     self.assertIsNotNone(self.page.query_selector('#fields .time-box [data-date="times__range"]'))
                     chips = self.js("""() => [...document.querySelectorAll('#fields .time-chip')]
                         .map(c => +c.getBoundingClientRect().height.toFixed(1))""")
                     self.assertEqual(len(chips), 2)
                     self.assertAlmostEqual(chips[0], seen[(tid, ver)]['dh'], delta=1.0, msg='시각 칸 높이 = 날짜 칸 높이')
+                    self.assertEqual(self.js("""() => [...document.querySelectorAll('#fields .range-foot button')]
+                        .map(b => b.textContent.trim())"""), ['초기화', '저장'])
                 else:
                     self.assertIsNotNone(self.page.query_selector('#fields .time-box .date-btn'))
         base = seen[('t4', None)]
@@ -2564,10 +2606,11 @@ class AppTest(unittest.TestCase):
         self.wait(100)
         self.assertIn('월세 손님이 있어서', self.text())
 
-        # 상세 버전으로 바꾸면 후보 시간대 입력이 나온다
+        # 상세 버전으로 바꾸면 날짜칸·시간칸·초기화/저장만 있는 방문 희망 시간이 나온다
         self.page.click('#fields [data-seg="ver"][data-value="detail"]')
         self.wait(120)
-        self.assertIsNotNone(self.page.query_selector('#fields [data-field="times"]'))
+        self.assertIsNotNone(self.page.query_selector('#fields .time-box [data-date="times__range"]'))
+        self.assertEqual(self.js("() => document.querySelectorAll('#fields .time-box textarea').length"), 0)
         body = self.text()
         self.assertIn('집을 보시고자 하는 월세 손님이 계셔서', body)
         self.assertIn('* (방문 희망 시간)', body)
@@ -4317,25 +4360,25 @@ class AppTest(unittest.TestCase):
                     ctx.close()
 
     # ============================================================== 버전 · 배포 파일
-    def test_24_version_bumped_to_1_1_5(self):
+    def test_24_version_bumped_to_1_1_6(self):
         # 서비스 워커 · 화면 캐시 주소 · 안드로이드 빌드 번호가 모두 같은 버전을 가리킨다
         with open(os.path.join(ROOT, 'sw.js'), encoding='utf-8') as f:
             sw = f.read()
         m = re.search(r"var VERSION = '(v\d+\.\d+\.\d+)';", sw)
         self.assertIsNotNone(m, 'sw.js에 VERSION이 있다')
         ver = m.group(1)
-        self.assertEqual(ver, 'v1.1.5')
+        self.assertEqual(ver, 'v1.1.6')
         self.assertIn("'js/sync.js'", sw)
         # 새 파일(동호수 타입표)도 오프라인 캐시에 들어간다
         self.assertIn("'js/maraepu-types.js'", sw)
         with open(os.path.join(ROOT, 'index.html'), encoding='utf-8') as f:
             html = f.read()
         for f_ in ('icons', 'maraepu-types', 'core', 'templates', 'sync', 'app'):
-            self.assertIn(f'js/{f_}.js?v=1.1.5', html)
-        self.assertIn('styles.css?v=1.1.5', html)
+            self.assertIn(f'js/{f_}.js?v=1.1.6', html)
+        self.assertIn('styles.css?v=1.1.6', html)
         gradle = open(os.path.join(ROOT, 'android/app/build.gradle'), encoding='utf-8').read()
-        self.assertIn('versionCode 10', gradle)
-        self.assertIn("versionName '1.1.5'", gradle)
+        self.assertIn('versionCode 11', gradle)
+        self.assertIn("versionName '1.1.6'", gradle)
 
 
 if __name__ == '__main__':

@@ -554,7 +554,7 @@ input, textarea, select { font-family: inherit; letter-spacing: inherit; }
 .form-hint b { color: var(--label); }
 
 .range-add {
-  /* 날짜는 윗줄에 폭 그대로, 아래 한 줄에 [시작] ~ [종료] [추가] */
+  /* 날짜는 윗줄에 폭 그대로, 가운데 줄에 [시작] ~ [종료] 반반, 마지막 줄 오른쪽에 초기화 · 저장 */
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -574,7 +574,7 @@ input, textarea, select { font-family: inherit; letter-spacing: inherit; }
 }
 .range-add.time-box { margin-top: 8px; }
 .time-box .date-btn { background: #fff; }
-/* 시각 한 줄 — [시작 시각] ~ [종료 시각] [추가]. 좁은 폰(390px)에서도 한 줄에 들어간다 */
+/* 시각 한 줄 — [시작 시각] ~ [종료 시각] 이 박스 폭을 반씩 나눠 쓴다 */
 .range-times {
   display: flex;
   align-items: center;
@@ -582,7 +582,10 @@ input, textarea, select { font-family: inherit; letter-spacing: inherit; }
   flex-wrap: nowrap;
 }
 .range-who { font-size: 10.5px; font-weight: 600; color: var(--muted); letter-spacing: -0.01em; }
-.range-times .add-btn { margin: 0; height: 38px; padding: 0 12px; flex: 0 0 auto; }
+/* 마지막 줄 — 오른쪽 아래에 초기화 · 저장 */
+.range-foot { display: flex; justify-content: flex-end; gap: 6px; }
+.range-foot .ghost,
+.range-foot .primary { padding: 6px 13px; font-size: 11.5px; border-radius: 9px; }
 .range-tilde { flex: 0 0 auto; font-size: 12px; color: var(--muted2); text-align: center; }
 /* 시작·종료 시각 칸 — 누르면 3열 휠 피커가 열린다 */
 .time-chip {
@@ -907,20 +910,10 @@ select.inp,
   from { opacity: 0; transform: scaleY(.55); }
   to { opacity: 1; transform: scaleY(1); }
 }
-.wheelpop-head {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--label);
-  padding: 0 1px 7px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 .wheelpop .wheel { background: #FCFCFE; }
 .wheelpop-foot { display: flex; justify-content: flex-end; gap: 5px; margin-top: 7px; }
 .wheelpop-foot .ghost { padding: 5px 8px; font-size: 10.5px; }
 .wheelpop.is-narrow .wheelpop-foot .ghost { padding: 5px 6px; font-size: 10px; }
-.wheelpop.is-narrow .wheelpop-head { font-size: 10.5px; }
 
 /* ---------------- 토스트 ---------------- */
 .toast {

@@ -1067,13 +1067,8 @@
       }
 
       case 'times': {
-        row = fieldRow(f.label, { hintText: '한 줄에 시간대 하나' });
-        var ta2 = el('textarea', 'inp inp-area');
-        ta2.rows = 2;
-        ta2.placeholder = '예: 11월 28일 (토) 오전 10:00 ~ 오후 12:00';
-        ta2.dataset.field = f.id;
-        ta2.value = data[f.id] == null ? '' : data[f.id];
-        row.appendChild(ta2);
+        // 날짜칸 · 시작~종료 · 초기화/저장 만 — 저장한 시간대는 미리보기 본문에 바로 들어간다
+        row = fieldRow(f.label);
         row.appendChild(renderRangeAdd(t, f));
         return row;
       }
@@ -1433,8 +1428,8 @@
     return rs;
   }
 
-  // 방문 희망 시간 — 날짜 아래 한 줄 [시작 시각] ~ [종료 시각] [추가]
-  //   시작만 고르면 한 시각, 둘 다 고르면 범위. 시각 칸을 누르면 3열 휠 피커가 열린다.
+  // 방문 희망 시간 — 날짜칸 / 시작 ~ 종료(반반) / 초기화 · 저장 세 줄
+  //   시작만 고르면 한 시각, 둘 다 고르면 범위. 저장하면 미리보기 본문에 한 줄로 들어간다.
   function renderRangeAdd(t, f) {
     var rs = rangeDefaults(rangeState[t.id] = rangeState[t.id] || {});
     var box = el('div', 'range-add time-box');
@@ -1445,11 +1440,18 @@
     row.appendChild(timeChip('start', rs));
     row.appendChild(el('span', 'range-tilde', '~'));
     row.appendChild(timeChip('end', rs));
-    var add = el('button', 'ghost add-btn', '추가');
-    add.type = 'button';
-    add.dataset.rangeAdd = f.id;
-    row.appendChild(add);
     box.appendChild(row);
+
+    var foot = el('div', 'range-foot');
+    var reset = el('button', 'ghost', '초기화');
+    reset.type = 'button';
+    reset.dataset.rangeReset = f.id;
+    var saveBtn = el('button', 'primary', '저장');
+    saveBtn.type = 'button';
+    saveBtn.dataset.rangeSave = f.id;
+    foot.appendChild(reset);
+    foot.appendChild(saveBtn);
+    box.appendChild(foot);
     return box;
   }
 
@@ -1733,8 +1735,8 @@
     // 누른 칸 폭 그대로 — 크게 뜨지 않고 그 칸이 위아래로 펼쳐지는 느낌
     pop.style.width = Math.round(box.width) + 'px';
     pop.classList.toggle('is-narrow', box.width < 168);
+    // 제목 줄 없이 바로 휠부터 — 더 짧고 깔끔하게
     pop.innerHTML = '';
-    pop.appendChild(el('div', 'wheelpop-head', which === 'start' ? '시작 시각' : '종료 시각'));
     pop.appendChild(wheelPicker({
       key: 'range-' + which,
       row: 36,
@@ -2697,8 +2699,8 @@
         toast('계약금 10% · 중도금 25%를 채웠어요 · 잔금은 자동 계산');
         return;
       }
-      var rangeAdd = e.target.closest('[data-range-add]');
-      if (rangeAdd) {
+      var rangeSave = e.target.closest('[data-range-save]');
+      if (rangeSave) {
         var t7 = tplById(store.current);
         var d7 = dataOf(t7);
         var rs = rangeState[t7.id] || {};
@@ -2707,8 +2709,21 @@
         var s24 = toHour24(rs.startP, rs.startH);
         var e24 = toHour24(rs.endP, rs.endH);
         var line = C.formatVisitLine(rs.date, s24, rs.startM, e24, rs.endM);
-        var cur = String(d7[rangeAdd.dataset.rangeAdd] || '');
-        d7[rangeAdd.dataset.rangeAdd] = (cur ? cur.replace(/\s+$/, '') + '\n' : '') + line;
+        var cur = String(d7[rangeSave.dataset.rangeSave] || '');
+        d7[rangeSave.dataset.rangeSave] = (cur ? cur.replace(/\s+$/, '') + '\n' : '') + line;
+        save();
+        renderForm();
+        renderPreview();
+        toast('방문 희망 시간에 넣었어요');
+        return;
+      }
+      // 방문 희망 시간 — 입력(날짜·시각)과 저장해 둔 시간대를 함께 비운다
+      var rangeReset = e.target.closest('[data-range-reset]');
+      if (rangeReset) {
+        var t8 = tplById(store.current);
+        var d8 = dataOf(t8);
+        rangeState[t8.id] = rangeDefaults({});
+        d8[rangeReset.dataset.rangeReset] = '';
         save();
         renderForm();
         renderPreview();
