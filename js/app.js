@@ -1229,40 +1229,87 @@
     return moneyField({ prop: listId, idx: idx, money: key, value: value, small: true });
   }
 
-  function hourOptions(sel) {
+  // 시각은 앱 어디서나 5분 단위 — 00분, 05분, …, 55분
+  var MIN_STEP = 5;
+
+  function minOptions() {
     var out = [];
-    for (var h = 0; h < 24; h++) {
-      for (var m = 0; m < 60; m += 30) {
-        out.push({ v: h + ':' + m, l: C.formatTime(h, m) });
-      }
+    for (var m = 0; m < 60; m += MIN_STEP) {
+      out.push({ v: String(m), l: (m < 10 ? '0' + m : String(m)) + '분' });
     }
     return out;
   }
 
+  function hourOptions12() {
+    var out = [];
+    for (var h = 1; h <= 12; h++) out.push({ v: String(h), l: h + '시' });
+    return out;
+  }
+
+  function rangeSelect(kind, which, options, selected, placeholder) {
+    var sel = el('select', 'sel');
+    sel.dataset.rangePart = kind;
+    sel.dataset.rangeTime = which;
+    if (placeholder) {
+      var ph = el('option', null, placeholder);
+      ph.value = '';
+      ph.selected = selected == null || selected === '';
+      sel.appendChild(ph);
+    }
+    options.forEach(function (o) {
+      var op = el('option', null, o.l);
+      op.value = o.v;
+      if (String(selected) === o.v) op.selected = true;
+      sel.appendChild(op);
+    });
+    return sel;
+  }
+
+  // 시각 한 벌 — [오전/오후][시][분] (분은 5분 단위)
+  function rangeTimeSelects(which, rs) {
+    return [
+      rangeSelect('P', which, [{ v: 'am', l: '오전' }, { v: 'pm', l: '오후' }], rs[which + 'P'] || 'am'),
+      rangeSelect('H', which, hourOptions12(), rs[which + 'H'], '시'),
+      rangeSelect('M', which, minOptions(), rs[which + 'M'] || '0')
+    ];
+  }
+
+  // 방문 희망 시간 — 날짜 + 시작 시각 ~ 끝 시각(비워 두면 한 시각) + 추가
   function renderRangeAdd(t, f) {
-    var rs = rangeState[t.id] = rangeState[t.id] || { date: null, start: '10:0', end: '12:0' };
+    var rs = rangeState[t.id] = rangeState[t.id] || {};
+    if (rs.date === undefined) rs.date = null;
+    if (rs.startP === undefined) rs.startP = 'am';
+    if (rs.startH === undefined) rs.startH = '';
+    if (rs.startM === undefined) rs.startM = '0';
+    if (rs.endP === undefined) rs.endP = 'am';
+    if (rs.endH === undefined) rs.endH = '';
+    if (rs.endM === undefined) rs.endM = '0';
+
     var box = el('div', 'range-add');
     var db = dateTrigger(f.id + '__range', rs.date ? { date: rs.date } : null, '날짜', 'is-compact', { dateOnly: true });
     box.appendChild(db);
 
-    ['start', 'end'].forEach(function (k, i) {
-      if (i === 1) box.appendChild(el('span', 'range-tilde', '~'));
-      var sel = el('select', 'sel');
-      sel.dataset.rangeTime = k;
-      hourOptions().forEach(function (o) {
-        var op = el('option', null, o.l);
-        op.value = o.v;
-        if (rs[k] === o.v) op.selected = true;
-        sel.appendChild(op);
-      });
-      box.appendChild(sel);
-    });
+    // 1줄: 시작 [오전/오후][시][분] ~  ·  2줄: 종료 [오전/오후][시][분] — 종료를 비우면 한 시각
+    var row = el('div', 'range-times');
+    row.appendChild(el('span', 'range-who', '시작'));
+    rangeTimeSelects('start', rs).forEach(function (s) { row.appendChild(s); });
+    row.appendChild(el('span', 'range-tilde', '~'));
+    row.appendChild(el('span', 'range-who', '종료'));
+    rangeTimeSelects('end', rs).forEach(function (s) { row.appendChild(s); });
+    box.appendChild(row);
 
     var add = el('button', 'ghost add-btn', '추가');
     add.type = 'button';
     add.dataset.rangeAdd = f.id;
     box.appendChild(add);
     return box;
+  }
+
+  // 오전/오후 + 1~12시 → 24시간 (비어 있으면 null)
+  function toHour24(period, hour12) {
+    if (hour12 == null || hour12 === '') return null;
+    var h = Number(hour12) % 12;
+    return h + (period === 'pm' ? 12 : 0);
   }
 
   /* ---------------- 중개보수 계산기 ---------------- */
@@ -1624,10 +1671,11 @@
 
       var msel = el('select', 'sel is-time');
       msel.dataset.calMin = '1';
-      ['0', '10', '20', '30', '40', '50'].forEach(function (mm) {
-        var op2 = el('option', null, mm === '0' ? '' : mm + '분');
-        op2.value = mm;
-        if (String(cur.min || 0) === mm) op2.selected = true;
+      // 분은 앱 어디서나 5분 단위 — 00분, 05분, …, 55분
+      minOptions().forEach(function (o) {
+        var op2 = el('option', null, o.l);
+        op2.value = o.v;
+        if (String(cur.min || 0) === o.v) op2.selected = true;
         msel.appendChild(op2);
       });
       time.appendChild(msel);
@@ -2292,9 +2340,9 @@
         syncCalc();
         validateInline();
         save();
-      } else if (t.dataset.rangeTime) {
+      } else if (t.dataset.rangePart) {
         var rs = rangeState[store.current] = rangeState[store.current] || {};
-        rs[t.dataset.rangeTime] = t.value;
+        rs[t.dataset.rangeTime + t.dataset.rangePart] = t.value;
       }
     });
 
@@ -2406,7 +2454,14 @@
       if (clr) {
         e.stopPropagation();
         var t5 = tplById(store.current);
-        dataOf(t5)[clr.dataset.clearDate] = { date: '', hour: null, min: 0 };
+        var cid5 = clr.dataset.clearDate;
+        if (cid5.indexOf('__range') !== -1) {
+          // 방문 희망 시간의 날짜 칸은 임시값만 지운다
+          var rs5 = rangeState[t5.id] = rangeState[t5.id] || {};
+          rs5.date = null;
+        } else {
+          dataOf(t5)[cid5] = { date: '', hour: null, min: 0 };
+        }
         save();
         renderForm();
         renderPreview();
@@ -2454,9 +2509,10 @@
         var d7 = dataOf(t7);
         var rs = rangeState[t7.id] || {};
         if (!rs.date) { toast('날짜를 먼저 골라 주세요'); return; }
-        var s = String(rs.start || '10:0').split(':');
-        var en = String(rs.end || '12:0').split(':');
-        var line = C.formatDateTimeRange({ date: rs.date, hour: Number(s[0]), min: Number(s[1]) }, { hour: Number(en[0]), min: Number(en[1]) });
+        if (!rs.startH && rs.endH) { toast('시작 시각을 먼저 골라 주세요'); return; }
+        var s24 = toHour24(rs.startP, rs.startH);
+        var e24 = toHour24(rs.endP, rs.endH);
+        var line = C.formatVisitLine(rs.date, s24, rs.startM, e24, rs.endM);
         var cur = String(d7[rangeAdd.dataset.rangeAdd] || '');
         d7[rangeAdd.dataset.rangeAdd] = (cur ? cur.replace(/\s+$/, '') + '\n' : '') + line;
         save();

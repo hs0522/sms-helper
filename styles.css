@@ -554,14 +554,24 @@ input, textarea, select { font-family: inherit; letter-spacing: inherit; }
 .form-hint b { color: var(--label); }
 
 .range-add {
-  /* 날짜는 윗줄에 폭 그대로, 아래줄에 시각 두 칸과 '추가' */
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
-  align-items: center;
+  /* 날짜는 윗줄에 폭 그대로, 아래줄에 [시작] ~ [끝] 시각, 맨 아래 '추가' */
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
   gap: 6px;
   margin-top: 8px;
 }
-.range-add .date-btn { grid-column: 1 / -1; }
+.range-add .date-btn { width: 100%; }
+/* 시각 줄 — 1줄: [오전/오후][시][분] ~ , 2줄: [오전/오후][시][분]
+   좁은 폰에서도 넘치지 않고, '~'는 시작 시각 바로 뒤에 붙는다 */
+.range-times {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px 5px;
+}
+.range-who { font-size: 10.5px; font-weight: 600; color: var(--muted); letter-spacing: -0.01em; }
+.range-times .sel { min-width: 0; padding: 8px 4px; text-align: center; text-align-last: center; }
 .range-add .sel { min-width: 0; }
 .range-tilde { font-size: 12px; color: var(--muted2); text-align: center; }
 .sel {
@@ -712,6 +722,24 @@ input, textarea, select { font-family: inherit; letter-spacing: inherit; }
 .modal-body { padding: 0 18px 6px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
 .modal-body .field-label { margin-top: 10px; }
 .modal-body .inp { font-size: 13px; }
+/* 모달 안 입력칸은 절대 눌려서 찌그러지지 않게 — 자리가 모자라면 본문이 스크롤된다.
+   (아이폰 사파리에서 flex가 칸을 눌러 select·입력칸 글자가 위아래로 잘리던 원인) */
+.modal-body > * { flex: 0 0 auto; }
+
+/* 셀렉트 — 고정 높이·패딩·16px 글씨가 서로 부딪쳐 글자가 위아래로 잘리지 않게.
+   높이는 글자에 맞춰 늘어나고(height:auto), 최소 44px(손가락으로 누르기 좋은 높이)를 지킨다. */
+select.inp,
+.modal-card select,
+.field select,
+.fields select {
+  height: auto;
+  min-height: 44px;
+  padding: 10px 36px 10px 14px;
+  line-height: 1.4;
+  box-sizing: border-box;
+}
+/* 작은 시간·종류 셀렉트(.sel)도 높이가 글자에 맞춰 늘어나게만 */
+.sel { height: auto; line-height: 1.4; box-sizing: border-box; }
 .modal-tip { font-size: 11px; color: var(--muted); margin: 8px 0 0; line-height: 1.6; }
 .modal-tip b { color: var(--label); }
 .modal-foot { padding: 12px 18px 16px; }
@@ -1323,6 +1351,27 @@ input, textarea, select { font-family: inherit; letter-spacing: inherit; }
 .modal-card.is-editor { width: min(520px, 100%); }
 .modal-card.is-editor .modal-body .inp { font-size: 13px; }
 .modal-card.is-editor #te-body { min-height: 210px; line-height: 1.7; }
+
+/* 폰 — 「새 문구 추가 / 문구 편집」이 390×844·390×740 사파리 화면에서도
+   안쪽 세로 스크롤 없이 카테고리 · 제목 · 부제목 · 본문 · 서명 · 취소/저장이 한 화면에 다 보이게 */
+@media (max-width: 600px) {
+  .modal-card.is-editor .modal-head { padding: 14px 18px 2px; }
+  .modal-card.is-editor .modal-head h2 { font-size: 15px; }
+  .modal-card.is-editor .modal-body { gap: 2px; padding: 0 18px 0; }
+  .modal-card.is-editor .modal-body .field-label { margin-top: 7px; font-size: 11.5px; }
+  .modal-card.is-editor .modal-body input.inp { padding: 8px 12px; }
+  .modal-card.is-editor #te-body {
+    min-height: 132px;
+    flex: 1 1 auto;
+    line-height: 1.5;
+    resize: none;
+  }
+  .modal-card.is-editor .check-row { margin-top: 8px; font-size: 12.2px; }
+  .modal-card.is-editor .modal-tip { margin-top: 6px; font-size: 10.5px; line-height: 1.45; }
+  .modal-card.is-editor .modal-foot.is-row { padding: 8px 18px 12px; }
+  .modal-card.is-editor .modal-foot.is-row .primary { padding: 11px 14px; }
+  .modal-card.is-editor .modal-foot.is-row .ghost { padding: 11px 14px; }
+}
 .check-row {
   display: flex;
   align-items: center;

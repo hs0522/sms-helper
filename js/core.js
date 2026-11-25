@@ -500,6 +500,28 @@
     return a + (t ? ' ~ ' + t : '');
   }
 
+  // 방문 희망 시간 한 줄 — "오후 2:15" (분은 5분 단위)
+  function slotClock(hour, min) {
+    if (hour == null || hour === '') return '';
+    var h = Number(hour);
+    var p = h < 12 ? '오전' : '오후';
+    var h12 = h % 12 === 0 ? 12 : h % 12;
+    return p + ' ' + h12 + ':' + pad2(Number(min || 0));
+  }
+
+  // 방문 희망 시간 줄 — "11월 26일 (목) 오후 2:15" / "11월 26일 (목) 오후 2:15 ~ 오후 3:30"
+  // 시각을 비워 두면 날짜만, 끝 시각을 비워 두면 한 시각만 적는다
+  function formatVisitLine(dateStr, startHour, startMin, endHour, endMin) {
+    var d = parseDateValue({ date: dateStr });
+    if (!d) return '';
+    var head = d.m + '월 ' + d.d + '일 (' + weekdayOf(d.y, d.m, d.d) + ')';
+    var s = slotClock(startHour, startMin);
+    var e = slotClock(endHour, endMin);
+    if (!s) return head;
+    if (!e) return head + ' ' + s;
+    return head + ' ' + s + ' ~ ' + e;
+  }
+
   // 문자에 넣는 짧은 표기: "내일 9/23 (화) 오전 9시30분" (오늘·내일·모레는 말로)
   function shortDate(v, now) {
     var d = parseDateValue(v);
@@ -608,6 +630,8 @@
     formatTime: formatTime,
     formatDateTime: formatDateTime,
     formatDateTimeRange: formatDateTimeRange,
+    slotClock: slotClock,
+    formatVisitLine: formatVisitLine,
     compactDateTime: compactDateTime,
     compactDate: compactDate,
     formatDateRange: formatDateRange,

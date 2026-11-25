@@ -196,7 +196,7 @@ def main():
         pg.fill('#te-desc', '입주 축하 · 관리 안내')
         pg.fill('#te-body', '안녕하세요, 고객님.\n이사 잘 마치셨는지요.\n\n새 집에서 불편한 점이 있으시면 언제든 연락 주세요.\n관리사무소 연락처와 주차 등록 안내도 함께 보내드립니다.')
         pg.wait_for_timeout(200)
-        pg.screenshot(path=sh(DOWNLOADS, 'sms-app-custom-editor.png'))
+        pg.screenshot(path=sh(DOWNLOADS, 'sms-app-custom-editor-pc.png'))
         pg.screenshot(path=sh(DOCS, 'shot-custom-editor.png'))
         pg.click('#btn-tpl-editor-save')
         pg.wait_for_timeout(2300)   # '새 문구를 저장했어요' 토스트가 사라진 뒤
@@ -342,6 +342,49 @@ def main():
         mp.wait_for_timeout(200)
         mp.screenshot(path=sh(DOWNLOADS, 'sms-app-cal-popup.png'))
         mp.click('#calpop [data-cal-close]')
+
+        # ---------------- v1.1.4 — 폰의 새 문구 추가(카테고리 잘림·스크롤 없음) ----------------
+        mp.click('#btn-sheet')
+        mp.wait_for_timeout(200)
+        mp.click('#btn-tpl-new-sheet')
+        mp.wait_for_timeout(300)
+        mp.select_option('#te-stage', '1')
+        mp.fill('#te-title', '이사 후 안부')
+        mp.fill('#te-desc', '입주 축하 · 관리 안내')
+        mp.fill('#te-body', '안녕하세요, 고객님.\n이사 잘 마치셨는지요.\n\n새 집에서 불편한 점이 있으시면 언제든 연락 주세요.')
+        mp.wait_for_timeout(250)
+        mp.screenshot(path=sh(DOWNLOADS, 'sms-app-custom-editor.png'))
+        mp.screenshot(path=sh(DOCS, 'shot-custom-editor-mobile.png'))
+        mp.click('#btn-tpl-editor-cancel')
+        mp.wait_for_timeout(200)
+
+        # ---------------- v1.1.4 — 방문 희망 시간 (끝을 비우면 한 시각, 채우면 범위 · 5분 단위) ----------------
+        mp.click('#btn-sheet')
+        mp.wait_for_timeout(200)
+        mp.click('#sheet-list [data-id="t3"]')
+        mp.wait_for_timeout(250)
+        mp.click('#fields [data-seg="ver"][data-value="detail"]')
+        mp.wait_for_timeout(250)
+        mp.click('#fields [data-date="times__range"]')
+        mp.wait_for_timeout(250)
+        mp.click('#calpop [data-cal-day="26"]')
+        mp.wait_for_timeout(250)
+        mp.select_option('#fields [data-range-part="P"][data-range-time="start"]', 'pm')
+        mp.select_option('#fields [data-range-part="H"][data-range-time="start"]', '2')
+        mp.select_option('#fields [data-range-part="M"][data-range-time="start"]', '15')
+        mp.wait_for_timeout(150)
+        mp.click('#fields [data-range-add="times"]')
+        mp.wait_for_timeout(250)
+        mp.select_option('#fields [data-range-part="P"][data-range-time="end"]', 'pm')
+        mp.select_option('#fields [data-range-part="H"][data-range-time="end"]', '3')
+        mp.select_option('#fields [data-range-part="M"][data-range-time="end"]', '30')
+        mp.wait_for_timeout(150)
+        mp.click('#fields [data-range-add="times"]')
+        mp.wait_for_timeout(300)
+        mp.evaluate("document.querySelector('#fields .range-add').scrollIntoView({block:'center'})")
+        mp.wait_for_timeout(250)
+        mp.screenshot(path=sh(DOWNLOADS, 'sms-app-times-modes.png'))
+        mp.screenshot(path=sh(DOCS, 'shot-times-modes.png'))
         m.close()
         browser.close()
 
@@ -351,7 +394,7 @@ def main():
               'sms-app-myungdan.png', 'sms-app-calc.png', 'sms-app-pay.png',
               'sms-app-vendor-scroll.png', 'sms-app-vendor-scroll-end.png', 'sms-app-1000x720.png',
               'sms-app-paytable-t8-390x844.png', 'sms-app-date-modes.png', 'sms-app-cal-popup.png',
-              'sms-app-custom-editor.png', 'sms-app-custom-tpl.png',
+              'sms-app-custom-editor.png', 'sms-app-times-modes.png', 'sms-app-custom-tpl.png',
               'sms-app-tpl-edit.png', 'sms-app-sync.png'):
         path = sh(DOWNLOADS, f)
         print(' ', path, os.path.getsize(path), 'bytes')

@@ -1465,25 +1465,113 @@ class AppTest(unittest.TestCase):
         segs = self.page.query_selector_all('#fields [data-seg="calcTrade"]')
         self.assertEqual(len(segs), 1)
 
+    def range_time(self, which, period, hour, minute):
+        self.page.select_option(f'#fields [data-range-part="P"][data-range-time="{which}"]', period)
+        self.page.select_option(f'#fields [data-range-part="H"][data-range-time="{which}"]', hour)
+        self.page.select_option(f'#fields [data-range-part="M"][data-range-time="{which}"]', minute)
+        self.wait(60)
+
     def test_time_range_helper(self):
+        # 방문 희망 시간 — 날짜 + 시작 시각 ~ 끝 시각(비우면 한 시각) + 추가
         self.pick('t3')
         self.page.click('#fields [data-seg="ver"][data-value="detail"]')
         self.wait(120)
+        # 세그먼트 버튼 없이 날짜·시각 칸만 있다 (종료를 비우면 지정, 둘 다 넣으면 범위)
+        self.assertEqual(self.js("() => document.querySelectorAll('#fields .range-add .seg-btn').length"), 0)
         self.page.click('#fields [data-date="times__range"]')
         self.wait(120)
         self.page.click('#calpop [data-cal-nav="1"]')
         self.wait(80)
         self.page.click('#calpop [data-cal-day="5"]')
-        self.wait(120)
-        self.page.select_option('#fields [data-range-time="start"]', '10:0')
-        self.page.select_option('#fields [data-range-time="end"]', '12:0')
+        self.wait(150)
+
+        # ① 끝 시각을 비워 두고 추가 → 한 시각(11월 26일 (목) 오후 2:15 꼴)
+        self.range_time('start', 'pm', '2', '15')
         self.page.click('#fields [data-range-add="times"]')
         self.wait(150)
         body = self.text()
-        self.assertIn('* 2026년 12월 5일 토요일 오전 10시 ~ 오후 12시', body)
+        self.assertIn('* 12월 5일 (토) 오후 2:15', body)
         ta = self.page.query_selector('#fields [data-field="times"]')
-        self.assertIn('2026년 12월 5일', ta.input_value())
+        self.assertEqual(ta.input_value(), '12월 5일 (토) 오후 2:15')
+        self.assertNotIn('~', ta.input_value())
+
+        # ② 시작·끝을 모두 넣고 추가 → 범위
+        self.range_time('end', 'pm', '3', '30')
+        self.page.click('#fields [data-range-add="times"]')
+        self.wait(150)
+        body = self.text()
+        self.assertIn('* 12월 5일 (토) 오후 2:15 ~ 오후 3:30', body)
+        lines = self.page.query_selector('#fields [data-field="times"]').input_value().split('\n')
+        self.assertEqual(lines, ['12월 5일 (토) 오후 2:15', '12월 5일 (토) 오후 2:15 ~ 오후 3:30'])
         self.assertNotIn('마포래미안푸르지오', body)
+
+        # ③ 시각을 비우고 날짜만 추가 → 날짜 한 줄
+        self.page.select_option('#fields [data-range-part="H"][data-range-time="start"]', '')
+        self.page.select_option('#fields [data-range-part="H"][data-range-time="end"]', '')
+        self.wait(80)
+        self.page.click('#fields [data-range-add="times"]')
+        self.wait(150)
+        self.assertIn('* 12월 5일 (토)', self.text())
+
+        # 날짜 없이 추가하면 안내하고 아무것도 넣지 않는다
+        self.page.click('#fields .date-clear')
+        self.wait(120)
+        before = self.page.query_selector('#fields [data-field="times"]').input_value()
+        self.page.click('#fields [data-range-add="times"]')
+        self.wait(150)
+        self.assertIn('날짜를 먼저 골라 주세요', self.page.inner_text('#toast'))
+        self.assertEqual(self.page.query_selector('#fields [data-field="times"]').input_value(), before)
+
+    def test_visit_line_formatter(self):
+        # 문자에 들어가는 한 줄 표기 — 끝 시각이 없으면 한 시각만
+        self.assertEqual(
+            self.js("() => SMSCore.formatVisitLine('2026-11-26', 14, 15, null, 0)"),
+            '11월 26일 (목) 오후 2:15')
+        self.assertEqual(
+            self.js("() => SMSCore.formatVisitLine('2026-11-26', 14, 15, 15, 30)"),
+            '11월 26일 (목) 오후 2:15 ~ 오후 3:30')
+        self.assertEqual(
+            self.js("() => SMSCore.formatVisitLine('2026-11-26', null, 0, null, 0)"),
+            '11월 26일 (목)')
+        self.assertEqual(self.js('() => SMSCore.slotClock(0, 5)'), '오전 12:05')
+        self.assertEqual(self.js('() => SMSCore.slotClock(12, 55)'), '오후 12:55')
+
+    def test_every_time_select_uses_5_minute_steps(self):
+        # 앱 어디서나 분은 5분 단위 — 달력+시간 팝업 · 방문 희망 시간 모두
+        scan = """() => [...document.querySelectorAll('select')]
+          .filter(s => (s.dataset.calMin || s.dataset.rangePart === 'M') && !s.closest('#calpop[hidden]'))
+          .map(s => ({kind: s.dataset.calMin ? 'cal' : 'range',
+                      values: [...s.options].map(o => o.value),
+                      labels: [...s.options].map(o => o.textContent.trim())}))"""
+        expect = [str(m) for m in range(0, 60, 5)]
+        labels = [(m < 10 and '0' + str(m) or str(m)) + '분' for m in range(0, 60, 5)]
+
+        # ① 달력 + 시간 팝업 (모든 날짜 칸이 같은 팝업을 쓴다)
+        self.pick('t9')
+        self.page.click('#fields [data-date="when"]')
+        self.wait(150)
+        found = self.js(scan)
+        self.assertEqual([f['kind'] for f in found], ['cal'])
+        self.assertEqual(found[0]['values'], expect)
+        self.assertEqual(found[0]['labels'], labels)
+        self.page.click('#calpop [data-cal-close]')
+
+        # ② 방문 희망 시간 (시작·끝 두 벌)
+        self.pick('t3')
+        self.page.click('#fields [data-seg="ver"][data-value="detail"]')
+        self.wait(150)
+        found = self.js(scan)
+        self.assertEqual([f['kind'] for f in found], ['range', 'range'])
+        for f in found:
+            self.assertEqual(f['values'], expect)
+            self.assertEqual(f['labels'], labels)
+
+        # ③ 다른 템플릿·다른 버전에도 시간 셀렉트가 따로 남아 있지 않다
+        for tid in ('t2', 't5', 't8', 't10', 't13', 't18'):
+            with self.subTest(tid=tid):
+                self.pick(tid)
+                self.wait(80)
+                self.assertEqual(self.js(scan), [], '시간 셀렉트는 위 두 곳뿐')
 
     def test_parking_toggle(self):
         self.pick('t5')
@@ -3386,6 +3474,72 @@ class AppTest(unittest.TestCase):
                          '가로 넘침 없음')
         self.assertEqual(errors, [])
         ctx.close()
+
+    def test_13b_custom_editor_mobile_no_clip_no_scroll(self):
+        # IMG_3965 — 새 문구 추가 편집창에서
+        #  ① 카테고리 <select> 글자가 위아래로 잘리지 않고 (scrollHeight <= clientHeight + 2)
+        #  ② 폰 화면에서 편집창 안쪽 세로 스크롤이 생기지 않는다 (카드·본문 모두 scrollHeight <= clientHeight + 2)
+        for vw, vh in ((390, 844), (390, 740)):
+            with self.subTest(viewport=f'{vw}x{vh}'):
+                ctx = self.browser.new_context(viewport={'width': vw, 'height': vh},
+                                               is_mobile=True, has_touch=True)
+                page = ctx.new_page()
+                errors = []
+                page.on('console', lambda m: errors.append(f'{m.type}: {m.text}')
+                        if m.type in ('error', 'warning') else None)
+                page.on('pageerror', lambda e: errors.append(f'pageerror: {e}'))
+                page.goto(BASE, wait_until='networkidle')
+                page.evaluate('localStorage.clear()')
+                page.reload(wait_until='networkidle')
+                page.wait_for_timeout(250)
+
+                page.click('#btn-sheet')
+                page.wait_for_timeout(200)
+                page.click('#btn-tpl-new-sheet')
+                page.wait_for_timeout(300)
+                # 가장 긴 카테고리 이름 — 신고된 화면과 같은 상태
+                page.select_option('#te-stage', '1')
+                page.fill('#te-title', '이사 후 안부')
+                page.fill('#te-desc', '입주 축하 · 관리 안내')
+                page.wait_for_timeout(200)
+
+                sel = page.eval_on_selector('#te-stage', """e => {
+                  const cs = getComputedStyle(e);
+                  return {sh: e.scrollHeight, ch: e.clientHeight, sw: e.scrollWidth, cw: e.clientWidth,
+                          h: e.getBoundingClientRect().height, minH: cs.minHeight,
+                          pad: cs.padding, shrink: cs.flexShrink, text: e.options[e.selectedIndex].text};
+                }""")
+                self.assertEqual(sel['text'], '고객 응대·매물 관리')
+                self.assertLessEqual(sel['sh'], sel['ch'] + 2,
+                                     f'카테고리 글자가 위아래로 잘리지 않는다 (scrollHeight {sel["sh"]} > {sel["ch"]})')
+                self.assertLessEqual(sel['sw'], sel['cw'] + 2, '카테고리 글자가 좌우로 잘리지 않는다')
+                self.assertGreaterEqual(sel['h'], 44, '셀렉트는 손가락으로 누르기 좋은 44px 이상')
+                self.assertEqual(sel['shrink'], '0', 'flex가 셀렉트를 눌러 찌그러뜨리지 않는다')
+                self.assertEqual(sel['pad'].split()[0], '10px', '셀렉트 위아래 패딩 10px')
+
+                card = page.eval_on_selector('#tpl-editor .modal-card',
+                                             'e => ({sh: e.scrollHeight, ch: e.clientHeight})')
+                self.assertLessEqual(card['sh'], card['ch'] + 2,
+                                     f'편집창 안쪽 세로 스크롤이 없다 (카드 {card["sh"]} > {card["ch"]})')
+                body = page.eval_on_selector('#tpl-editor .modal-body',
+                                             'e => ({sh: e.scrollHeight, ch: e.clientHeight, top: e.scrollTop})')
+                self.assertLessEqual(body['sh'], body['ch'] + 2,
+                                     f'편집창 본문 세로 스크롤이 없다 (본문 {body["sh"]} > {body["ch"]})')
+                self.assertEqual(body['top'], 0, '본문이 스크롤된 상태로 열리지 않는다')
+
+                # 카테고리부터 취소/저장까지 모두 화면 안에 들어온다
+                fits = page.evaluate("""() => {
+                  const ids = ['#te-stage', '#te-title', '#te-desc', '#te-body', '#te-sign',
+                               '#btn-tpl-editor-cancel', '#btn-tpl-editor-save'];
+                  return ids.map(s => {
+                    const r = document.querySelector(s).getBoundingClientRect();
+                    return {s, ok: r.top >= 0 && r.bottom <= window.innerHeight + 0.5};
+                  });
+                }""")
+                for item in fits:
+                    self.assertTrue(item['ok'], f'{item["s"]} 가 화면 안에 다 보인다')
+                self.assertEqual(errors, [])
+                ctx.close()
 
     def test_14_permanent_edit_and_revert(self):
         self.pick('t3')
