@@ -2877,6 +2877,508 @@ class AppTest(unittest.TestCase):
             self.assertTrue(os.path.exists(path), f'{path} 가 없다 — tests/capture.py를 실행하세요')
             self.assertGreater(os.path.getsize(path), 20000, f'{path} 가 너무 작다')
 
+    # ============================================================== 내 문구 · 문구 편집
+    def add_custom(self, title='이사 인사', desc='입주 축하', body='안녕하세요 [고객]님\n이사 잘 마치셨나요?',
+                   stage='2'):
+        self.page.click('#btn-tpl-new')
+        self.page.wait_for_timeout(120)
+        self.page.select_option('#te-stage', stage)
+        self.page.fill('#te-title', title)
+        self.page.fill('#te-desc', desc)
+        self.page.fill('#te-body', body)
+        self.page.click('#btn-tpl-editor-save')
+        self.page.wait_for_timeout(200)
+
+    def test_11_custom_template_add_and_persist(self):
+        # 목록 위 버튼 → 편집창 → 저장 → 목록·미리보기에 바로
+        self.assertTrue(self.page.is_visible('#btn-tpl-new'))
+        self.add_custom()
+
+        self.assertFalse(self.page.is_visible('#tpl-editor.is-open'),
+                         '저장하면 편집창이 닫힌다')
+        text = self.text()
+        self.assertIn('안녕하세요 (고객)님', text, '본문의 대괄호는 소괄호로 바뀐다')
+        self.assertNotIn('[', text)
+        self.assertNotIn(']', text)
+        self.assertIn('마래푸중앙부동산 드림', text, '서명 토글 기본 ON')
+        self.assertIn('010-4585-7365', text)
+
+        # 목록: 내 문구 배지 + 제목·부제목, 아이콘은 SVG 라인 아이콘
+        row = self.page.query_selector('#tpl-list .row.is-active')
+        self.assertIsNotNone(row, '저장한 문구가 바로 선택되어 있다')
+        self.assertIn('내 문구', row.inner_text())
+        self.assertIn('이사 인사', row.inner_text())
+        self.assertIn('입주 축하', row.inner_text())
+        self.assertEqual(self.page.eval_on_selector('#tpl-list .row.is-active .row-icon svg',
+                                                    'e => e.tagName.toLowerCase()'), 'svg')
+
+        # 입력 항목이 없고 '비우기' 대신 안내가 뜬다
+        self.assertEqual(self.page.eval_on_selector_all('#fields .field', 'els => els.length'), 0)
+        self.assertTrue(self.page.eval_on_selector('#btn-reset', 'e => e.hidden'))
+        self.assertIn('내가 만든 문구', self.page.inner_text('#fields .fixed-note'))
+
+        # 새로 고침해도 남는다 (localStorage)
+        self.page.reload(wait_until='networkidle')
+        self.page.wait_for_timeout(250)
+        self.assertIn('이사 인사', self.page.inner_text('#tpl-list'))
+        self.assertIn('안녕하세요 (고객)님', self.text())
+
+        stored = self.page.evaluate("JSON.parse(localStorage.getItem('smshelper.v1'))")
+        self.assertEqual(len(stored['custom']), 1)
+        self.assertEqual(stored['custom'][0]['title'], '이사 인사')
+        self.assertEqual(stored['custom'][0]['stage'], '2')
+
+    def test_12_custom_template_edit_and_delete(self):
+        self.add_custom(title='이사 인사', desc='입주 축하', body='처음 본문')
+        self.page.click('#btn-tpl-edit')
+        self.page.wait_for_timeout(150)
+        self.assertEqual(self.page.inner_text('#tpl-editor-title'), '내 문구 편집')
+        self.assertEqual(self.page.input_value('#te-title'), '이사 인사')
+        self.assertEqual(self.page.input_value('#te-body'), '처음 본문')
+        self.assertTrue(self.page.is_visible('#btn-tpl-editor-del'), '내 문구는 삭제할 수 있다')
+
+        self.page.fill('#te-title', '이사 후 안부')
+        self.page.fill('#te-body', '고친 본문입니다')
+        self.page.select_option('#te-stage', '4')
+        self.page.click('#btn-tpl-editor-save')
+        self.page.wait_for_timeout(200)
+        self.assertIn('고친 본문입니다', self.text())
+        self.assertIn('이사 후 안부', self.page.inner_text('#tpl-list'))
+        stored = self.page.evaluate("JSON.parse(localStorage.getItem('smshelper.v1'))")
+        self.assertEqual(stored['custom'][0]['stage'], '4')
+        self.assertEqual(len(stored['custom']), 1, '고치는 것이지 새로 만들지 않는다')
+
+        # 삭제 — 확인창 → 목록에서 사라짐 → 되돌리기
+        self.page.on('dialog', lambda d: d.accept())
+        self.page.click('#btn-tpl-edit')
+        self.page.wait_for_timeout(120)
+        self.page.click('#btn-tpl-editor-del')
+        self.page.wait_for_timeout(200)
+        self.assertNotIn('이사 후 안부', self.page.inner_text('#tpl-list'))
+        self.assertEqual(self.page.evaluate("JSON.parse(localStorage.getItem('smshelper.v1')).custom.length"), 0)
+        self.assertTrue(self.page.is_visible('#snackbar.is-on'))
+        self.page.click('#snackbar-undo')
+        self.page.wait_for_timeout(200)
+        self.assertIn('이사 후 안부', self.page.inner_text('#tpl-list'))
+        self.assertEqual(self.page.evaluate("JSON.parse(localStorage.getItem('smshelper.v1')).custom.length"), 1)
+
+    def test_13_custom_template_mobile_sheet(self):
+        ctx = self.browser.new_context(viewport={'width': 390, 'height': 844})
+        page = ctx.new_page()
+        errors = []
+        page.on('console', lambda m: errors.append(f'{m.type}: {m.text}') if m.type in ('error', 'warning') else None)
+        page.on('pageerror', lambda e: errors.append(f'pageerror: {e}'))
+        page.goto(BASE, wait_until='networkidle')
+        page.evaluate('localStorage.clear()')
+        page.reload(wait_until='networkidle')
+        page.wait_for_timeout(250)
+
+        page.click('#btn-sheet')
+        page.wait_for_timeout(200)
+        self.assertTrue(page.is_visible('#btn-tpl-new-sheet'), '모바일 목록 시트에도 새 문구 버튼')
+        page.click('#btn-tpl-new-sheet')
+        page.wait_for_timeout(250)
+        self.assertTrue(page.is_visible('#tpl-editor.is-open'))
+        self.assertFalse(page.is_visible('#sheet.is-open'), '편집창을 열면 목록 시트는 닫힌다')
+        self.assertEqual(page.eval_on_selector('#te-body', 'e => getComputedStyle(e).fontSize'), '16px',
+                         '아이폰 확대 방지 16px')
+
+        page.fill('#te-title', '모바일 문구')
+        page.fill('#te-body', '모바일에서 만든 본문')
+        page.click('#btn-tpl-editor-save')
+        page.wait_for_timeout(250)
+        self.assertIn('모바일에서 만든 본문', page.input_value('#preview'))
+        page.click('#btn-sheet')
+        page.wait_for_timeout(200)
+        self.assertIn('모바일 문구', page.inner_text('#sheet-list'))
+        self.assertIn('내 문구', page.inner_text('#sheet-list'))
+        self.assertFalse(page.evaluate('document.documentElement.scrollWidth > window.innerWidth'),
+                         '가로 넘침 없음')
+        self.assertEqual(errors, [])
+        ctx.close()
+
+    def test_14_permanent_edit_and_revert(self):
+        self.pick('t3')
+        original = self.text()
+        self.assertIn('방문', original)
+        self.assertTrue(self.page.is_hidden('#btn-tpl-revert'))
+
+        self.page.click('#btn-tpl-edit')
+        self.page.wait_for_timeout(150)
+        self.assertEqual(self.page.inner_text('#tpl-editor-title'), '문구 편집 — 영구 저장')
+        body_in_editor = self.page.input_value('#te-body')
+        self.assertNotIn('마래푸중앙부동산 드림', body_in_editor, '편집창에는 서명을 빼고 본문만')
+        self.assertTrue(self.page.eval_on_selector('#te-title', 'e => e.disabled'), '기존 문구의 제목은 잠금')
+        self.assertTrue(self.page.eval_on_selector('#te-stage', 'e => e.disabled'))
+
+        self.page.fill('#te-body', '영구로 고친 본문입니다 [확인]')
+        self.page.click('#btn-tpl-editor-save')
+        self.page.wait_for_timeout(220)
+        text = self.text()
+        self.assertIn('영구로 고친 본문입니다 (확인)', text)
+        self.assertNotIn('[', text)
+        self.assertIn('마래푸중앙부동산 드림', text)
+        self.assertTrue(self.page.is_visible('#btn-tpl-revert'))
+        self.assertTrue(self.page.eval_on_selector('#btn-reset', 'e => e.hidden'))
+        self.assertIn('수정됨', self.page.inner_text('#tpl-list .row.is-active'))
+        self.assertIn('영구 수정한 문구', self.page.inner_text('#fields .fixed-note'))
+
+        # 새로 고침해도 유지
+        self.page.reload(wait_until='networkidle')
+        self.page.wait_for_timeout(250)
+        self.assertIn('영구로 고친 본문입니다 (확인)', self.text())
+
+        # 기본값으로 되돌리기 → 원래 20종 문구·입력 항목 복귀
+        self.page.click('#btn-tpl-revert')
+        self.page.wait_for_timeout(220)
+        self.assertNotIn('영구로 고친 본문입니다', self.text())
+        self.assertIn('방문', self.text())
+        self.assertGreater(self.page.eval_on_selector_all('#fields .field', 'els => els.length'), 0)
+        self.assertTrue(self.page.is_hidden('#btn-tpl-revert'))
+        self.assertEqual(self.page.evaluate("Object.keys(JSON.parse(localStorage.getItem('smshelper.v1')).overrides || {}).length"), 0)
+
+    def test_15_one_off_edit_stays_separate(self):
+        # 미리보기 직접 수정(일회성)과 영구 저장은 서로 다른 버튼·문구로 구분된다
+        self.pick('t5')
+        self.page.fill('#preview', '일회성으로 고친 본문')
+        self.page.wait_for_timeout(120)
+        self.assertTrue(self.page.is_visible('#btn-restore'), '일회성 수정은 원상복구로 되돌린다')
+        self.assertTrue(self.page.is_hidden('#btn-tpl-revert'))
+        self.page.click('#btn-restore')
+        self.page.wait_for_timeout(150)
+        self.assertNotIn('일회성으로 고친 본문', self.text())
+        self.assertIn('집보기', self.text())
+
+        # 일회성으로 고쳐 둔 본문을 영구 저장하면 그 본문이 남는다
+        self.page.fill('#preview', '일회성 본문을 영구로')
+        self.page.wait_for_timeout(120)
+        self.page.click('#btn-tpl-edit')
+        self.page.wait_for_timeout(150)
+        self.assertEqual(self.page.input_value('#te-body'), '일회성 본문을 영구로')
+        self.page.click('#btn-tpl-editor-save')
+        self.page.wait_for_timeout(200)
+        self.assertIn('일회성 본문을 영구로', self.text())
+        self.assertTrue(self.page.is_visible('#btn-tpl-revert'))
+
+    # ============================================================== 백업 · 불러오기
+    def context_with_state(self, state):
+        ctx = self.browser.new_context(viewport={'width': 1440, 'height': 900},
+                                       permissions=['clipboard-read', 'clipboard-write'])
+        page = ctx.new_page()
+        page.add_init_script("localStorage.setItem('smshelper.v1', JSON.stringify(%s));"
+                             % json.dumps(state, ensure_ascii=False))
+        page.goto(BASE, wait_until='networkidle')
+        page.wait_for_timeout(220)
+        return ctx, page
+
+    def test_16_export_copy_json(self):
+        state = {
+            'profile': {'office': '마래푸중앙부동산', 'phones': '010-4585-7365 / 02-312-7365',
+                        'feeAccount': '우리은행 1002-762-106047 황호선', 'amountMode': 'eokman'},
+            'stars': ['t3', 't4'],
+            'data': {}, 'texts': {},
+            'contacts': {'대출': [{'id': 'k1', 'name': '김상담', 'phone': '010-2222-3333'}]},
+            'current': 't1', 'stage': 'all',
+            'custom': [{'id': 'c1', 'stage': '2', 'title': '이사 인사', 'desc': '입주 축하',
+                        'body': '백업 본문', 'sign': True}],
+            'overrides': {'t3': {'body': '영구 수정 본문', 'sign': True}},
+            'sync': {'token': '', 'gistId': '', 'updatedAt': 123, 'lastSync': 0},
+        }
+        ctx, page = self.context_with_state(state)
+        page.click('#btn-settings')
+        page.wait_for_timeout(150)
+        page.click('#btn-export')
+        page.wait_for_timeout(350)
+        clip = page.evaluate('navigator.clipboard.readText()')
+        snap = json.loads(clip)
+        self.assertEqual(snap['app'], 'maraepu-sms-helper')
+        for key in ('profile', 'stars', 'contacts', 'custom', 'overrides', 'updatedAt'):
+            self.assertIn(key, snap)
+        self.assertEqual(snap['profile']['feeAccount'], '우리은행 1002-762-106047 황호선')
+        self.assertEqual(snap['profile']['amountMode'], 'eokman')
+        self.assertEqual(snap['stars'], ['t3', 't4'])
+        self.assertEqual(snap['contacts']['대출'][0]['name'], '김상담')
+        self.assertEqual(len(snap['custom']), 1)
+        self.assertEqual(snap['custom'][0]['title'], '이사 인사')
+        self.assertIn('t3', snap['overrides'])
+        self.assertEqual(snap['overrides']['t3']['body'], '영구 수정 본문')
+        # 동기화 설정(토큰·Gist ID)은 백업에 절대 넣지 않는다
+        self.assertNotIn('sync', snap)
+        self.assertNotIn('"token"', clip)
+        self.assertNotIn('gistId', clip)
+        ctx.close()
+
+    def test_17_import_restores_on_new_device(self):
+        # 이 기기: 문구를 만들고 내보낸다
+        self.add_custom(title='옮길 문구', body='옮길 본문')
+        self.page.click('#btn-settings')
+        self.page.wait_for_timeout(120)
+        self.page.click('#btn-export')
+        self.page.wait_for_timeout(300)
+        clip = self.page.evaluate('navigator.clipboard.readText()')
+        self.page.click('#btn-settings-close')
+
+        # 다른 기기(저장값 없는 새 창)에서 붙여넣기로 복원
+        ctx = self.browser.new_context(viewport={'width': 1440, 'height': 900})
+        page = ctx.new_page()
+        page.goto(BASE, wait_until='networkidle')
+        page.wait_for_timeout(250)
+        self.assertNotIn('옮길 문구', page.inner_text('#tpl-list'))
+        page.click('#btn-settings')
+        page.wait_for_timeout(120)
+        page.click('#btn-import')
+        page.wait_for_timeout(120)
+        page.fill('#import-text', clip)
+        page.click('#btn-import-apply')
+        page.wait_for_timeout(350)
+        self.assertFalse(page.is_visible('#settings.is-open'), '불러오면 설정창이 닫힌다')
+        self.assertIn('옮길 문구', page.inner_text('#tpl-list'))
+        self.assertIn('내 문구', page.inner_text('#tpl-list'))
+        stored = page.evaluate("JSON.parse(localStorage.getItem('smshelper.v1'))")
+        self.assertEqual(len(stored['custom']), 1)
+        self.assertEqual(stored['custom'][0]['body'], '옮길 본문')
+        # 복원한 문구는 그 기기에서도 그대로 문자로 나온다
+        page.click('#tpl-list .row-badge')
+        page.wait_for_timeout(150)
+        self.assertIn('옮길 본문', page.input_value('#preview'))
+        ctx.close()
+
+    def test_18_import_rejects_bad_json(self):
+        self.page.click('#btn-settings')
+        self.page.wait_for_timeout(120)
+        self.page.click('#btn-import')
+        self.page.wait_for_timeout(100)
+        self.page.fill('#import-text', '이건 백업 파일이 아니에요')
+        self.page.click('#btn-import-apply')
+        self.page.wait_for_timeout(250)
+        self.assertEqual(self.page.inner_text('#toast'), '불러올 수 없는 내용이에요')
+        self.assertTrue(self.page.is_visible('#settings.is-open'), '실패하면 설정창을 그대로 둔다')
+
+    # ============================================================== PC·폰 자동 동기화 (Gist)
+    def test_19_sync_snapshot_helpers(self):
+        out = self.js("""() => {
+          const store = {
+            profile: { office: '가나부동산', phones: '010-1111-2222', feeAccount: '우리 123', amountMode: 'won' },
+            stars: ['t3', 't3', 'c1', 5],
+            contacts: { '대출': [{ id: 'k1', name: '김', phone: '010-2' }, { name: '', phone: '' }] },
+            custom: [
+              { id: 'c1', stage: '2', title: '제목', desc: '', body: '본문', sign: false },
+              { id: 'c2', stage: '9', title: '', desc: 'x', body: '', sign: true }
+            ],
+            overrides: { t3: { body: '영구', sign: true }, t99: { body: '무시' }, junk: null },
+            sync: { updatedAt: 12345 }
+          };
+          const s = SMSSync.snapshot(store);
+          const target = { profile: {}, stars: [], contacts: {}, custom: [], overrides: {}, sync: {} };
+          const changed = SMSSync.apply(target, s);
+          return {
+            snap: s, changed, target,
+            choose_fresh: SMSSync.choose({ updatedAt: 0 }, s),
+            choose_pull: SMSSync.choose({ updatedAt: 100 }, Object.assign({}, s, { updatedAt: 200 })),
+            choose_push: SMSSync.choose({ updatedAt: 300 }, Object.assign({}, s, { updatedAt: 200 })),
+            choose_same: SMSSync.choose({ updatedAt: 200 }, Object.assign({}, s, { updatedAt: 200 })),
+            choose_none: SMSSync.choose({ updatedAt: 200 }, null),
+            parse_ok: !!SMSSync.parse(JSON.stringify(s)),
+            parse_bad: SMSSync.parse('not json'),
+            parse_other: SMSSync.parse(JSON.stringify({ app: 'other-app', profile: {} })),
+            parse_empty: SMSSync.parse('{}')
+          };
+        }""")
+        snap = out['snap']
+        self.assertEqual(snap['app'], 'maraepu-sms-helper')
+        self.assertEqual(snap['updatedAt'], 12345)
+        self.assertEqual(snap['profile']['office'], '가나부동산')
+        self.assertEqual(snap['stars'], ['t3', 'c1'], '중복·숫자는 걸러낸다')
+        self.assertEqual(len(snap['contacts']['대출']), 1, '빈 연락처는 뺀다')
+        self.assertEqual(len(snap['custom']), 1, '본문 없는 내 문구는 뺀다')
+        self.assertEqual(snap['custom'][0]['stage'], '2')
+        self.assertEqual(list(snap['overrides'].keys()), ['t3'], '기본 20종만 영구 수정 대상')
+
+        self.assertTrue(out['changed'])
+        self.assertEqual(out['target']['profile']['office'], '가나부동산')
+        self.assertEqual(out['target']['sync']['updatedAt'], 12345)
+        self.assertEqual(out['choose_fresh'], 'pull')
+        self.assertEqual(out['choose_pull'], 'pull')
+        self.assertEqual(out['choose_push'], 'push')
+        self.assertEqual(out['choose_same'], 'same')
+        self.assertEqual(out['choose_none'], 'push')
+        self.assertTrue(out['parse_ok'])
+        self.assertIsNone(out['parse_bad'])
+        self.assertIsNone(out['parse_other'])
+        self.assertIsNone(out['parse_empty'])
+
+    def gist_mock(self, page):
+        mock = {'file': None, 'id': 'gistabc1234567', 'calls': []}
+
+        def handle(route):
+            req = route.request
+            headers = {
+                'access-control-allow-origin': '*',
+                'access-control-allow-headers': '*',
+                'access-control-allow-methods': 'GET,POST,PATCH,OPTIONS',
+                'content-type': 'application/json',
+            }
+            if req.method == 'OPTIONS':
+                route.fulfill(status=204, headers=headers, body='')
+                return
+            body = None
+            try:
+                body = json.loads(req.post_data) if req.post_data else None
+            except Exception:
+                body = None
+            mock['calls'].append({'method': req.method, 'url': req.url, 'body': body})
+            if req.method == 'POST':
+                mock['file'] = body['files']['smshelper-backup.json']['content']
+                route.fulfill(status=201, headers=headers, body=json.dumps({'id': mock['id']}))
+            elif req.method == 'PATCH':
+                mock['file'] = body['files']['smshelper-backup.json']['content']
+                route.fulfill(status=200, headers=headers, body=json.dumps({'id': mock['id']}))
+            elif req.method == 'GET':
+                if mock['file'] is None:
+                    route.fulfill(status=404, headers=headers, body=json.dumps({'message': 'Not Found'}))
+                else:
+                    route.fulfill(status=200, headers=headers, body=json.dumps({
+                        'id': mock['id'],
+                        'files': {'smshelper-backup.json': {'content': mock['file'], 'truncated': False}},
+                    }))
+            else:
+                route.fulfill(status=200, headers=headers, body='{}')
+
+        page.route('https://api.github.com/**', handle)
+        return mock
+
+    def connect_gist(self, token='ghp_testtoken1234'):
+        self.page.click('#btn-settings')
+        self.page.wait_for_timeout(150)
+        self.page.fill('#set-gh-token', token)
+        self.page.click('#btn-gh-sync')
+        self.page.wait_for_timeout(600)
+
+    def test_20_gist_connect_creates_secret_gist(self):
+        mock = self.gist_mock(self.page)
+        self.add_custom(title='동기화 문구', body='동기화 본문')
+        self.connect_gist()
+
+        self.assertEqual(self.page.input_value('#set-gh-gist'), mock['id'], 'Gist ID가 자동으로 채워진다')
+        self.assertTrue(self.page.is_visible('#sync-status'))
+        self.assertEqual(self.page.inner_text('#sync-status'), '동기화됨')
+        posts = [c for c in mock['calls'] if c['method'] == 'POST']
+        self.assertEqual(len(posts), 1, posts)
+        self.assertIs(posts[0]['body']['public'], False, '비공개(Secret) Gist로 만든다')
+        content = json.loads(posts[0]['body']['files']['smshelper-backup.json']['content'])
+        self.assertEqual(content['custom'][0]['title'], '동기화 문구')
+        self.assertNotIn('ghp_testtoken1234', posts[0]['body']['files']['smshelper-backup.json']['content'],
+                         '토큰은 Gist에 올라가지 않는다')
+
+        stored = self.page.evaluate("JSON.parse(localStorage.getItem('smshelper.v1')).sync")
+        self.assertEqual(stored['token'], 'ghp_testtoken1234')
+        self.assertEqual(stored['gistId'], mock['id'])
+        self.assertGreater(stored['lastSync'], 0)
+
+    def test_21_gist_autopush_after_change(self):
+        mock = self.gist_mock(self.page)
+        self.connect_gist()
+        self.page.click('#btn-settings-close')
+        self.page.wait_for_timeout(150)
+        before = len([c for c in mock['calls'] if c['method'] == 'PATCH'])
+
+        # 내 정보를 고치면 디바운스 뒤 자동으로 올라간다
+        self.page.click('#btn-settings')
+        self.page.wait_for_timeout(150)
+        self.page.fill('#set-office', '마래푸중앙분양')
+        self.page.click('#btn-settings-save')
+        self.page.wait_for_timeout(3400)
+        patches = [c for c in mock['calls'] if c['method'] == 'PATCH']
+        self.assertEqual(len(patches), before + 1, 'auto push')
+        content = json.loads(mock['file'])
+        self.assertEqual(content['profile']['office'], '마래푸중앙분양')
+        self.assertEqual(self.page.inner_text('#sync-status'), '동기화됨')
+
+    def test_22_gist_pulls_newer_remote_on_open(self):
+        # 다른 기기에서 올려 둔 최신 백업을 열자마자 받아 온다
+        remote = {
+            'app': 'maraepu-sms-helper', 'version': 1, 'updatedAt': 9999999999999,
+            'profile': {'office': '마래푸중앙분양', 'phones': '010-9999-8888', 'feeAccount': '', 'amountMode': 'won_eokman'},
+            'stars': ['t5'],
+            'contacts': {},
+            'custom': [{'id': 'c_remote', 'stage': '1', 'title': '다른 기기 문구', 'desc': '', 'body': '원격 본문', 'sign': True}],
+            'overrides': {},
+        }
+        mock = {'file': json.dumps(remote, ensure_ascii=False), 'id': 'gistremote', 'calls': []}
+
+        def handle(route):
+            req = route.request
+            headers = {'access-control-allow-origin': '*', 'access-control-allow-headers': '*',
+                       'access-control-allow-methods': 'GET,POST,PATCH,OPTIONS',
+                       'content-type': 'application/json'}
+            if req.method == 'OPTIONS':
+                route.fulfill(status=204, headers=headers, body='')
+                return
+            mock['calls'].append(req.method)
+            if req.method == 'GET':
+                route.fulfill(status=200, headers=headers, body=json.dumps({
+                    'id': mock['id'],
+                    'files': {'smshelper-backup.json': {'content': mock['file'], 'truncated': False}}}))
+            else:
+                route.fulfill(status=200, headers=headers, body=json.dumps({'id': mock['id']}))
+
+        ctx = self.browser.new_context(viewport={'width': 1440, 'height': 900})
+        page = ctx.new_page()
+        page.route('https://api.github.com/**', handle)
+        page.add_init_script("localStorage.setItem('smshelper.v1', JSON.stringify(%s));" % json.dumps({
+            'profile': {'office': '마래푸중앙부동산', 'phones': '010-4585-7365 / 02-312-7365',
+                        'feeAccount': '', 'amountMode': 'won_eokman'},
+            'stars': [], 'data': {}, 'texts': {}, 'contacts': {}, 'current': 't5', 'stage': 'all',
+            'custom': [], 'overrides': {},
+            'sync': {'token': 'ghp_x', 'gistId': 'gistremote', 'updatedAt': 1, 'lastSync': 0},
+        }))
+        page.goto(BASE, wait_until='networkidle')
+        page.wait_for_timeout(1400)
+        self.assertIn('다른 기기 문구', page.inner_text('#tpl-list'))
+        self.assertEqual(page.inner_text('#sync-status'), '동기화됨')
+        stored = page.evaluate("JSON.parse(localStorage.getItem('smshelper.v1'))")
+        self.assertEqual(stored['profile']['office'], '마래푸중앙분양')
+        self.assertEqual(stored['sync']['updatedAt'], 9999999999999)
+        self.assertIn('GET', mock['calls'])
+        ctx.close()
+
+    def test_23_gist_offline_badge_and_leave_token_local(self):
+        mock = self.gist_mock(self.page)
+        self.connect_gist()
+        self.page.click('#btn-settings-close')
+        self.page.wait_for_timeout(150)
+        # 연결을 끊고(네트워크 실패) 다시 동기화 → '오프라인'
+        self.page.route('https://api.github.com/**', lambda route: route.abort())
+        self.page.click('#btn-settings')
+        self.page.wait_for_timeout(150)
+        self.page.click('#btn-gh-sync')
+        self.page.wait_for_timeout(700)
+        self.assertEqual(self.page.inner_text('#sync-status'), '오프라인')
+        self.assertTrue(self.page.is_visible('#btn-gh-off'), '연결 해제 버튼이 보인다')
+        self.page.click('#btn-gh-off')
+        self.page.wait_for_timeout(150)
+        self.assertTrue(self.page.is_hidden('#sync-status'))
+        stored = self.page.evaluate("JSON.parse(localStorage.getItem('smshelper.v1')).sync")
+        self.assertEqual(stored['token'], '')
+        self.assertEqual(stored['gistId'], '')
+        # 끊긴 네트워크에서 생기는 브라우저 리소스 오류만 걸러 낸다
+        self.errors = [e for e in self.errors if 'ERR_' not in e and 'Failed to load resource' not in e]
+
+    # ============================================================== 버전 · 배포 파일
+    def test_24_version_bumped_to_1_1_0(self):
+        with open(os.path.join(ROOT, 'sw.js'), encoding='utf-8') as f:
+            sw = f.read()
+        self.assertIn("'v1.1.0'", sw)
+        self.assertIn("'js/sync.js'", sw)
+        with open(os.path.join(ROOT, 'index.html'), encoding='utf-8') as f:
+            html = f.read()
+        for f_ in ('icons', 'core', 'templates', 'sync', 'app'):
+            self.assertIn(f'js/{f_}.js?v=1.1.0', html)
+        self.assertIn('styles.css?v=1.1.0', html)
+        gradle = open(os.path.join(ROOT, 'android/app/build.gradle'), encoding='utf-8').read()
+        self.assertIn('versionCode 5', gradle)
+        self.assertIn("versionName '1.1.0'", gradle)
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

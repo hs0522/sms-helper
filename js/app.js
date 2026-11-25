@@ -4,7 +4,9 @@
 
   var C = window.SMSCore;
   var T = window.SMSTemplates;
-  var TEMPLATES = T.TEMPLATES;
+  var SYNC = window.SMSSync;
+  // 화면에 보이는 문구 — 기본 20종 + 영구 수정한 문구 + 내가 만든 문구 (rebuildTemplates 가 채운다)
+  var TEMPLATES = [];
   var STAGES = T.STAGES;
   var KEY = 'smshelper.v1';
 
@@ -25,8 +27,14 @@
     profile: Object.assign({}, DEFAULT_PROFILE),
     stars: ['t3', 't4', 't5', 't14'],
     data: {}, texts: {}, contacts: T.defaultContacts(),
-    current: 't5', stage: 'all'
+    current: 't5', stage: 'all',
+    custom: [],          // 내가 만든 문구
+    overrides: {},       // 기존 20종을 영구 수정한 본문 (id -> {body, sign})
+    sync: { token: '', gistId: '', updatedAt: 0, lastSync: 0 }
   };
+
+  var applyingRemote = false;   // PC·폰에서 받아 온 내용을 넣는 중 (다시 저장하지 않게)
+  var lastContent = null;       // 마지막으로 저장한 내용의 열쇠 — 바뀔 때만 동기화한다
 
   function load() {
     try {
@@ -38,8 +46,19 @@
       if (o.data && typeof o.data === 'object') store.data = o.data;
       if (o.texts && typeof o.texts === 'object') store.texts = o.texts;
       if (o.contacts && typeof o.contacts === 'object') store.contacts = mergeContacts(o.contacts);
-      if (o.current && tplById(o.current)) store.current = o.current;
+      store.custom = SYNC.sanitizeCustom(o.custom);
+      store.overrides = SYNC.sanitizeOverrides(o.overrides);
+      // 문구 목록은 이 함수가 끝난 뒤 rebuildTemplates 로 만들어진다 — 고른 문구 검사는 그 뒤에 한다
+      if (o.current) store.current = String(o.current);
       if (o.stage) store.stage = o.stage;
+      if (o.sync && typeof o.sync === 'object') {
+        store.sync = {
+          token: String(o.sync.token == null ? '' : o.sync.token),
+          gistId: String(o.sync.gistId == null ? '' : o.sync.gistId),
+          updatedAt: Number(o.sync.updatedAt) || 0,
+          lastSync: Number(o.sync.lastSync) || 0
+        };
+      }
       // 2026-11-25: 중개보수 부가세 기본값이 '미포함(별도)'에서 '간이 4%'로 바뀌었다.
       // 예전 기본값(none)이 저장되어 있으면 한 번만 4%로 옮긴다 (이후 고른 값은 그대로 둔다).
       if (!o.vatDefault4) {
@@ -70,6 +89,16 @@
   function save() {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(saveNow, 120);
+    noteChange();
+  }
+  // 내용이 실제로 바뀌었을 때만 updatedAt을 올리고 PC·폰 동기화를 예약한다
+  function noteChange() {
+    if (applyingRemote) return;
+    var key = SYNC.contentKey(store);
+    if (key === lastContent) return;
+    lastContent = key;
+    store.sync.updatedAt = Date.now();
+    schedulePush();
   }
   window.addEventListener('beforeunload', saveNow);
   window.addEventListener('pagehide', saveNow);
@@ -87,7 +116,50 @@
     for (var i = 0; i < TEMPLATES.length; i++) if (TEMPLATES[i].id === id) return TEMPLATES[i];
     return null;
   }
+
+  /* ---------------- 문구 목록 만들기 (기본 20종 + 영구 수정 + 내 문구) ---------------- */
+  function composeBody(item, c) {
+    var body = String(item.body == null ? '' : item.body).replace(/\r\n/g, '\n').replace(/\s+$/, '');
+    if (item.sign === false) return body;
+    return body + (body ? '\n\n' : '') + c.office + ' 드림\n' + c.phones;
+  }
+
+  function rebuildTemplates() {
+    var list = [];
+    T.TEMPLATES.forEach(function (base) {
+      var ov = store.overrides ? store.overrides[base.id] : null;
+      if (!ov) { list.push(base); return; }
+      list.push({
+        id: base.id, no: base.no, stage: base.stage, order: base.order,
+        icon: base.icon, title: base.title, desc: base.desc,
+        fields: [], edited: true, override: ov,
+        build: (function (o) { return function (d, c) { return composeBody(o, c); }; })(ov)
+      });
+    });
+    (store.custom || []).forEach(function (ct, i) {
+      list.push({
+        id: ct.id, no: '', stage: Number(ct.stage) || 1, order: 500 + i,
+        icon: 'message', title: ct.title, desc: ct.desc || '내가 만든 문구',
+        fields: [], custom: true, entry: ct,
+        build: (function (e) { return function (d, c) { return composeBody(e, c); }; })(ct)
+      });
+    });
+    list.sort(function (a, b) {
+      if (a.stage !== b.stage) return a.stage - b.stage;
+      return (a.order || 0) - (b.order || 0);
+    });
+    TEMPLATES.length = 0;
+    Array.prototype.push.apply(TEMPLATES, list);
+  }
+
+  function customById(id) {
+    for (var i = 0; i < (store.custom || []).length; i++) if (store.custom[i].id === id) return store.custom[i];
+    return null;
+  }
+
   function dataOf(t) {
+    // 입력 항목이 없는 문구(내 문구·영구 수정)는 저장할 입력값이 없다
+    if (t && (t.custom || t.edited)) return {};
     if (!store.data[t.id]) {
       store.data[t.id] = T.defaultData(t);
     } else {
@@ -281,15 +353,16 @@
     row.dataset.id = t.id;
     var main = el('button', 'row-main');
     main.dataset.id = t.id;
-    main.setAttribute('aria-label', t.no + '번 ' + t.title);
+    main.setAttribute('aria-label', (t.no ? t.no + '번 ' : '') + t.title);
     if (ICON) main.appendChild(ICON.el(t.icon, 15, 'row-icon'));
     else main.appendChild(el('span', 'row-icon', ''));
     var wrap = el('span', 'row-text');
     var titleLine = el('span', 'row-title');
-    titleLine.appendChild(el('span', 'row-no', String(t.no)));
+    if (t.no !== '' && t.no != null) titleLine.appendChild(el('span', 'row-no', String(t.no)));
     titleLine.appendChild(el('span', 'row-title-text', t.title));
+    if (t.custom || t.edited) titleLine.appendChild(el('span', 'row-badge', t.custom ? '내 문구' : '수정됨'));
     wrap.appendChild(titleLine);
-    wrap.appendChild(el('span', 'row-desc', t.desc));
+    wrap.appendChild(el('span', 'row-desc', t.desc || ''));
     main.appendChild(wrap);
     var star = el('button', 'row-star' + (store.stars.indexOf(t.id) !== -1 ? ' is-on' : ''), '★');
     star.dataset.star = t.id;
@@ -328,12 +401,22 @@
     var titleText = $('#form-title .title-text');
     if (titleText) titleText.textContent = t.title;
 
-    if (t.fixed) {
+    if (t.custom || t.edited) {
       var note = el('div', 'fixed-note');
-      note.appendChild(el('div', 'fixed-note-title', '입력할 항목이 없습니다'));
-      note.appendChild(el('div', 'fixed-note-body', '오른쪽 미리보기를 그대로 복사하거나, 필요한 부분만 직접 고쳐서 보내세요.'));
+      note.appendChild(el('div', 'fixed-note-title', t.custom ? '내가 만든 문구' : '영구 수정한 문구입니다'));
+      note.appendChild(el('div', 'fixed-note-body', t.custom
+        ? '오른쪽 미리보기 그대로 문자로 나갑니다. 본문은 미리보기 머리의 「문구 편집」에서 고칠 수 있어요.'
+        : '이 문구는 「문구 편집」으로 저장한 본문을 그대로 보냅니다. 「기본값으로」를 누르면 원래 20종 문구로 돌아갑니다.'));
       box.appendChild(note);
+    } else if (t.fixed) {
+      var fixedNote = el('div', 'fixed-note');
+      fixedNote.appendChild(el('div', 'fixed-note-title', '입력할 항목이 없습니다'));
+      fixedNote.appendChild(el('div', 'fixed-note-body', '오른쪽 미리보기를 그대로 복사하거나, 필요한 부분만 직접 고쳐서 보내세요.'));
+      box.appendChild(fixedNote);
     }
+
+    var resetBtn = $('#btn-reset');
+    if (resetBtn) resetBtn.hidden = !!(t.custom || t.edited);
 
     t.fields.forEach(function (f) {
       if (f.showIf && !f.showIf(data)) return;
@@ -1258,6 +1341,8 @@
     var edited = store.texts[t.id] != null;
     ta.value = edited ? store.texts[t.id] : buildText(t);
     $('#btn-restore').disabled = !edited;
+    $('#btn-tpl-revert').hidden = !t.edited;
+    $('#btn-tpl-edit').textContent = '문구 편집';
     var note = $('#edited-note');
     if (note) {
       note.hidden = !edited;
@@ -1307,6 +1392,11 @@
     renderPreview();
     $$('#tpl-list .row').forEach(function (r) { r.classList.toggle('is-active', r.dataset.id === store.current); });
     $$('#sheet-list .row').forEach(function (r) { r.classList.toggle('is-active', r.dataset.id === store.current); });
+    // 새 문구를 만들거나 골랐을 때 왼쪽 목록에서 그 줄이 보이게
+    var activeRow = $('#tpl-list .row.is-active');
+    if (activeRow && activeRow.scrollIntoView) {
+      try { activeRow.scrollIntoView({ block: 'nearest' }); } catch (e) { /* 구형 브라우저는 그냥 둔다 */ }
+    }
   }
 
   /* ---------------- 달력 ---------------- */
@@ -1534,6 +1624,10 @@
       b.classList.toggle('is-active', b.dataset.setMode === C.normMode(store.profile.amountMode));
     });
     $('#set-account-preview').textContent = C.accountParse(store.profile.feeAccount) ? '→ ' + C.accountParse(store.profile.feeAccount) : '';
+    $('#set-gh-token').value = store.sync.token || '';
+    $('#set-gh-gist').value = store.sync.gistId || '';
+    $('#import-box').hidden = true;
+    refreshSyncUi();
     m.classList.add('is-open');
     m.setAttribute('aria-hidden', 'false');
   }
@@ -1552,6 +1646,402 @@
     closeSettings();
     renderAll();
     toast('내 정보를 저장했어요');
+  }
+
+  /* ---------------- 문구 편집 (내 문구 · 기존 문구 영구 수정) ---------------- */
+  var editor = { mode: 'new', id: null };   // mode: new | custom | override
+
+  // 본문 끝에 붙어 있는 '상호 드림 / 연락처' 서명을 떼어 낸다 (편집창에는 본문만 보이게)
+  function stripSign(text) {
+    var s = String(text == null ? '' : text).replace(/\r\n/g, '\n');
+    var c = ctx();
+    var tail = '\n\n' + c.office + ' 드림\n' + c.phones;
+    if (s.slice(-tail.length) === tail) return s.slice(0, -tail.length).replace(/\s+$/, '');
+    var m = /\n\n[^\n]{1,40} 드림\n[0-9+()\- ]{7,30}\s*$/.exec(s);
+    if (m) return s.slice(0, m.index).replace(/\s+$/, '');
+    return s;
+  }
+
+  function cleanBody(text) {
+    // 문자 본문에는 대괄호가 나가지 않는 규칙을 그대로 지킨다
+    return String(text == null ? '' : text)
+      .replace(/\r\n/g, '\n')
+      .replace(/\[/g, '(')
+      .replace(/\]/g, ')')
+      .replace(/\s+$/, '');
+  }
+
+  function defaultStageForNew() {
+    if (store.stage && store.stage !== 'all') return String(store.stage);
+    var cur = tplById(store.current);
+    return cur ? String(cur.stage) : '1';
+  }
+
+  function openTemplateEditor(mode, id) {
+    var m = $('#tpl-editor');
+    if (!m) return;
+    editor.mode = mode;
+    editor.id = id || null;
+    var stageSel = $('#te-stage');
+    var delBtn = $('#btn-tpl-editor-del');
+    var tip = $('#te-tip');
+
+    if (mode === 'override') {
+      var t = tplById(id);
+      if (!t) return;
+      var ov = store.overrides[id];
+      var body, sign;
+      if (ov) {
+        body = ov.body;
+        sign = ov.sign !== false;
+      } else {
+        var full = $('#preview').value || buildText(t);
+        body = stripSign(full);
+        sign = body !== full;
+      }
+      $('#tpl-editor-title').textContent = '문구 편집 — 영구 저장';
+      stageSel.value = String(t.stage);
+      stageSel.disabled = true;
+      $('#te-title').value = t.title;
+      $('#te-title').disabled = true;
+      $('#te-desc').value = t.desc || '';
+      $('#te-desc').disabled = true;
+      $('#te-body').value = body;
+      $('#te-sign').checked = sign;
+      delBtn.hidden = true;
+      tip.textContent = '저장하면 이 문구는 고정 본문으로 바뀝니다(입력 항목은 숨겨짐). 미리보기에서 한 번만 고치는 것과 달리 계속 남습니다 — 「기본값으로」로 언제든 되돌릴 수 있어요. 대괄호 [ ]는 소괄호 ( )로 바뀌어 저장됩니다.';
+    } else {
+      var cur = mode === 'custom' ? customById(id) : null;
+      $('#tpl-editor-title').textContent = cur ? '내 문구 편집' : '새 문구 추가';
+      stageSel.value = cur ? String(cur.stage) : defaultStageForNew();
+      stageSel.disabled = false;
+      $('#te-title').value = cur ? cur.title : '';
+      $('#te-title').disabled = false;
+      $('#te-desc').value = cur ? cur.desc : '';
+      $('#te-desc').disabled = false;
+      $('#te-body').value = cur ? cur.body : '';
+      $('#te-sign').checked = cur ? cur.sign !== false : true;
+      delBtn.hidden = !cur;
+      tip.textContent = '저장하면 목록에 바로 나오고, 이 기기에 저장됩니다. 대괄호 [ ]는 소괄호 ( )로 바뀌어 저장됩니다.';
+    }
+
+    closeSheet();
+    m.classList.add('is-open');
+    m.setAttribute('aria-hidden', 'false');
+    setTimeout(function () {
+      if (mode === 'override') { $('#te-body').focus(); }
+      else { $('#te-title').focus(); }
+    }, 40);
+  }
+
+  function closeTemplateEditor() {
+    var m = $('#tpl-editor');
+    if (!m) return;
+    m.classList.remove('is-open');
+    m.setAttribute('aria-hidden', 'true');
+  }
+
+  function afterTemplateChange() {
+    rebuildTemplates();
+    if (!tplById(store.current)) store.current = TEMPLATES[0] ? TEMPLATES[0].id : 't1';
+    // 지금 고른 카테고리에 없는 문구라면 전체 목록으로 돌려 목록에서 보이게 한다
+    var cur = tplById(store.current);
+    if (cur && cur.custom && store.stage !== 'all' && String(store.stage) !== String(cur.stage)) {
+      store.stage = 'all';
+    }
+    save();
+    renderAll();
+  }
+
+  function saveTemplateEditor() {
+    var body = cleanBody($('#te-body').value);
+    if (!body.trim()) { toast('본문을 먼저 적어 주세요'); $('#te-body').focus(); return; }
+    var sign = $('#te-sign').checked;
+
+    if (editor.mode === 'override') {
+      var t = tplById(editor.id);
+      if (!t) return;
+      var before = store.overrides[editor.id]
+        ? JSON.parse(JSON.stringify(store.overrides[editor.id])) : null;
+      store.overrides[editor.id] = { body: body, sign: sign };
+      delete store.texts[editor.id];
+      delete editDirty[editor.id];
+      closeTemplateEditor();
+      afterTemplateChange();
+      showSnack('「' + t.title + '」 문구를 영구 저장했어요', function () {
+        if (before) store.overrides[editor.id] = before;
+        else delete store.overrides[editor.id];
+        afterTemplateChange();
+      });
+      return;
+    }
+
+    var title = $('#te-title').value.trim();
+    if (!title) { toast('제목을 먼저 적어 주세요'); $('#te-title').focus(); return; }
+    var stage = String($('#te-stage').value || '1');
+    var desc = $('#te-desc').value.trim();
+
+    if (editor.mode === 'custom' && customById(editor.id)) {
+      var cur = customById(editor.id);
+      cur.stage = stage;
+      cur.title = title;
+      cur.desc = desc;
+      cur.body = body;
+      cur.sign = sign;
+      closeTemplateEditor();
+      afterTemplateChange();
+      toast('문구를 고쳤어요');
+      return;
+    }
+
+    var id = 'c' + Date.now().toString(36) + Math.floor(Math.random() * 1000).toString(36);
+    store.custom.push({ id: id, stage: stage, title: title, desc: desc, body: body, sign: sign });
+    store.current = id;
+    closeTemplateEditor();
+    afterTemplateChange();
+    toast('새 문구를 저장했어요');
+  }
+
+  function deleteCustomTemplate() {
+    var ct = editor.id ? customById(editor.id) : null;
+    if (!ct) return;
+    if (!window.confirm('「' + ct.title + '」 문구를 삭제할까요?')) return;
+    var idx = store.custom.indexOf(ct);
+    var snap = JSON.parse(JSON.stringify(ct));
+    var starIdx = store.stars.indexOf(ct.id);
+    store.custom.splice(idx, 1);
+    if (starIdx !== -1) store.stars.splice(starIdx, 1);
+    if (store.current === ct.id) store.current = 't1';
+    closeTemplateEditor();
+    afterTemplateChange();
+    showSnack('문구를 삭제했어요', function () {
+      store.custom.splice(Math.min(idx, store.custom.length), 0, snap);
+      if (starIdx !== -1) store.stars.splice(Math.min(starIdx, store.stars.length), 0, snap.id);
+      store.current = snap.id;
+      afterTemplateChange();
+    });
+  }
+
+  function revertTemplate() {
+    var t = tplById(store.current);
+    if (!t || !t.edited) return;
+    var before = JSON.parse(JSON.stringify(store.overrides[t.id]));
+    var title = t.title;
+    delete store.overrides[t.id];
+    afterTemplateChange();
+    showSnack('「' + title + '」을 기본 문구로 되돌렸어요', function () {
+      store.overrides[t.id] = before;
+      afterTemplateChange();
+    });
+  }
+
+  /* ---------------- PC·폰 백업 · 불러오기 ---------------- */
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+
+  function exportJson() {
+    var snap = SYNC.snapshot(store);
+    if (!snap.updatedAt) snap.updatedAt = Date.now();
+    return JSON.stringify(snap, null, 2);
+  }
+
+  function exportCopy(btn) {
+    copyText(exportJson(), btn);
+  }
+
+  function exportFile() {
+    var text = exportJson();
+    var d = new Date();
+    var name = '문자도우미_백업_' + d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + '.json';
+    var blob = new Blob([text], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 3000);
+    toast('백업 파일을 내려받았어요');
+  }
+
+  function applyImport(text) {
+    var snap = SYNC.parse(text);
+    if (!snap) { toast('불러올 수 없는 내용이에요'); return false; }
+    applyingRemote = true;
+    var changed = false;
+    try {
+      changed = SYNC.apply(store, snap);
+      store.contacts = mergeContacts(store.contacts);
+    } finally {
+      applyingRemote = false;
+    }
+    lastContent = SYNC.contentKey(store);
+    rebuildTemplates();
+    if (!tplById(store.current)) store.current = TEMPLATES[0] ? TEMPLATES[0].id : 't1';
+    saveNow();
+    renderAll();
+    $('#import-box').hidden = true;
+    $('#import-text').value = '';
+    closeSettings();
+    if (ghConnected()) schedulePush();
+    toast(changed ? '불러왔어요' : '이미 같은 내용이에요');
+    return true;
+  }
+
+  /* ---------------- PC·폰 자동 동기화 (GitHub Gist) ---------------- */
+  var syncUi = { timer: null, busy: false, again: false };
+
+  function ghConnected() { return !!(store.sync && store.sync.token && store.sync.gistId); }
+
+  function shortId(id) {
+    var s = String(id || '');
+    return s.length > 10 ? s.slice(0, 6) + '…' : s;
+  }
+
+  function timeLabel(ts) {
+    if (!ts) return '';
+    var d = new Date(ts);
+    return pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+  }
+
+  function syncBadge(state, label) {
+    var b = $('#sync-status');
+    if (!b) return;
+    if (!state) { b.hidden = true; return; }
+    b.hidden = false;
+    b.dataset.state = state;
+    b.textContent = label;
+  }
+
+  function syncLine(msg) {
+    var n = $('#gh-status');
+    if (n) n.textContent = msg;
+  }
+
+  function refreshSyncUi() {
+    var off = $('#btn-gh-off');
+    if (off) off.hidden = !ghConnected();
+    if (ghConnected()) {
+      if (store.sync.lastSync) {
+        syncBadge('ok', '동기화됨');
+        syncLine('연결됨 · Gist ' + shortId(store.sync.gistId) + ' · 마지막 동기화 ' + timeLabel(store.sync.lastSync));
+      } else {
+        syncBadge('pending', '연결됨');
+        syncLine('연결됨 · Gist ' + shortId(store.sync.gistId) + ' · 아직 동기화 전');
+      }
+    } else {
+      syncBadge(null);
+      syncLine('연결하면 앱을 열 때 자동으로 불러오고, 문구를 고치면 자동으로 저장합니다.');
+    }
+  }
+
+  function syncFail(err) {
+    var offline = !!(err && err.offline);
+    syncBadge('off', offline ? '오프라인' : '동기화 실패');
+    syncLine((err && err.message) || '동기화에 실패했어요');
+    return false;
+  }
+
+  function markSynced() {
+    store.sync.lastSync = Date.now();
+    saveNow();
+    syncBadge('ok', '동기화됨');
+    syncLine('연결됨 · Gist ' + shortId(store.sync.gistId) + ' · 마지막 동기화 ' + timeLabel(store.sync.lastSync));
+  }
+
+  function pushSnapshot() {
+    return SYNC.updateGist(store.sync.token, store.sync.gistId, SYNC.snapshot(store)).then(function () {
+      markSynced();
+      return true;
+    });
+  }
+
+  function applyRemote(snap, opts) {
+    applyingRemote = true;
+    try {
+      SYNC.apply(store, snap);
+      store.contacts = mergeContacts(store.contacts);
+    } finally {
+      applyingRemote = false;
+    }
+    lastContent = SYNC.contentKey(store);
+    rebuildTemplates();
+    if (!tplById(store.current)) store.current = TEMPLATES[0] ? TEMPLATES[0].id : 't1';
+    markSynced();
+    renderAll();
+    if (!(opts && opts.silent)) toast('PC·폰의 최신 내용으로 맞췄어요');
+    return true;
+  }
+
+  // 최신(updatedAt) 쪽으로 맞춘다 — 받아 올 것이 없으면 올린다
+  function syncNow(opts) {
+    opts = opts || {};
+    if (!ghConnected()) return Promise.resolve(false);
+    if (syncUi.busy) { syncUi.again = true; return Promise.resolve(false); }
+    syncUi.busy = true;
+    syncBadge('syncing', '동기화 중');
+    return SYNC.readSnapshot(store.sync.token, store.sync.gistId).then(function (remote) {
+      if (!remote) return pushSnapshot();
+      var who = SYNC.choose(SYNC.snapshot(store), remote);
+      if (who === 'pull') return applyRemote(remote, opts);
+      if (who === 'push') return pushSnapshot();
+      markSynced();
+      return true;
+    }).catch(syncFail).then(function (res) {
+      syncUi.busy = false;
+      if (syncUi.again) { syncUi.again = false; schedulePush(); }
+      return res;
+    });
+  }
+
+  function schedulePush() {
+    if (!ghConnected() || applyingRemote) return;
+    syncBadge('pending', '저장 대기');
+    clearTimeout(syncUi.timer);
+    syncUi.timer = setTimeout(function () { syncNow({ silent: true }); }, 2500);
+  }
+
+  function connectSync() {
+    var token = $('#set-gh-token').value.trim();
+    var gistId = $('#set-gh-gist').value.trim();
+    if (!token) { toast('GitHub 토큰을 먼저 넣어 주세요'); $('#set-gh-token').focus(); return; }
+    if (gistId && !/^[A-Za-z0-9]+$/.test(gistId)) { toast('Gist ID를 확인해 주세요'); $('#set-gh-gist').focus(); return; }
+    store.sync.token = token;
+    store.sync.gistId = gistId;
+    saveNow();
+    var btn = $('#btn-gh-sync');
+    btn.disabled = true;
+    syncBadge('syncing', '연결 중');
+    syncLine('GitHub에 연결하는 중…');
+    var job;
+    if (!gistId) {
+      job = SYNC.createGist(token, SYNC.snapshot(store)).then(function (data) {
+        if (!data || !data.id) throw new Error('비공개 Gist를 만들지 못했어요');
+        store.sync.gistId = data.id;
+        $('#set-gh-gist').value = data.id;
+        markSynced();
+        toast('연결했어요 · 이제 PC·폰이 자동으로 맞춰집니다');
+        return true;
+      });
+    } else {
+      job = syncNow({});
+    }
+    job.catch(syncFail).then(function (ok) {
+      btn.disabled = false;
+      // 실패했으면 실패 표시(오프라인 등)를 그대로 둔다
+      if (ok !== false) refreshSyncUi();
+    });
+  }
+
+  function disconnectSync() {
+    store.sync.token = '';
+    store.sync.gistId = '';
+    saveNow();
+    $('#set-gh-token').value = '';
+    $('#set-gh-gist').value = '';
+    refreshSyncUi();
+    toast('PC·폰 연결을 해제했어요');
   }
 
   /* ---------------- 모바일 목록 시트 ---------------- */
@@ -1986,8 +2476,49 @@
     $('#sheet-close').addEventListener('click', closeSheet);
     $('#sheet').addEventListener('click', function (e) { if (e.target === this) closeSheet(); });
 
+    // 문구 편집 · 새 문구
+    $('#btn-tpl-new').addEventListener('click', function () { openTemplateEditor('new'); });
+    $('#btn-tpl-new-sheet').addEventListener('click', function () { openTemplateEditor('new'); });
+    $('#btn-tpl-edit').addEventListener('click', function () {
+      var t = tplById(store.current);
+      if (!t) return;
+      openTemplateEditor(t.custom ? 'custom' : 'override', t.id);
+    });
+    $('#btn-tpl-revert').addEventListener('click', revertTemplate);
+    $('#btn-tpl-editor-close').addEventListener('click', closeTemplateEditor);
+    $('#btn-tpl-editor-cancel').addEventListener('click', closeTemplateEditor);
+    $('#btn-tpl-editor-save').addEventListener('click', saveTemplateEditor);
+    $('#btn-tpl-editor-del').addEventListener('click', deleteCustomTemplate);
+    $('#tpl-editor').addEventListener('click', function (e) { if (e.target === this) closeTemplateEditor(); });
+
+    // 백업 · 불러오기
+    $('#btn-export').addEventListener('click', function () { exportCopy(this); });
+    $('#btn-export-file').addEventListener('click', exportFile);
+    $('#btn-import').addEventListener('click', function () {
+      var box = $('#import-box');
+      box.hidden = !box.hidden;
+      if (!box.hidden) $('#import-text').focus();
+    });
+    $('#btn-import-apply').addEventListener('click', function () { applyImport($('#import-text').value); });
+    $('#btn-import-file').addEventListener('click', function () { $('#import-file').click(); });
+    $('#import-file').addEventListener('change', function () {
+      var f = this.files && this.files[0];
+      this.value = '';
+      if (!f) return;
+      var reader = new FileReader();
+      reader.onload = function () { applyImport(String(reader.result || '')); };
+      reader.readAsText(f);
+    });
+
+    // PC·폰 자동 동기화
+    $('#btn-gh-sync').addEventListener('click', connectSync);
+    $('#btn-gh-off').addEventListener('click', disconnectSync);
+    $('#sync-status').addEventListener('click', openSettings);
+    window.addEventListener('online', function () { if (ghConnected()) syncNow({ silent: true }); });
+    window.addEventListener('offline', function () { if (ghConnected()) syncBadge('off', '오프라인'); });
+
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') { closeCal(); closeSettings(); closeSheet(); }
+      if (e.key === 'Escape') { closeCal(); closeSettings(); closeSheet(); closeTemplateEditor(); }
     });
   }
 
@@ -2102,7 +2633,7 @@
     var on = i === -1;
     if (on) store.stars.push(id);
     else store.stars.splice(i, 1);
-    saveNow();
+    save();
     renderList($('#tpl-list'), { withFavorites: true });
     renderList($('#sheet-list'), { withFavorites: false });
     if (fromLongPress) toast(on ? '★ 즐겨찾기에 넣었어요' : '즐겨찾기에서 뺐어요');
@@ -2409,9 +2940,15 @@
 
   /* ---------------- 시작 ---------------- */
   load();
+  rebuildTemplates();
+  if (!tplById(store.current)) store.current = 't5';
+  lastContent = SYNC.contentKey(store);
   bind();
   bindLongPress();
   bindSwipe();
   applyUrlParams();
   renderAll();
+  refreshSyncUi();
+  // 연결돼 있으면 앱을 열 때 최신 내용을 받아 온다
+  if (ghConnected()) setTimeout(function () { syncNow({ silent: true }); }, 350);
 })();

@@ -187,6 +187,39 @@ def main():
         pg.wait_for_timeout(200)
         pg.screenshot(path=sh(DOCS, 'shot-settings.png'))
         pg.click('#btn-settings-close')
+
+        # 8) 새 문구 추가 (v1.1.0) — 편집창 → 목록·미리보기
+        pg.click('#btn-tpl-new')
+        pg.wait_for_timeout(250)
+        pg.select_option('#te-stage', '4')
+        pg.fill('#te-title', '이사 후 안부')
+        pg.fill('#te-desc', '입주 축하 · 관리 안내')
+        pg.fill('#te-body', '안녕하세요, 고객님.\n이사 잘 마치셨는지요.\n\n새 집에서 불편한 점이 있으시면 언제든 연락 주세요.\n관리사무소 연락처와 주차 등록 안내도 함께 보내드립니다.')
+        pg.wait_for_timeout(200)
+        pg.screenshot(path=sh(DOWNLOADS, 'sms-app-custom-editor.png'))
+        pg.screenshot(path=sh(DOCS, 'shot-custom-editor.png'))
+        pg.click('#btn-tpl-editor-save')
+        pg.wait_for_timeout(2300)   # '새 문구를 저장했어요' 토스트가 사라진 뒤
+        pg.screenshot(path=sh(DOWNLOADS, 'sms-app-custom-tpl.png'))
+        pg.screenshot(path=sh(DOCS, 'shot-custom-tpl.png'))
+
+        # 9) 기존 문구 영구 수정 — 문구 편집 창
+        pick(pg, 't3')
+        pg.wait_for_timeout(200)
+        pg.click('#btn-tpl-edit')
+        pg.wait_for_timeout(300)
+        pg.screenshot(path=sh(DOWNLOADS, 'sms-app-tpl-edit.png'))
+        pg.screenshot(path=sh(DOCS, 'shot-tpl-edit.png'))
+        pg.click('#btn-tpl-editor-cancel')
+
+        # 10) 내 정보 설정 아래쪽 — 백업 · 불러오기 / PC·폰 자동 동기화
+        pg.click('#btn-settings')
+        pg.wait_for_timeout(250)
+        pg.eval_on_selector('#settings .modal-body', 'e => e.scrollTop = e.scrollHeight')
+        pg.wait_for_timeout(300)
+        pg.screenshot(path=sh(DOWNLOADS, 'sms-app-sync.png'))
+        pg.screenshot(path=sh(DOCS, 'shot-sync.png'))
+        pg.click('#btn-settings-close')
         ctx.close()
 
         # ---------------- 작은 PC 창 (1000×720) ----------------
@@ -293,7 +326,8 @@ def main():
     for f in ('sms-app-pc.png', 'sms-app-mobile.png', 'sms-app-vendor.png', 'sms-app-thanks.png',
               'sms-app-myungdan.png', 'sms-app-calc.png', 'sms-app-pay.png',
               'sms-app-vendor-scroll.png', 'sms-app-vendor-scroll-end.png', 'sms-app-1000x720.png',
-              'sms-app-paytable-t8-390x844.png'):
+              'sms-app-paytable-t8-390x844.png', 'sms-app-custom-editor.png', 'sms-app-custom-tpl.png',
+              'sms-app-tpl-edit.png', 'sms-app-sync.png'):
         path = sh(DOWNLOADS, f)
         print(' ', path, os.path.getsize(path), 'bytes')
     print('콘솔 오류:', errors if errors else '없음')

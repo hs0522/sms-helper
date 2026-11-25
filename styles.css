@@ -1202,3 +1202,105 @@ input, textarea, select { font-family: inherit; letter-spacing: inherit; }
   overflow-wrap: normal;
 }
 .money-hint .hint-ko { white-space: nowrap; }
+
+/* ==================================================================
+   내 문구 · 문구 편집 · PC·폰 동기화 (v1.1.0)
+   ================================================================== */
+/* 목록 위 '새 문구 추가' */
+.list-top { padding: 0 0 8px; }
+.ghost.is-block { display: flex; width: 100%; align-items: center; justify-content: center; gap: 6px; padding: 9px 12px; font-size: 12.2px; }
+.sheet-add { padding: 0 0 8px; }
+
+/* 미리보기 머리의 문구 편집 · 기본값으로 */
+.panel-head .head-actions { display: flex; gap: 6px; flex: 0 0 auto; }
+.ghost.is-tpl { padding: 6px 9px; font-size: 11.2px; border-radius: 9px; }
+
+/* 목록의 '내 문구 · 수정됨' 표시 */
+.row-badge {
+  flex: 0 0 auto;
+  margin-left: 5px;
+  font-size: 8.6px;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: var(--accent-dark);
+  background: var(--tint);
+  border-radius: 4px;
+  padding: 1px 4px;
+  white-space: nowrap;
+}
+
+/* 상단 동기화 상태 */
+.sync-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sync-pill::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: #B9BCC8; flex: 0 0 auto; }
+.sync-pill[data-state="ok"] { color: #1B7A46; border-color: #CBEBDA; background: #F4FBF7; }
+.sync-pill[data-state="ok"]::before { background: #2FA36B; }
+.sync-pill[data-state="syncing"] { color: #96660C; border-color: #F0E2BE; background: #FDF9EE; }
+.sync-pill[data-state="syncing"]::before { background: #E0A020; }
+.sync-pill[data-state="pending"] { color: #96660C; border-color: #F0E2BE; background: #FDF9EE; }
+.sync-pill[data-state="pending"]::before { background: #E0A020; }
+.sync-pill[data-state="off"] { color: #B03A2E; border-color: #F0D3CE; background: #FDF5F3; }
+.sync-pill[data-state="off"]::before { background: #D4553F; }
+
+/* 설정 안 구역 · 버튼 줄 */
+.modal-sep { height: 1px; background: var(--line-soft); margin: 18px 0 2px; }
+.modal-sub { margin: 12px 0 2px; font-size: 13px; font-weight: 700; letter-spacing: -0.025em; color: var(--ink); }
+.btn-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.btn-row .ghost { flex: 1 1 auto; padding: 9px 10px; font-size: 12px; }
+.primary.is-slim { flex: 1 1 auto; padding: 9px 12px; font-size: 12.3px; border-radius: 10px; width: auto; }
+.import-box { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.import-box .inp-area { min-height: 84px; }
+
+/* 문구 편집 모달 */
+.modal-card.is-editor { width: min(520px, 100%); }
+.modal-card.is-editor .modal-body .inp { font-size: 13px; }
+.modal-card.is-editor #te-body { min-height: 210px; line-height: 1.7; }
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 12.4px;
+  color: var(--label);
+  cursor: pointer;
+}
+.check-row input { width: 16px; height: 16px; accent-color: var(--accent); flex: 0 0 auto; }
+.ghost.is-danger { color: #B03A2E; border-color: #F0D3CE; }
+.ghost.is-danger:hover { background: #FDF5F3; border-color: #E7BDB5; color: #8E2A20; }
+.modal-foot.is-row { display: flex; gap: 8px; align-items: center; }
+.modal-foot.is-row .primary { flex: 1 1 auto; width: auto; }
+.modal-foot.is-row .ghost { flex: 0 0 auto; }
+.modal-foot.is-row .is-danger { margin-right: auto; }
+
+@media (max-width: 900px) {
+  /* 상단: 동기화 표시가 있어도 두 줄로 접히게 */
+  .top-actions { flex-wrap: wrap; justify-content: flex-end; }
+  .sync-pill { padding: 5px 8px; font-size: 10px; }
+  .panel-head .head-actions { gap: 5px; }
+  .ghost.is-tpl { padding: 6px 8px; font-size: 10.6px; }
+  .modal-card.is-editor .modal-body .inp,
+  .modal-card.is-editor #te-body { font-size: 16px; }
+  .modal-foot.is-row .primary { padding: 12px 14px; }
+}
+
+/* 읽기 전용으로 잠근 입력칸(기존 문구 영구 수정에서 제목·카테고리) */
+.inp:disabled,
+select.inp:disabled {
+  background: var(--track);
+  color: var(--muted);
+  cursor: default;
+}
+.inp:disabled::placeholder { color: var(--muted2); }
+select.inp:disabled { appearance: none; -webkit-appearance: none; background-image: none; }
