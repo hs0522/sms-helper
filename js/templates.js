@@ -50,6 +50,11 @@
     var price = C.propPrice(p);
     return price ? base + ' (' + price + ')' : base + ' (가격)';
   }
+  // 동·호수로 찾은 평형·타입·방향 → " 34평 84A · 남동향" (표에 없으면 직접 적은 값, 그것도 없으면 빈칸)
+  function typeLine(p) {
+    var s = String((p && p.typeInfo) || '').trim() || C.maraepuUnit(p && p.complex, p && p.dong, p && p.ho);
+    return s ? ' ' + s : '';
+  }
   function itemsOf(data, key, mode) {
     var list = data[key];
     if (!Array.isArray(list) || !list.length) return [];
@@ -173,20 +178,21 @@
       title: '매물 접수 확인',
       desc: '거래조건 · 입주 · 옵션',
       fields: [
-        { t: 'property', id: 'prop', label: '매물' },
-        { t: 'seg', id: 'trade', label: '거래 유형', options: [{ v: '매매', l: '매매' }, { v: '전세', l: '전세' }, { v: '월세', l: '월세' }] },
-        { t: 'text', id: 'price', label: '금액', ph: '예: 23억 / 보증금 5억 6천 / 보증금 1억·월세 350' },
-        { t: 'text', id: 'movein', label: '입주', ph: '예: 협의 / 즉시 / 26.12 말' },
+        { t: 'property', id: 'prop', label: '매물', price: true },
+        { t: 'date', id: 'movein', label: '입주', freeText: true, ph: '또는 협의 / 즉시' },
         { t: 'text', id: 'option', label: '옵션', ph: '예: 시스템에어컨 2대, 에어컨 3대' }
       ],
       build: function (d, ctx) {
+        var p = d.prop || {};
+        var price = C.propPrice(p);
+        var movein = C.formatDateTime(d.movein) || txt(d.moveinText, '입주');
         return join([
           '안녕하세요, ' + ctx.office + '입니다 😊',
           '소중한 매물을 접수해 주셔서 진심으로 감사드립니다.\n저희가 마포래미안푸르지오 단지 내 상가에 자리하고 있는 만큼, 더욱 신경 써서 좋은 인연으로 연결해 드리겠습니다.',
           '접수해 주신 매물 내용 확인 부탁드립니다.',
-          '* ' + prop(d.prop, d.mode) + '\n' +
-          '* 거래조건 : ' + (d.trade || '매매') + ' ' + txt(d.price, '금액') + '\n' +
-          '* 입주 : ' + txt(d.movein, '입주') + '\n' +
+          '* ' + prop(p, d.mode) + '\n' +
+          '* 거래조건 : ' + (price || '(금액)') + '\n' +
+          '* 입주 : ' + movein + '\n' +
           '* 옵션 : ' + txt(d.option, '옵션'),
           '혹시 변동 사항이 있으시면 언제든 편하게 연락 주세요. 감사합니다!',
           sign(ctx)
@@ -422,25 +428,37 @@
       title: '공동중개 매물 요청',
       desc: '고객 희망 조건 · 매물 확보',
       fields: [
-        { t: 'seg', id: 'trade', label: '거래 유형', options: [{ v: '매매', l: '매매' }, { v: '임대차', l: '임대차(전세·월세)' }] },
-        { t: 'money', id: 'amount', label: '금액 (보증금 · 매매가)' },
-        { t: 'text', id: 'area', label: '평형', ph: '예: 34 (매매일 때만)', showIf: function (d) { return d.trade !== '임대차'; } },
-        { t: 'text', id: 'movein', label: '입주', ph: '예: 27년 2월' },
+        { t: 'seg', id: 'trade', label: '거래 유형', options: [{ v: '매매', l: '매매' }, { v: '전세', l: '전세' }, { v: '월세', l: '월세' }] },
+        { t: 'money', id: 'amount', label: '금액 (매매가)', showIf: function (d) { return d.trade !== '전세' && d.trade !== '월세'; } },
+        { t: 'money', id: 'deposit', label: '보증금', showIf: function (d) { return d.trade === '전세' || d.trade === '월세'; } },
+        { t: 'money', id: 'rent', label: '월차임 (월세일 때만)', showIf: function (d) { return d.trade === '월세'; } },
+        { t: 'text', id: 'area', label: '평형', ph: '예: 34 (매매일 때만)', showIf: function (d) { return d.trade !== '전세' && d.trade !== '월세'; } },
+        { t: 'date', id: 'movein', label: '입주', freeText: true, ph: '또는 즉시 / 협의' },
         { t: 'text', id: 'guestNote', label: '손님 특징 한 줄', ph: '예: 염리초 보내고 싶은 학부모입니다' }
       ],
       build: function (d, ctx) {
-        var rent = d.trade === '임대차';
-        var amount = hint(d.amount) || '(금액)';
+        // 예전 저장값(임대차 · 금액 한 칸)도 그대로 읽는다
+        var rent = d.trade === '전세' || d.trade === '월세';
+        var trade = d.trade === '월세' ? '월세' : (rent ? '전세' : '매매');
+        var depMan = C.parseMan(rent ? d.deposit : d.amount);
+        var rentMan = C.parseMan(d.rent);
+        var amount = hint(depMan) || '(금액)';
         var area = String(d.area == null ? '' : d.area).trim().replace(/평$/, '');
         var first = rent
           ? '요즘 임대매물 귀한데, 염치없이 전화드렸어요 🥲\n혹시 매물 나오면 꼭 부탁드립니다~!'
           : '매수 의사 확실한 손님이라 조심스레 여쭤봤어요 😊\n혹시 조건 맞는 매물 나오면 꼭 부탁드립니다~!';
-        var cond = rent
-          ? '보증금 ' + amount + '까지'
-          : '매매 ' + amount + '까지' + (area ? ' (' + area + '평)' : '');
+        var cond;
+        if (trade === '월세') {
+          cond = '보증금 ' + amount + (rentMan != null ? ' / 월세 ' + hint(rentMan) + ' 원' : '') + '까지';
+        } else if (trade === '전세') {
+          cond = '보증금 ' + amount + '까지';
+        } else {
+          cond = '매매 ' + amount + '까지' + (area ? ' (' + area + '평)' : '');
+        }
+        var movein = C.formatDateTime(d.movein) || txt(d.moveinText, '입주');
         var blocks = [
           first,
-          [cond, '입주 ' + txt(d.movein, '입주'), txt(d.guestNote, '손님 특징')].join('\n'),
+          [cond, '입주 ' + movein, txt(d.guestNote, '손님 특징')].join('\n'),
           '친절하게 설명해주셔서 감사합니다!'
         ];
         blocks.push(sign(ctx));
@@ -456,30 +474,30 @@
       title: '특가 매물 홍보',
       desc: '매물 정보 · 거래조건 · 강조 문구',
       fields: [
-        { t: 'seg', id: 'trade', label: '거래 유형', options: [{ v: '매매', l: '매매' }, { v: '전세', l: '전세' }, { v: '월세', l: '월세' }] },
-        { t: 'text', id: 'spot', label: '단지·층', ph: '예: 4단지 19층' },
-        { t: 'text', id: 'area', label: '평형', ph: '예: 24' },
-        { t: 'text', id: 'unit', label: '동·호로 빠르게', ph: '예: 404동 1903호' },
-        { t: 'action', id: 'promoUnit', label: '단지·층 자동 변환' },
-        { t: 'money', id: 'price', label: '금액' },
+        { t: 'props', id: 'items', label: '매물', price: true, typeInfo: true },
         { t: 'text', id: 'emphasis', label: '강조 문구', ph: '예: 최저가 조율 가능합니다' }
       ],
       build: function (d, ctx) {
-        var spot = String(d.spot == null ? '' : d.spot).trim() || spotFromUnit(d.unit) || '(단지·층·평형)';
-        // 평형은 "24" / "24평" / "24평형" 어느 쪽으로 적어도 "24평형"으로
-        var area = String(d.area == null ? '' : d.area).trim().replace(/\s*(평형|평)$/, '');
-        var spotLine = area ? spot + ' ' + area + '평형' : spot;
-        var trade = d.trade === '전세' || d.trade === '월세' ? d.trade : '매매';
-        var amount = hint(d.price) || '(금액)';
+        var list = itemsOf(d, 'items', d.mode);
+        var first = list[0] || {};
+        var headTrade = first.trade === '전세' || first.trade === '월세' ? first.trade : '매매';
         var emph = String(d.emphasis == null ? '' : d.emphasis).trim() || '최저가 조율 가능합니다';
-        var blocks = [
+        // 매물이 여럿이면 한 줄씩: 단지·동·호 + 평형·타입·방향, 그 아래 거래조건 한 줄
+        var lines = list.length ? list.map(function (p) {
+          var head = prop(p, d.mode);
+          var tl = typeLine(p).trim();
+          if (head === '(매물)' && tl) head = tl;
+          else if (tl) head += ' ' + tl;
+          var price = C.propPrice(p);
+          return '🔑' + head + '\n🔑' + (price ? price + '으로 ' : '') + emph;
+        }).join('\n') : '🔑(매물) (가격)';
+        return join([
           '안녕하세요, ' + ctx.office + '입니다 😊',
-          '마포래미안푸르지오 ' + trade + ' 특가 소식 전해드립니다!',
-          '🔑' + spotLine + '\n🔑' + trade + ' ' + amount + '으로 ' + emph,
-          '관심있으시면 편하게 연락주시고, 오늘도 좋은 하루 보내세요!'
-        ];
-        blocks.push(sign(ctx));
-        return join(blocks);
+          '마포래미안푸르지오 ' + headTrade + ' 특가 소식 전해드립니다!',
+          lines,
+          '관심있으시면 편하게 연락주시고, 오늘도 좋은 하루 보내세요!',
+          sign(ctx)
+        ]);
       }
     },
 
@@ -760,59 +778,62 @@
       title: '중도금·잔금 일정 안내',
       desc: '일시 · 준비물 · 입금 정보',
       fields: [
-        { t: 'seg', id: 'trade', label: '거래 유형', options: [{ v: '매매', l: '매매' }, { v: '임대차', l: '임대차' }] },
-        { t: 'seg', id: 'kind', label: '일정', options: [{ v: '중도금', l: '중도금' }, { v: '잔금', l: '잔금' }] },
+        { t: 'seg', id: 'trade', label: '거래 유형', options: [{ v: '매매', l: '매매' }, { v: '전세', l: '전세' }, { v: '월세', l: '월세' }] },
+        { t: 'seg', id: 'kind', label: '일정', options: [{ v: '중도금', l: '중도금' }, { v: '잔금', l: '잔금' }], showIf: function (d) { return d.trade !== '전세' && d.trade !== '월세'; } },
         { t: 'property', id: 'prop', label: '매물' },
-        { t: 'toggle', id: 'registry', label: '당일 등기부 확인 안내 포함', showIf: function (d) { return d.trade === '임대차'; } },
-        { t: 'toggle', id: 'docs', label: '잔금 구비서류 포함', showIf: function (d) { return d.trade !== '임대차' && d.kind === '잔금'; } },
+        { t: 'toggle', id: 'registry', label: '당일 등기부 확인 안내 포함', showIf: function (d) { return d.trade === '전세' || d.trade === '월세'; } },
+        { t: 'toggle', id: 'docs', label: '잔금 구비서류 포함', showIf: function (d) { return d.trade !== '전세' && d.trade !== '월세' && d.kind === '잔금'; } },
         { t: 'group', label: '거래금액' },
-        { t: 'money', id: 'price', label: '매매대금', showIf: function (d) { return d.trade !== '임대차'; } },
-        { t: 'money', id: 'deposit', label: '보증금', showIf: function (d) { return d.trade === '임대차'; } },
-        { t: 'money', id: 'rent', label: '월차임 (월세일 때만)', showIf: function (d) { return d.trade === '임대차'; } },
+        { t: 'money', id: 'price', label: '매매대금', showIf: function (d) { return d.trade !== '전세' && d.trade !== '월세'; } },
+        { t: 'money', id: 'deposit', label: '보증금', showIf: function (d) { return d.trade === '전세' || d.trade === '월세'; } },
+        { t: 'money', id: 'rent', label: '월차임 (월세일 때만)', showIf: function (d) { return d.trade === '월세'; } },
         { t: 'paytable', id: 'pay', rows: [
           { id: 'gyeyak', label: '계약금', amountId: 'gyeyak', dateId: 'gyeyakDate', rate: true },
-          { id: 'jung', label: '중도금', amountId: 'jung', dateId: 'jungDate', rate: true, showIf: function (d) { return d.trade !== '임대차'; } },
+          { id: 'jung', label: '중도금', amountId: 'jung', dateId: 'jungDate', rate: true, showIf: function (d) { return d.trade !== '전세' && d.trade !== '월세'; } },
           { id: 'jan', label: '잔금', amountId: 'jan', dateId: 'janDate', auto: true }
         ] },
         { t: 'account', id: 'account', label: '입금 계좌', ph: '예: 국민은행 123456-01-234567 홍길동' }
       ],
       build: function (d, ctx) {
         var place = prop(d.prop, d.mode);
+        // 매매가 아니면 중도금이 없으니 일정은 늘 잔금이다
+        var isRent = d.trade === '전세' || d.trade === '월세';
+        var kind = isRent ? '잔금' : (d.kind || '중도금');
         // 일시는 고른 일정(중도금/잔금) 줄의 날짜를 쓴다. 예전 저장값(d.when)도 그대로 읽는다.
         var whenVal = C.formatDateTime(d.when) || String(d.whenText || '').trim();
         if (!whenVal) {
-          whenVal = d.kind === '잔금'
+          whenVal = kind === '잔금'
             ? (C.formatDateTime(d.janDate) || C.formatDateTime(d.jungDate))
             : (C.formatDateTime(d.jungDate) || C.formatDateTime(d.janDate));
         }
         var blocks = [
           '안녕하세요, ' + ctx.office + '입니다 😊',
-          place + ' ' + (d.kind || '중도금') + ' 일정 안내드립니다.',
+          place + ' ' + kind + ' 일정 안내드립니다.',
           '* 일시 : ' + (whenVal || '(입금 일시)') +
-            (d.trade === '임대차' && d.registry
+            (isRent && d.registry
               ? '\n* 당일 제가 본 소재지 등기부를 발급해 새로운 권리변동이 없음을 확인시켜 드린 후 입금 진행하시면 됩니다.'
               : '')
         ];
-        // 잔금 = 매매대금(임대차는 보증금) − 계약금 − 중도금 — core.paymentSplit 하나로 계산한다
+        // 잔금 = 매매대금(전세·월세는 보증금) − 계약금 − 중도금 — core.paymentSplit 하나로 계산한다
         var split = C.paymentSplit({
-          totalMan: C.parseMan(d.trade === '임대차' ? d.deposit : d.price),
+          totalMan: C.parseMan(isRent ? d.deposit : d.price),
           gyeyakMan: C.parseMan(d.gyeyak),
-          jungMan: d.trade === '임대차' ? null : C.parseMan(d.jung)
+          jungMan: isRent ? null : C.parseMan(d.jung)
         });
         var janAmt = split.ok ? amt(split.janMan, ctx) : '';
         var janText = janAmt || (split.over ? '확인 필요 (계약금이 보증금을 넘음)' : '(잔금)');
         var warn = '';
         if (split.over) {
-          warn = '※ 계약금' + (d.trade === '임대차' ? '' : '·중도금') + ' 합계 ' + amt(split.paidMan, ctx) +
-            '이 ' + (d.trade === '임대차' ? '보증금 ' : '매매대금 ') + amt(split.baseMan, ctx) + '보다 ' +
+          warn = '※ 계약금' + (isRent ? '' : '·중도금') + ' 합계 ' + amt(split.paidMan, ctx) +
+            '이 ' + (isRent ? '보증금 ' : '매매대금 ') + amt(split.baseMan, ctx) + '보다 ' +
             amt(split.overByMan, ctx) + ' 많습니다. 지급액을 다시 확인해 주세요.';
         } else if (split.negative) {
           warn = '※ 지급액에 음수가 있어 잔금을 계산하지 않았습니다. 금액을 다시 확인해 주세요.';
         }
         var rows;
-        if (d.trade === '임대차') {
+        if (isRent) {
           var dep = amt(C.parseMan(d.deposit), ctx);
-          var rent = amt(C.parseMan(d.rent), ctx);
+          var rent = d.trade === '월세' ? amt(C.parseMan(d.rent), ctx) : '';
           rows = [
             '* 보증금 : ' + (dep || '(보증금)') + (rent ? ' / 월차임 : ' + rent : ''),
             '* 계약금 : ' + (amt(C.parseMan(d.gyeyak), ctx) || '(계약금)'),
@@ -829,7 +850,7 @@
         blocks.push('■ 금액 세부사항\n' + rows.join('\n'));
         if (warn) blocks.push(warn);
         blocks.push('* 입금 계좌 : ' + (C.accountParse(d.account) || '(계좌번호)'));
-        if (d.trade !== '임대차' && d.kind === '잔금' && d.docs) {
+        if (d.trade !== '전세' && d.trade !== '월세' && kind === '잔금' && d.docs) {
           blocks.push('■ 매도인 구비서류\n1. 인감도장, 신분증\n2. 매도용 인감증명서 1통 (매수인 인적사항 기재)\n3. 등기권리증\n4. 주민등록초본 1통 (전체 주소 이력 포함)\n5. 관리비·가스비 정산서\n6. 각종 리모컨, 카드키 등 전달품');
           blocks.push('■ 매수인 구비서류\n1. 도장\n2. 매매계약서 원본\n3. 가족관계증명서(상세) : 매수인 각각 본인 기준 발급\n4. 주민등록등본 1통 (세대원 전원 주민등록번호 뒷자리 공개)\n5. 취득세 등 이전비용');
         }
@@ -988,9 +1009,9 @@
   function defaultData(t) {
     var d = { mode: 'ho' };
     if (t.id === 't4' || t.id === 't2' || t.id === 't9' || t.id === 't10' || t.id === 't13' || t.id === 't8') d.prop = defaultProp();
-    if (t.id === 't5' || t.id === 't7') d.items = [defaultProp()];
+    if (t.id === 't5' || t.id === 't7' || t.id === 't19') d.items = [defaultProp()];
     if (t.id === 't5') { d.status = 'confirmed'; d.detail = true; d.parking = true; }
-    if (t.id === 't2') d.trade = '매매';
+    if (t.id === 't2') { d.movein = { date: '', hour: null, min: 0 }; d.moveinText = ''; }
     if (t.id === 't3') { d.ver = 'simple'; d.guest = '매수'; d.times = ''; }
     if (t.id === 't10' || t.id === 't13') d.trade = '매매';
     if (t.id === 't13') d.kind = '중도금';
@@ -1001,8 +1022,8 @@
     if (t.id === 't14') { d.calcKind = 'house'; d.calcTrade = '매매'; d.calcVat = '4'; }
     if (t.id === 't16') { d.danji = '1단지'; d.trade = '매매'; }
     if (t.id === 't17') { d.target = 'owner'; d.vpick = { owner: 0, coagent: 0, guest: 0 }; d.greet = 'none'; }
-    if (t.id === 't18') { d.trade = '임대차'; d.movein = '27년 2월'; d.guestNote = '염리초 보내고 싶은 학부모입니다'; }
-    if (t.id === 't19') { d.trade = '매매'; d.spot = ''; d.unit = ''; d.emphasis = '최저가 조율 가능합니다'; }
+    if (t.id === 't18') { d.trade = '매매'; d.movein = { date: '', hour: null, min: 0 }; d.moveinText = ''; d.guestNote = '염리초 보내고 싶은 학부모입니다'; }
+    if (t.id === 't19') { d.emphasis = '최저가 조율 가능합니다'; }
     if (t.id === 't20') { d.vendorCat = '대출'; d.vendorSel = defaultVendorSel(); }
     return d;
   }

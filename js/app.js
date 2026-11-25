@@ -165,6 +165,7 @@
     } else {
       // 기본값을 채우기 전에 예전 저장값부터 매물 줄 구조로 옮긴다
       migrateProps(t, store.data[t.id]);
+      migrateTrades(t, store.data[t.id]);
       var d = T.defaultData(t);
       for (var k in d) if (!(k in store.data[t.id])) store.data[t.id][k] = d[k];
     }
@@ -203,7 +204,42 @@
         if (patch2) Object.assign(data[f.id], patch2);
       }
     });
+    migratePromoProps(t, data);
     migratePropMode(t, data);
+  }
+
+  // 예전 "임대차" 하나짜리 거래 유형을 전세/월세로 나눈다 (t13 · t18)
+  function migrateTrades(t, data) {
+    if (!t || (t.id !== 't13' && t.id !== 't18') || data.trade !== '임대차') return;
+    data.trade = C.parseMan(data.rent) != null ? '월세' : '전세';
+    if (t.id === 't18' && (data.deposit == null || data.deposit === '') && data.amount != null) data.deposit = data.amount;
+  }
+
+  // 예전 특가 매물 홍보(단지·층 + 평형 + 동·호로 빠르게)를 매물 줄 하나로 옮긴다
+  function migratePromoProps(t, data) {
+    if (t.id !== 't19' || Array.isArray(data.items)) return;
+    var item = T.defaultProp();
+    if (data.trade === '전세' || data.trade === '월세') item.trade = data.trade;
+    if (data.price != null && data.price !== '') item.price = String(data.price);
+    var unit = String(data.unit == null ? '' : data.unit);
+    var dm = /(\d{2,4})\s*동/.exec(unit);
+    var hm = /(\d{2,4})\s*호/.exec(unit);
+    if (!dm && !hm) {
+      var nums = unit.match(/\d{3,4}/g) || [];
+      if (nums.length >= 2) { dm = [0, nums[0]]; hm = [0, nums[1]]; }
+    }
+    if (dm && hm) {
+      item.dong = dm[1];
+      item.ho = hm[1];
+    } else {
+      // 동·호를 못 읽으면 예전 단지·층·평형 글자를 그대로 살려 둔다
+      var area = String(data.area == null ? '' : data.area).trim().replace(/\s*(평형|평)$/, '');
+      var spot = String(data.spot == null ? '' : data.spot).trim();
+      var keep = [spot, area ? area + '평형' : ''].filter(Boolean).join(' ');
+      if (keep) { item.typeInfo = keep; item.typeInfoManual = true; }
+      item.complex = '';
+    }
+    data.items = [item];
   }
 
   // 예전 한 줄짜리 노출 설정(동·호수 / 동·층 / 단지)을 매물 줄의 동·호 배지로 옮긴다
@@ -491,17 +527,19 @@
       });
     }
     if (t.id === 't13') {
+      var rentTrade = data.trade === '전세' || data.trade === '월세';
       return C.paymentSplit({
-        totalMan: C.parseMan(data.trade === '임대차' ? data.deposit : data.price),
+        totalMan: C.parseMan(rentTrade ? data.deposit : data.price),
         gyeyakMan: C.parseMan(data.gyeyak),
-        jungMan: data.trade === '임대차' ? null : C.parseMan(data.jung)
+        jungMan: rentTrade ? null : C.parseMan(data.jung)
       });
     }
     return null;
   }
 
   function payBaseLabel(t, data) {
-    return t && t.id === 't13' && data && data.trade === '임대차' ? '보증금' : '매매대금';
+    var rent = data && (data.trade === '전세' || data.trade === '월세');
+    return t && t.id === 't13' && rent ? '보증금' : '매매대금';
   }
 
   // 읽기 전용 잔금 칸 (자동 계산 결과)
@@ -594,7 +632,10 @@
 
   function payBaseMan(t, data) {
     if (!t || !data) return null;
-    if (t.id === 't13') return C.parseMan(data.trade === '임대차' ? data.deposit : data.price);
+    if (t.id === 't13') {
+      var rent = data.trade === '전세' || data.trade === '월세';
+      return C.parseMan(rent ? data.deposit : data.price);
+    }
     return C.parseMan(data.price);
   }
 
@@ -736,7 +777,7 @@
       // 잔금처럼 자동으로 계산되는 금액 (t13)
       case 'autoMoney': {
         var sp = paySplitOf(t, data);
-        row = fieldRow(f.label, { hintText: (t.id === 't13' && data.trade === '임대차' ? '보증금 − 계약금' : '매매대금 − 계약금 − 중도금') + ' 자동 계산' });
+        row = fieldRow(f.label, { hintText: (t.id === 't13' && (data.trade === '전세' || data.trade === '월세') ? '보증금 − 계약금' : '매매대금 − 계약금 − 중도금') + ' 자동 계산' });
         row.appendChild(autoMoneyField({
           id: f.id,
           value: sp && sp.ok ? sp.janMan : null,
@@ -910,20 +951,33 @@
       }
 
       case 'date': {
-        row = fieldRow(f.label);
-        var db = el('button', 'date-btn');
+        row = fieldRow(f.label, f.freeText ? { hintText: f.hintText || '달력에서 고르거나 협의·즉시처럼 적어도 됩니다' } : undefined);
+        var dbox = el('div', 'date-with-text');
+        var db = el('button', 'date-btn' + (f.freeText ? ' is-compact' : ''));
         db.type = 'button';
         db.dataset.date = f.id;
         var v = data[f.id];
         db.appendChild(dateIcon());
-        db.appendChild(el('span', 'date-text' + (C.formatDateTime(v) ? '' : ' is-empty'), C.compactDateTime(v) || '날짜 · 시간 선택'));
+        db.appendChild(el('span', 'date-text' + (C.formatDateTime(v) ? '' : ' is-empty'), C.compactDateTime(v) || (f.freeText ? '날짜' : '날짜 · 시간 선택')));
         if (C.formatDateTime(v)) {
           var clr = el('span', 'date-clear', '×');
           clr.dataset.clearDate = f.id;
           clr.title = '일시 지우기';
           db.appendChild(clr);
         }
-        row.appendChild(db);
+        dbox.appendChild(db);
+        if (f.freeText) {
+          // 달력 대신 "협의" / "즉시" / "26.12 말"처럼 글자로 적는 칸
+          var ft = el('input', 'inp inp-date-free');
+          ft.type = 'text';
+          ft.autocomplete = 'off';
+          ft.placeholder = f.ph || '또는 협의 / 즉시';
+          ft.dataset.field = f.id + 'Text';
+          ft.dataset.dateField = f.id;
+          ft.value = data[f.id + 'Text'] == null ? '' : data[f.id + 'Text'];
+          dbox.appendChild(ft);
+        }
+        row.appendChild(dbox);
         return row;
       }
 
@@ -1045,7 +1099,39 @@
     }
     box.appendChild(top);
     if (f.price) box.appendChild(propMoney(f.id, idx, item));
+    // 동·호수로 찾은 평형·타입·방향 — 자동으로 채우고, 표에 없으면 직접 적는다
+    if (f.typeInfo) box.appendChild(propTypeInfo(f, item, idx));
     return box;
+  }
+
+  function propTypeInfo(f, item, idx) {
+    var line = el('div', 'prop-type');
+    var i = el('input', 'inp inp-type');
+    i.type = 'text';
+    i.autocomplete = 'off';
+    i.placeholder = '평형·타입·방향 (동·호수를 넣으면 자동)';
+    i.title = '마래푸 1~4단지 동·라인 표에서 평형·타입·방향을 채웁니다 · 다르면 직접 고쳐 쓰세요';
+    i.dataset.prop = f.id;
+    if (idx != null) i.dataset.idx = idx;
+    i.dataset.key = 'typeInfo';
+    var stored = item.typeInfo == null ? '' : String(item.typeInfo).trim();
+    i.value = stored || C.maraepuUnit(item.complex, item.dong, item.ho);
+    line.appendChild(i);
+    return line;
+  }
+
+  // 동·호수가 바뀌면 평형·타입·방향을 다시 찾아 칸에 넣는다 (직접 고친 값은 건드리지 않는다)
+  function fillTypeInfo(item, box) {
+    if (!item || item.typeInfoManual) return;
+    var info = C.maraepuUnit(item.complex, item.dong, item.ho);
+    if (!info) {
+      if (item.typeInfoAuto) { item.typeInfo = ''; item.typeInfoAuto = false; }
+    } else {
+      item.typeInfo = info;
+      item.typeInfoAuto = true;
+    }
+    var inp = box && box.querySelector('[data-key="typeInfo"]');
+    if (inp && document.activeElement !== inp) inp.value = item.typeInfo || '';
   }
 
   function propInput(f, item, idx, key, ph, cls, title) {
@@ -1076,21 +1162,17 @@
     var asComplex = item.dongMode === 'complex';
     var asFloor = item.hoMode === 'floor';
     var alt = isDong ? asComplex : asFloor;
-    var off = !isDong && asComplex;
-    wrap.classList.toggle('is-off', off);
-    if (off) { inp.disabled = true; inp.placeholder = '—'; }
 
-    var btn = el('button', 'unit-toggle' + (alt ? ' is-alt' : ''), off ? '—' : (isDong ? (asComplex ? '단지' : '동') : (asFloor ? '층' : '호')));
+    var btn = el('button', 'unit-toggle' + (alt ? ' is-alt' : ''), isDong ? (asComplex ? '단지' : '동') : (asFloor ? '층' : '호'));
     btn.type = 'button';
     btn.dataset.propUnit = key;
     btn.dataset.unitList = f.id;
     if (idx != null) btn.dataset.idx = idx;
     btn.setAttribute('aria-pressed', alt ? 'true' : 'false');
     btn.setAttribute('aria-label', isDong ? '동·단지 전환' : '호수·층 전환');
-    btn.disabled = off;
     btn.title = isDong
       ? (asComplex ? '지금은 단지로 나갑니다 (208 → 2단지) · 눌러서 동으로' : '지금은 동으로 나갑니다 (208 → 208동) · 눌러서 단지로')
-      : (asFloor ? '지금은 층으로 나갑니다 (208 → 2층) · 눌러서 호수로' : '지금은 호수로 나갑니다 (208 → 208호) · 눌러서 층으로');
+      : (asFloor ? '지금은 층으로 나갑니다 (1203 → 12층) · 눌러서 호수로' : '지금은 호수로 나갑니다 (1203 → 1203호) · 눌러서 층으로');
     wrap.appendChild(btn);
     return wrap;
   }
@@ -1556,6 +1638,8 @@
     var data = dataOf(t);
     if (!data[fieldId] || typeof data[fieldId] !== 'object') data[fieldId] = { date: '', hour: null, min: 0 };
     Object.assign(data[fieldId], patch);
+    // 달력으로 날짜를 골랐으면 직접 적은 글자(협의·즉시)는 지운다
+    if (patch.date) data[fieldId + 'Text'] = '';
     save();
   }
 
@@ -2151,6 +2235,14 @@
           pitem[t.dataset.money] = pman == null ? '' : pman;
         } else {
           pitem[t.dataset.key] = t.value;
+          if (t.dataset.key === 'typeInfo') {
+            // 직접 고친 값은 동·호수를 다시 넣어도 그대로 둔다
+            pitem.typeInfoManual = !!String(t.value).trim();
+            pitem.typeInfoAuto = false;
+          }
+        }
+        if (t.dataset.key === 'dong' || t.dataset.key === 'ho' || t.dataset.key === 'complex') {
+          fillTypeInfo(pitem, t.closest('.prop-item'));
         }
         markEdited();
         updatePreviewOnly();
@@ -2166,6 +2258,8 @@
         } else {
           data[t.dataset.field] = v;
         }
+        // 날짜 칸에 글자(협의·즉시)를 쓰면 달력으로 고른 값은 지운다
+        if (t.dataset.dateField && String(v).trim()) data[t.dataset.dateField] = null;
         // 단지처럼 직접 적는 칸에 글을 치면 옆의 선택 버튼은 꺼진다
         if (t.dataset.freeText) {
           var rowBox = t.parentNode;
@@ -2232,7 +2326,7 @@
         var uk = unitBtn.dataset.propUnit;
         if (uk === 'dong') {
           itemU.dongMode = itemU.dongMode === 'complex' ? 'dong' : 'complex';
-        } else if (itemU.dongMode !== 'complex') {
+        } else {
           itemU.hoMode = itemU.hoMode === 'floor' ? 'ho' : 'floor';
         }
         save();
@@ -2308,7 +2402,6 @@
       var act = e.target.closest('[data-action]');
       if (act) {
         if (act.dataset.action === 'vary') { varyPhrase(); return; }
-        if (act.dataset.action === 'promoUnit') { promoFromUnit(); return; }
         var t6 = tplById(store.current);
         var d6 = dataOf(t6);
         var price = C.parseMan(d6.price);
@@ -2526,6 +2619,33 @@
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') { closeCal(); closeSettings(); closeSheet(); closeTemplateEditor(); }
     });
+
+    bindKeyboardGuard();
+  }
+
+  // 아이폰 숫자·문자 키보드가 열린 채 스크롤해도 하단 고정 바가 화면 가운데에 떠
+  // 미리보기 카드를 가로지르지 않게, 키보드가 올라온 동안에는 바를 감춘다.
+  function bindKeyboardGuard() {
+    var isMobile = function () { return window.matchMedia('(max-width: 900px)').matches; };
+    var isField = function (el) {
+      if (!el) return false;
+      var tag = (el.tagName || '').toLowerCase();
+      return tag === 'input' || tag === 'textarea' || tag === 'select';
+    };
+    var shrunk = function () {
+      var vv = window.visualViewport;
+      return !!(vv && vv.height && vv.height < window.innerHeight * 0.78);
+    };
+    function sync() {
+      var open = isMobile() && (shrunk() || isField(document.activeElement));
+      document.body.classList.toggle('kbd-open', open);
+    }
+    document.addEventListener('focusin', sync);
+    document.addEventListener('focusout', function () { setTimeout(sync, 120); });
+    if (window.visualViewport) window.visualViewport.addEventListener('resize', sync);
+    window.addEventListener('resize', sync);
+    window.addEventListener('orientationchange', function () { setTimeout(sync, 200); });
+    sync();
   }
 
   function onListClick(e) {
@@ -2817,19 +2937,6 @@
     save();
     renderForm();
     updatePreviewOnly();
-  }
-
-  function promoFromUnit() {
-    var t = tplById(store.current);
-    var d = dataOf(t);
-    var spot = T.spotFromUnit(d.unit);
-    if (!spot) { toast('동·호를 먼저 넣어 주세요 (예: 404동 1903호)'); return; }
-    d.spot = spot;
-    markEdited();
-    save();
-    renderForm();
-    updatePreviewOnly();
-    toast(spot + '(으)로 바꿨어요');
   }
 
   /* ---------------- 매물 스파이더에서 값 넘겨 열기 (?template=...) ---------------- */

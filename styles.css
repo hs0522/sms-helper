@@ -461,15 +461,9 @@ input, textarea, select { font-family: inherit; letter-spacing: inherit; }
 .unit-toggle:hover { background: #E1E4FF; }
 .unit-toggle.is-alt { background: var(--accent); color: #fff; box-shadow: none; }
 .unit-toggle.is-alt:hover { background: var(--accent-dark); }
-.unit-toggle:disabled { background: var(--track); color: var(--muted2); box-shadow: none; cursor: default; }
-.unit-field.is-off .inp {
-  background: var(--track);
-  border-color: var(--line-soft);
-  color: var(--muted2);
-  -webkit-text-fill-color: var(--muted2);
-  cursor: default;
-}
 .prop-money { display: flex; align-items: flex-start; gap: 6px; flex-wrap: wrap; }
+/* 동·호수로 찾은 평형·타입·방향 — 매물 줄 아래 가는 한 줄 */
+.prop-type .inp { width: 100%; padding: 7px 10px; font-size: 12.2px; color: var(--label); background: var(--track); }
 .prop-money .seg.is-trade { flex: 0 0 auto; }
 .prop-money .seg.is-trade .seg-btn { flex: 0 0 auto; padding: 7px 11px; font-size: 11.8px; }
 .prop-money > .money-field { flex: 1 1 168px; }
@@ -502,6 +496,10 @@ input, textarea, select { font-family: inherit; letter-spacing: inherit; }
 }
 .date-btn:hover { border-color: var(--accent); background: #fff; }
 .date-btn.is-compact { width: auto; padding: 10px 11px; font-size: 12.5px; }
+/* 달력 + 직접 글자(협의·즉시)를 함께 받는 입주 칸 */
+.date-with-text { display: flex; gap: 6px; align-items: center; }
+.date-with-text .date-btn { flex: 0 0 auto; }
+.date-with-text .inp-date-free { flex: 1 1 auto; min-width: 0; padding: 9px 10px; font-size: 12.6px; }
 .date-ico { font-size: 12px; }
 .date-text.is-empty { color: #B4B7C2; }
 
@@ -635,6 +633,11 @@ input, textarea, select { font-family: inherit; letter-spacing: inherit; }
 /* ---------------- 모바일 ---------------- */
 .mobile-bar { display: none; }
 #btn-sheet { display: none; }
+/* 키보드가 열린 동안에는 하단 고정 바를 감춘다 (입력칸을 가리지 않게) */
+@media (max-width: 900px) {
+  body.kbd-open .mobile-bar { display: none; }
+  body.kbd-open { padding-bottom: 24px; }
+}
 
 .sheet { display: none; position: fixed; inset: 0; background: rgba(17, 18, 28, .34); z-index: 60; }
 .sheet.is-open { display: block; }

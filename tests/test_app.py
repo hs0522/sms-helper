@@ -275,15 +275,24 @@ class AppTest(unittest.TestCase):
             ({'complex': '마포래미안푸르지오', 'dong': '208', 'ho': '208', 'mode': 'floor'},
              '마포래미안푸르지오 208동 2층'),
             ({'complex': '마포래미안푸르지오', 'dong': '208', 'ho': '208', 'mode': 'complex'},
-             '마포래미안푸르지오 2단지'),
+             '마포래미안푸르지오 2단지 208호'),
             ({'complex': '마포래미안푸르지오', 'dong': '208', 'ho': '1103', 'mode': 'floor'},
              '마포래미안푸르지오 208동 11층'),
             ({'complex': '마포래미안푸르지오', 'dong': '304', 'ho': '1103', 'mode': 'complex'},
-             '마포래미안푸르지오 3단지'),
+             '마포래미안푸르지오 3단지 1103호'),
             ({'complex': '마포래미안푸르지오', 'dong': '105', 'ho': '101', 'mode': 'complex'},
-             '마포래미안푸르지오 1단지'),
+             '마포래미안푸르지오 1단지 101호'),
             ({'complex': '마포래미안푸르지오', 'dong': '402', 'ho': '201', 'mode': 'complex'},
-             '마포래미안푸르지오 4단지'),
+             '마포래미안푸르지오 4단지 201호'),
+            # 단지로 가려도 호수 칸에 값이 있으면 층·호수가 붙는다 (비우면 단지까지만)
+            ({'complex': '마포래미안푸르지오', 'dong': '404', 'ho': '1903', 'dongMode': 'complex', 'hoMode': 'floor'},
+             '마포래미안푸르지오 4단지 19층'),
+            ({'complex': '마포래미안푸르지오', 'dong': '201', 'ho': '1203', 'dongMode': 'complex', 'hoMode': 'floor'},
+             '마포래미안푸르지오 2단지 12층'),
+            ({'complex': '마포래미안푸르지오', 'dong': '201', 'ho': '1203', 'dongMode': 'complex', 'hoMode': 'ho'},
+             '마포래미안푸르지오 2단지 1203호'),
+            ({'complex': '마포래미안푸르지오', 'dong': '201', 'ho': '', 'dongMode': 'complex', 'hoMode': 'floor'},
+             '마포래미안푸르지오 2단지'),
             ({'complex': '마포래미안푸르지오', 'dong': '105', 'ho': '101', 'mode': 'floor'},
              '마포래미안푸르지오 105동 1층'),
             ({'complex': '마포래미안푸르지오', 'dong': '208동', 'ho': '208호', 'mode': 'ho'},
@@ -292,7 +301,7 @@ class AppTest(unittest.TestCase):
              '마포래미안푸르지오 208동'),
             # 동·호 → 단지·층 (특가 안내의 빠른 변환)
             ({'complex': '마포래미안푸르지오', 'dong': '404', 'ho': '1903', 'mode': 'complex'},
-             '마포래미안푸르지오 4단지'),
+             '마포래미안푸르지오 4단지 1903호'),
             # 매물 줄의 인라인 배지 (동 ↔ 단지 · 호 ↔ 층)
             ({'complex': '마포래미안푸르지오', 'dong': '208', 'ho': '208', 'dongMode': 'dong', 'hoMode': 'ho'},
              '마포래미안푸르지오 208동 208호'),
@@ -301,14 +310,14 @@ class AppTest(unittest.TestCase):
             ({'complex': '마포래미안푸르지오', 'dong': '208', 'ho': '1103', 'dongMode': 'dong', 'hoMode': 'floor'},
              '마포래미안푸르지오 208동 11층'),
             ({'complex': '마포래미안푸르지오', 'dong': '208', 'ho': '1103', 'dongMode': 'complex', 'hoMode': 'ho'},
-             '마포래미안푸르지오 2단지'),
+             '마포래미안푸르지오 2단지 1103호'),
             ({'complex': '마포래미안푸르지오', 'dong': '307', 'ho': '802', 'dongMode': 'complex', 'hoMode': 'floor'},
-             '마포래미안푸르지오 3단지'),
+             '마포래미안푸르지오 3단지 8층'),
             # 배지 설정이 있으면 예전 mode 값보다 우선한다
             ({'complex': '마포래미안푸르지오', 'dong': '208', 'ho': '1103', 'mode': 'floor', 'dongMode': 'dong', 'hoMode': 'ho'},
              '마포래미안푸르지오 208동 1103호'),
             ({'complex': '마포래미안푸르지오', 'dong': '208', 'ho': '1103', 'mode': 'ho', 'dongMode': 'complex'},
-             '마포래미안푸르지오 2단지'),
+             '마포래미안푸르지오 2단지 1103호'),
             ({'complex': '마포래미안푸르지오', 'dong': '208', 'ho': '', 'dongMode': 'dong', 'hoMode': 'floor'},
              '마포래미안푸르지오 208동'),
             # 단지명은 늘 앞에 붙는다
@@ -448,10 +457,12 @@ class AppTest(unittest.TestCase):
             t10: [{ trade: '매매' }, { trade: '임대차' }],
             t11: [{ trade: '매매' }, { trade: '임대차' }],
             t12: [{ owner: '공동' }, { owner: '단독' }],
-            t13: [{ trade: '매매', kind: '중도금' }, { trade: '매매', kind: '잔금' }, { trade: '임대차', kind: '잔금' }],
+            t13: [{ trade: '매매', kind: '중도금' }, { trade: '매매', kind: '잔금' },
+                  { trade: '전세', deposit: '10000', gyeyak: '1000' },
+                  { trade: '월세', deposit: '10000', rent: '50', gyeyak: '1000' }],
             t15: [{ role: '임대인' }, { role: '임차인' }],
             t16: [{ trade: '매매' }, { trade: '전세' }, { trade: '월세' }],
-            t18: [{ trade: '임대차' }, { trade: '매매' }],
+            t18: [{ trade: '전세' }, { trade: '매매' }, { trade: '월세', deposit: '10000', rent: '250' }],
             t19: [{ trade: '매매' }, { trade: '전세' }, { trade: '월세' }]
           };
           SMSTemplates.TEMPLATES.forEach(t => {
@@ -497,13 +508,15 @@ class AppTest(unittest.TestCase):
             t11: [{ trade: '매매' }, { trade: '임대차' }],
             t12: [{ owner: '공동' }, { owner: '단독' }],
             t13: [{ trade: '매매', kind: '중도금' }, { trade: '매매', kind: '잔금', docs: true },
-                  { trade: '임대차', kind: '잔금', registry: true },
+                  { trade: '전세', kind: '잔금', registry: true, deposit: '10000' },
+                  { trade: '월세', deposit: '10000', rent: '50', registry: true },
                   { trade: '매매', kind: '잔금', price: '247000', gyeyak: '24700', jung: '61750' }],
             t14: [{}, { calcAmount: '230000' }, { calcKind: 'commercial', calcTrade: '월세', calcDeposit: '10000', calcRent: '100' }],
             t15: [{ role: '임대인' }, { role: '임차인' }],
             t16: [{ trade: '매매' }, { trade: '전세' }, { trade: '월세' }],
-            t18: [{ trade: '임대차' }, { trade: '매매', amount: '90000', area: '34' }],
-            t19: [{ trade: '매매' }, { trade: '전세', price: '210000', spot: '4단지 19층', area: '24' }],
+            t18: [{ trade: '전세' }, { trade: '매매', amount: '90000', area: '34' },
+                  { trade: '월세', deposit: '10000', rent: '250' }],
+            t19: [{}, { items: [{ complex: '마포래미안푸르지오', dong: '201', ho: '1203', trade: '전세', amount: '210000' }] }],
             t20: [{ vendorCat: '대출' }, { vendorCat: '법무사' }]
           };
           SMSTemplates.TEMPLATES.forEach(t => {
@@ -635,17 +648,33 @@ class AppTest(unittest.TestCase):
         self.wait(80)
         self.assertIn('마포래미안푸르지오 208동 11층 (매매 23억)', self.text())
         self.assertEqual(self.page.inner_text('#fields [data-prop-unit="ho"]'), '층')
-        # 동 칸 배지 — 동 ↔ 단지 (호수·층은 빠지고 호수 칸은 잠긴다)
+        # 동 칸 배지 — 동 ↔ 단지: 호수 칸·호 배지는 그대로 살아 있고 층·호수가 함께 나간다
         self.page.click('#fields [data-prop-unit="dong"]')
         self.wait(80)
         body = self.text()
-        self.assertIn('마포래미안푸르지오 2단지 (매매 23억)', body)
-        self.assertNotIn('2단지 1103호', body)
-        self.assertNotIn('2단지 11층', body)
+        self.assertIn('마포래미안푸르지오 2단지 11층 (매매 23억)', body)
         self.assertEqual(self.page.inner_text('#fields [data-prop-unit="dong"]'), '단지')
         ho_inp = '#fields [data-prop="items"][data-idx="0"][data-key="ho"]'
-        self.assertTrue(self.page.eval_on_selector(ho_inp, 'e => e.disabled'), '단지일 때 호수 칸은 잠긴다')
-        self.assertTrue(self.page.eval_on_selector('#fields [data-prop-unit="ho"]', 'e => e.disabled'))
+        self.assertFalse(self.page.eval_on_selector(ho_inp, 'e => e.disabled'), '단지일 때도 호수 칸은 살아 있다')
+        self.assertFalse(self.page.eval_on_selector('#fields [data-prop-unit="ho"]', 'e => e.disabled'))
+        # 단지 상태에서 호 ↔ 층 배지도 그대로 돈다
+        self.page.click('#fields [data-prop-unit="ho"]')
+        self.wait(80)
+        self.assertEqual(self.page.inner_text('#fields [data-prop-unit="ho"]'), '호')
+        self.assertIn('마포래미안푸르지오 2단지 1103호 (매매 23억)', self.text())
+        # 단지 상태에서 호수 칸을 직접 고칠 수 있고, 비우면 단지까지만 나간다
+        self.page.fill(ho_inp, '1203')
+        self.wait(120)
+        self.assertIn('마포래미안푸르지오 2단지 1203호 (매매 23억)', self.text())
+        self.page.click('#fields [data-prop-unit="ho"]')
+        self.wait(80)
+        self.assertIn('마포래미안푸르지오 2단지 12층 (매매 23억)', self.text())
+        self.page.fill(ho_inp, '')
+        self.wait(120)
+        self.assertIn('마포래미안푸르지오 2단지 (매매 23억)', self.text())
+        self.assertNotIn('2단지 12층', self.text())
+        self.page.fill(ho_inp, '1103')
+        self.wait(120)
         # 다시 동으로 — 넣어 둔 호수는 그대로 남아 있다
         self.page.click('#fields [data-prop-unit="dong"]')
         self.wait(80)
@@ -752,7 +781,7 @@ class AppTest(unittest.TestCase):
         self.page.fill('#fields [data-money="rent"]', '300')
         self.wait(150)
         body = self.text()
-        self.assertIn('마포래미안푸르지오 208동 208호 (월세 1억/300만)', body)
+        self.assertIn('마포래미안푸르지오 208동 208호 (보증금 1억 / 월세 300만 원)', body)
 
     def test_legacy_price_migrated_on_load(self):
         ctx, page = self.page_with_state({
@@ -793,9 +822,11 @@ class AppTest(unittest.TestCase):
             'data': {'t7': {'mode': 'complex', 'items': [
                 {'complex': '마포래미안푸르지오', 'dong': '208', 'ho': '1103'}]}}
         })
-        self.assertIn('마포래미안푸르지오 2단지', page.input_value('#preview'))
+        self.assertIn('마포래미안푸르지오 2단지 1103호', page.input_value('#preview'))
         self.assertEqual(page.inner_text('#fields [data-prop-unit="dong"]'), '단지')
-        self.assertTrue(page.eval_on_selector('#fields [data-key="ho"]', 'e => e.disabled'))
+        self.assertFalse(page.eval_on_selector('#fields [data-key="ho"]', 'e => e.disabled'),
+                         '단지일 때도 호수 칸은 고칠 수 있다')
+        self.assertFalse(page.eval_on_selector('#fields [data-prop-unit="ho"]', 'e => e.disabled'))
         ctx.close()
 
     def test_header_and_panel_alignment(self):
@@ -971,7 +1002,8 @@ class AppTest(unittest.TestCase):
     def test_reset_button(self):
         self.pick('t2')
         self.page.fill('#fields [data-prop="prop"][data-key="dong"]', '402')
-        self.page.fill('#fields [data-field="price"]', '23억')
+        self.page.fill('#fields [data-prop="prop"][data-key="ho"]', '1201')
+        self.page.fill('#fields [data-prop="prop"][data-money="amount"]', '23억')
         self.wait(100)
         self.page.click('#btn-reset')
         self.wait(120)
@@ -981,7 +1013,7 @@ class AppTest(unittest.TestCase):
     def test_state_saved_across_reload(self):
         self.pick('t2')
         self.page.fill('#fields [data-prop="prop"][data-key="ho"]', '1201')
-        self.page.fill('#fields [data-field="price"]', '23억')
+        self.page.fill('#fields [data-prop="prop"][data-money="amount"]', '23억')
         self.wait(400)
         self.page.reload(wait_until='networkidle')
         self.wait(200)
@@ -1130,6 +1162,85 @@ class AppTest(unittest.TestCase):
         # 칸 위에 보증금·월세 이름
         labels = self.js("""() => [...document.querySelectorAll('.money-pair .money-label')].map(e => e.textContent)""")
         self.assertEqual(labels, ['보증금', '월세'])
+
+    def test_monthly_two_columns_in_all_property_blocks(self):
+        # 매물 블록을 쓰는 문자 모두 월세를 고르면 보증금·월차임 두 칸 + 각자 환산 줄
+        blocks = [('t2', 'prop'), ('t4', 'prop'), ('t7', 'items'), ('t19', 'items')]
+        for tid, key in blocks:
+            with self.subTest(tid=tid):
+                self.pick(tid)
+                base = '#fields [data-prop="%s"]' % key
+                if key == 'items':
+                    base += '[data-idx="0"]'
+                self.page.fill(base + '[data-key="dong"]', '208')
+                self.page.fill(base + '[data-key="ho"]', '1103')
+                trade = '#fields [data-prop-trade="%s"]' % key + ('[data-idx="0"]' if key == 'items' else '')
+                self.page.click(trade + '[data-value="월세"]')
+                self.wait(150)
+                self.assertEqual(len(self.page.query_selector_all('#fields [data-money="deposit"]')), 1)
+                self.assertEqual(len(self.page.query_selector_all('#fields [data-money="rent"]')), 1)
+                self.assertEqual(len(self.page.query_selector_all('#fields [data-money="amount"]')), 0)
+                labels = self.js("""() => [...document.querySelectorAll('.money-pair .money-label')].map(e => e.textContent)""")
+                self.assertEqual(labels, ['보증금', '월세'])
+                self.page.fill('#fields [data-money="deposit"]', '10000')
+                self.page.fill('#fields [data-money="rent"]', '350')
+                self.wait(180)
+                self.assertEqual(self.money_info('#fields [data-money="deposit"]')['hint'], '100,000,000원 (1억)')
+                self.assertEqual(self.money_info('#fields [data-money="rent"]')['hint'], '3,500,000원 (350만)')
+                self.assertIn('보증금 1억 / 월세 350만 원', self.text())
+                # 매매로 되돌리면 한 칸으로 돌아온다
+                self.page.click(trade + '[data-value="매매"]')
+                self.wait(150)
+                self.assertEqual(len(self.page.query_selector_all('#fields [data-money="amount"]')), 1)
+                self.assertEqual(len(self.page.query_selector_all('#fields [data-money="deposit"]')), 0)
+
+    def test_t2_property_block_and_trade(self):
+        # 매물 접수 확인 — 추천 매물 안내와 같은 매물 블록 하나로 거래조건까지 적는다
+        self.pick('t2')
+        self.assertEqual(len(self.page.query_selector_all('#fields [data-field="price"]')), 0,
+                         '따로 떨어진 금액 칸은 없다')
+        self.assertEqual(len(self.page.query_selector_all('#fields [data-field="trade"]')), 0,
+                         '따로 떨어진 거래 유형도 없다')
+        for key in ('complex', 'dong', 'ho'):
+            self.assertEqual(len(self.page.query_selector_all(f'#fields [data-prop="prop"][data-key="{key}"]')), 1)
+        self.page.fill('#fields [data-prop="prop"][data-key="dong"]', '208')
+        self.page.fill('#fields [data-prop="prop"][data-key="ho"]', '1103')
+        self.page.fill('#fields [data-prop="prop"][data-money="amount"]', '230000')
+        self.wait(180)
+        body = self.text()
+        self.assertIn('* 마포래미안푸르지오 208동 1103호', body)
+        self.assertIn('* 거래조건 : 매매 23억', body)
+        # 월세는 보증금·월차임이 한 줄로 조합된다
+        self.page.click('#fields [data-prop-trade="prop"][data-value="월세"]')
+        self.wait(150)
+        self.page.fill('#fields [data-money="deposit"]', '10000')
+        self.page.fill('#fields [data-money="rent"]', '350')
+        self.wait(180)
+        self.assertIn('* 거래조건 : 보증금 1억 / 월세 350만 원', self.text())
+
+    def test_movein_date_and_free_text(self):
+        # 입주 — 달력으로 고르거나 '협의/즉시'처럼 글자로 적을 수 있다 (t2 · t18)
+        for tid, sel in (('t2', '#fields [data-date="movein"]'), ('t18', '#fields [data-date="movein"]')):
+            with self.subTest(tid=tid):
+                self.pick(tid)
+                self.page.fill('#fields [data-field="moveinText"]', '즉시')
+                self.wait(150)
+                self.assertRegex(self.text(), r'입주\s*:?\s*즉시')
+                self.page.click(sel)
+                self.wait(160)
+                self.page.click('#calpop [data-cal-day="26"]')
+                self.wait(160)
+                self.page.click('#calpop [data-cal-close]')
+                self.wait(150)
+                body = self.text()
+                self.assertRegex(body, r'입주\s*:?\s*2026년 11월 26일 목요일')
+                self.assertNotIn('즉시', body)
+                # 글자를 다시 적으면 달력 값은 지워진다
+                self.page.fill('#fields [data-field="moveinText"]', '협의')
+                self.wait(150)
+                body = self.text()
+                self.assertRegex(body, r'입주\s*:?\s*협의')
+                self.assertNotIn('2026년 11월 26일', body)
 
     def test_all_money_fields_spider_style(self):
         # 만원 단위 금액칸이 있는 문자 전부 — 왼쪽 정렬 · 안쪽 '만원' · 아래 환산 줄
@@ -1579,6 +1690,93 @@ class AppTest(unittest.TestCase):
         self.assertTrue(page.is_hidden('#sms-mobile-bar'))
         ctx.close()
 
+    def test_mobile_bar_hidden_while_keyboard_open(self):
+        # 키보드가 열린 채 스크롤해도 '문자 앱 열기 / 복사하기' 바가 화면 가운데에 떠
+        # 미리보기 카드를 가르지 않도록, 입력칸에 초점이 들어간 동안에는 바를 감춘다.
+        ctx = self.browser.new_context(viewport={'width': 390, 'height': 844},
+                                      is_mobile=True, has_touch=True)
+        page = ctx.new_page()
+        errors = []
+        page.on('pageerror', lambda e: errors.append(str(e)))
+        page.goto(BASE, wait_until='networkidle')
+        page.evaluate('localStorage.clear()')
+        page.reload(wait_until='networkidle')
+        page.wait_for_timeout(220)
+        page.click('#btn-sheet')
+        page.wait_for_timeout(150)
+        page.click('#sheet-list [data-id="t7"]')
+        page.wait_for_timeout(220)
+
+        kbd = "document.body.classList.contains('kbd-open')"
+        bar_box = """() => { const r = document.querySelector('#sms-mobile-bar').getBoundingClientRect();
+          return { shown: r.width > 0 && r.height > 0, top: r.top, bottom: r.bottom }; }"""
+        self.assertTrue(page.is_visible('#sms-mobile-bar'))
+        self.assertFalse(page.evaluate(kbd))
+
+        dong = '#fields [data-prop="items"][data-idx="0"][data-key="dong"]'
+        page.click(dong)
+        page.wait_for_timeout(180)
+        self.assertTrue(page.evaluate(kbd), '입력칸에 초점이 가면 kbd-open')
+        self.assertTrue(page.is_hidden('#sms-mobile-bar'), '키보드가 열린 동안에는 하단 바를 감춘다')
+        self.assertEqual(page.evaluate('getComputedStyle(document.body).paddingBottom'), '24px')
+
+        # 키보드가 올라온 채로 맨 아래까지 스크롤해도 바가 화면 가운데에 뜨지 않는다
+        page.evaluate('window.scrollTo(0, document.documentElement.scrollHeight)')
+        page.wait_for_timeout(250)
+        self.assertFalse(page.evaluate(bar_box)['shown'], '스크롤해도 바는 그대로 감춰져 있다')
+        mid = page.evaluate("""() => {
+          const r = document.querySelector('#sms-mobile-bar').getBoundingClientRect();
+          return r.top > 0 && r.bottom < window.innerHeight;
+        }""")
+        self.assertFalse(mid, '바가 화면 가운데에 떠 있지 않다')
+
+        # 초점을 빼면 잠시 뒤 다시 보인다
+        page.evaluate('document.activeElement.blur()')
+        page.wait_for_timeout(240)
+        self.assertFalse(page.evaluate(kbd), '초점을 빼면 kbd-open 을 푼다')
+        self.assertTrue(page.is_visible('#sms-mobile-bar'))
+
+        # 다른 입력칸으로 옮겨 다녀도 계속 감춰진다
+        money = '#fields [data-prop="items"][data-idx="0"][data-money="amount"]'
+        page.click(money)
+        page.wait_for_timeout(180)
+        self.assertTrue(page.is_hidden('#sms-mobile-bar'))
+        page.evaluate('document.activeElement.blur()')
+        page.wait_for_timeout(240)
+        self.assertTrue(page.is_visible('#sms-mobile-bar'))
+
+        # 화면 보이는 높이(visualViewport)만 줄어도 — 키보드·주소창 — 바를 감춘다
+        page.evaluate("""() => {
+          Object.defineProperty(window.visualViewport, 'height',
+            { configurable: true, get: () => window.innerHeight * 0.6 });
+          window.visualViewport.dispatchEvent(new Event('resize'));
+        }""")
+        page.wait_for_timeout(120)
+        self.assertTrue(page.evaluate(kbd))
+        self.assertTrue(page.is_hidden('#sms-mobile-bar'))
+        page.evaluate("""() => {
+          delete window.visualViewport.height;
+          window.visualViewport.dispatchEvent(new Event('resize'));
+        }""")
+        page.wait_for_timeout(120)
+        self.assertFalse(page.evaluate(kbd))
+        self.assertTrue(page.is_visible('#sms-mobile-bar'))
+        self.assertEqual(errors, [])
+        ctx.close()
+
+        # PC 에서는 입력칸에 초점이 가도 하단 바 규칙이 끼어들지 않는다
+        ctx = self.browser.new_context(viewport={'width': 1440, 'height': 900})
+        page = ctx.new_page()
+        page.goto(BASE, wait_until='networkidle')
+        page.wait_for_timeout(220)
+        page.click('#tpl-list [data-id="t7"]')
+        page.wait_for_timeout(200)
+        page.click('#fields [data-prop="items"][data-idx="0"][data-key="dong"]')
+        page.wait_for_timeout(150)
+        self.assertFalse(page.evaluate(kbd))
+        self.assertTrue(page.is_hidden('#sms-mobile-bar'))
+        ctx.close()
+
     def test_mobile_inputs_16px_no_zoom(self):
         # 아이폰 사파리는 입력칸 글자가 16px보다 작으면 초점을 맞을 때 화면을 저절로 확대한다.
         # 모바일(≤900px)에서는 검색창·동·호·금액·퍼센트·모달 입력칸·미리보기까지 모두 16px 이상이다.
@@ -1856,7 +2054,7 @@ class AppTest(unittest.TestCase):
     def test_snackbar_undo_reset(self):
         self.pick('t2')
         self.page.fill('#fields [data-prop="prop"][data-key="dong"]', '402')
-        self.page.fill('#fields [data-field="price"]', '23억')
+        self.page.fill('#fields [data-prop="prop"][data-money="amount"]', '23억')
         self.wait(120)
         self.page.click('#btn-reset')
         self.wait(120)
@@ -2081,51 +2279,140 @@ class AppTest(unittest.TestCase):
     def test_t18_coagent_decline_amounts(self):
         self.pick('t18')
         body = self.text()
-        self.assertIn('요즘 임대매물 귀한데, 염치없이 전화드렸어요', body)
-        self.assertIn('보증금 (금액)까지', body)
-        self.assertIn('입주 27년 2월', body)
+        self.assertIn('매수 의사 확실한 손님이라 조심스레 여쭤봤어요', body)
+        self.assertIn('매매 (금액)까지', body)
         self.assertIn('염리초 보내고 싶은 학부모입니다', body)
         self.page.fill('#fields [data-field="amount"]', '90000')
         self.wait(150)
-        self.assertIn('보증금 9억까지', self.text())
+        self.assertIn('매매 9억까지', self.text())
         self.assertIn('(9억)', self.page.inner_text('#fields'))
-
-        # 매매로 바꾸면 평형 칸이 나오고 문구가 바뀐다
-        self.page.click('#fields [data-seg="trade"][data-value="매매"]')
-        self.wait(120)
-        body = self.text()
-        self.assertIn('매수 의사 확실한 손님이라 조심스레 여쭤봤어요', body)
-        self.assertIn('매매 9억까지', body)
         self.page.fill('#fields [data-field="area"]', '34')
         self.wait(150)
         self.assertIn('매매 9억까지 (34평)', self.text())
-        # 입주·특징 줄 고치기
-        self.page.fill('#fields [data-field="movein"]', '27년 8월')
-        self.wait(120)
+        # 입주 — 달력 대신 글자로도 적는다
+        self.page.fill('#fields [data-field="moveinText"]', '27년 8월')
+        self.wait(150)
         self.assertIn('입주 27년 8월', self.text())
 
-    def test_t19_promo_unit_convert_and_amount(self):
-        self.pick('t19')
-        self.assertIn('🔑(단지·층·평형)', self.text())
-        self.assertIn('🔑매매 (금액)으로 최저가 조율 가능합니다', self.text())
-        self.page.fill('#fields [data-field="unit"]', '404동 1903호')
-        self.wait(100)
-        self.page.click('#fields [data-action="promoUnit"]')
-        self.wait(150)
-        self.assertEqual(self.page.input_value('#fields [data-field="spot"]'), '4단지 19층')
-        self.page.fill('#fields [data-field="area"]', '24')
-        self.page.fill('#fields [data-field="price"]', '210000')
-        self.wait(200)
-        body = self.text()
-        self.assertIn('🔑4단지 19층 24평형', body)
-        self.assertIn('🔑매매 21억으로 최저가 조율 가능합니다', body)
-        # 강조 한 줄 · 종별
-        self.page.fill('#fields [data-field="emphasis"]', '급매로 조율 가능합니다')
+        # 전세 — 보증금 한 칸
         self.page.click('#fields [data-seg="trade"][data-value="전세"]')
         self.wait(150)
         body = self.text()
+        self.assertIn('요즘 임대매물 귀한데, 염치없이 전화드렸어요', body)
+        self.assertIn('보증금 (금액)까지', body)
+        self.assertEqual(len(self.page.query_selector_all('#fields [data-field="rent"]')), 0,
+                         '전세에는 월차임 칸이 없다')
+        self.page.fill('#fields [data-field="deposit"]', '90000')
+        self.wait(150)
+        self.assertIn('보증금 9억까지', self.text())
+
+        # 월세 — 보증금 + 월차임 두 칸
+        self.page.click('#fields [data-seg="trade"][data-value="월세"]')
+        self.wait(150)
+        self.assertEqual(len(self.page.query_selector_all('#fields [data-field="rent"]')), 1)
+        self.page.fill('#fields [data-field="deposit"]', '10000')
+        self.page.fill('#fields [data-field="rent"]', '250')
+        self.wait(200)
+        self.assertIn('보증금 1억 / 월세 250만 원까지', self.text())
+        self.assertEqual(len(self.page.query_selector_all('#fields [data-field="area"]')), 0,
+                         '임대 조건에는 평형 칸이 없다')
+
+    def test_t19_promo_property_block_and_type_info(self):
+        # 특가 매물 홍보 — 추천 매물 안내와 같은 매물 블록 + 강조 문구
+        self.pick('t19')
+        fields = self.page.inner_text('#fields')
+        self.assertIn('강조 문구', fields)
+        self.assertIn('+ 매물 추가', fields)
+        # 예전 단지·층 / 평형 / 동·호로 빠르게 / 자동 변환 버튼은 없다
+        for gone in ('단지·층', '평형', '빠르게', '자동 변환'):
+            self.assertNotIn(gone, fields)
+        self.assertEqual(len(self.page.query_selector_all('#fields [data-action="promoUnit"]')), 0)
+        # 매물 블록은 추천 매물 안내(t7)와 같은 칸을 쓴다
+        self.pick('t7')
+        t7_fields = self.js("""() => [...document.querySelectorAll('#fields [data-key]')]
+            .map(e => e.dataset.key)""")
+        self.pick('t19')
+        t19_fields = self.js("""() => [...document.querySelectorAll('#fields [data-key]')]
+            .map(e => e.dataset.key)""")
+        for key in ('complex', 'dong', 'ho'):
+            self.assertIn(key, t7_fields)
+            self.assertIn(key, t19_fields)
+        self.assertIn('🔑(매물)\n🔑최저가 조율 가능합니다', self.text())
+        self.assertIn('마포래미안푸르지오 매매 특가 소식 전해드립니다!', self.text())
+
+        # 동·호수를 넣으면 그 동·라인의 평형·타입·방향이 자동으로 들어간다
+        dong = '#fields [data-prop="items"][data-idx="0"][data-key="dong"]'
+        ho = '#fields [data-prop="items"][data-idx="0"][data-key="ho"]'
+        self.page.fill(dong, '205')
+        self.page.fill(ho, '1203')
+        self.wait(180)
+        type_inp = '#fields [data-prop="items"][data-idx="0"][data-key="typeInfo"]'
+        self.assertEqual(self.page.input_value(type_inp), '34평 84E · 동향')
+        self.page.fill('#fields [data-prop="items"][data-idx="0"][data-money="amount"]', '210000')
+        self.wait(200)
+        body = self.text()
+        self.assertIn('🔑마포래미안푸르지오 205동 1203호 34평 84E · 동향', body)
+        self.assertIn('🔑매매 21억으로 최저가 조율 가능합니다', body)
+
+        # [단지]로 가려도 호수 칸·배지는 살아 있고, 평형·타입은 그대로 따라온다
+        self.page.click('#fields [data-prop-unit="dong"]')
+        self.wait(150)
+        self.assertIn('🔑마포래미안푸르지오 2단지 1203호 34평 84E · 동향', self.text())
+        self.page.click('#fields [data-prop-unit="ho"]')
+        self.wait(150)
+        self.assertIn('🔑마포래미안푸르지오 2단지 12층 34평 84E · 동향', self.text())
+        self.page.fill(ho, '1002')
+        self.wait(180)
+        self.assertEqual(self.page.input_value(type_inp), '34평 84A · 동향')
+
+        # 강조 문구 · 거래 유형은 매물 줄에서 고른다
+        self.page.fill('#fields [data-field="emphasis"]', '급매로 조율 가능합니다')
+        self.page.click('#fields [data-prop-trade="items"][data-idx="0"][data-value="전세"]')
+        self.page.fill('#fields [data-prop="items"][data-idx="0"][data-money="amount"]', '115000')
+        self.wait(200)
+        body = self.text()
         self.assertIn('마포래미안푸르지오 전세 특가 소식 전해드립니다!', body)
-        self.assertIn('🔑전세 21억으로 급매로 조율 가능합니다', body)
+        self.assertIn('🔑전세 11억 5천만으로 급매로 조율 가능합니다', body)
+
+        # 표에 없는 동이면 빈 칸 — 직접 적은 값은 동·호를 바꿔도 그대로 둔다
+        self.page.fill(dong, '999')
+        self.wait(180)
+        self.assertEqual(self.page.input_value(type_inp), '')
+        self.page.fill(type_inp, '34평 84A · 남향')
+        self.wait(150)
+        self.page.fill(ho, '1203')
+        self.wait(180)
+        self.assertEqual(self.page.input_value(type_inp), '34평 84A · 남향')
+        self.assertIn('34평 84A · 남향', self.text())
+
+    def test_t19_promo_other_complex_has_no_type_info(self):
+        # 다른 단지 이름을 넣으면 마래푸 타입표를 쓰지 않는다
+        self.pick('t19')
+        self.page.fill('#fields [data-prop="items"][data-idx="0"][data-key="complex"]', '이편한세상신촌')
+        self.page.fill('#fields [data-prop="items"][data-idx="0"][data-key="dong"]', '205')
+        self.page.fill('#fields [data-prop="items"][data-idx="0"][data-key="ho"]', '1203')
+        self.wait(200)
+        self.assertEqual(self.page.input_value('#fields [data-prop="items"][data-idx="0"][data-key="typeInfo"]'), '')
+        self.assertIn('이편한세상신촌 205동 1203호', self.text())
+
+    def test_maraepu_unit_table(self):
+        # 엑셀 동호수 타입표(1~4단지 동·라인)를 그대로 읽는다
+        cases = [
+            (('마포래미안푸르지오', '102', '1103'), '34평 84C · 남서향'),
+            (('마래푸', '205', '1203'), '34평 84E · 동향'),
+            (('마포래미안푸르지오', '302', '1502'), '24평 59A · 동향'),
+            (('마포래미안푸르지오 2단지', '413', '1905'), '34평 84A · 남서향'),
+            # 표에 없는 동·라인·임대 동·다른 단지
+            (('마포래미안푸르지오', '201', '1203'), ''),
+            (('마포래미안푸르지오', '102', '1108'), ''),
+            (('마포래미안푸르지오', '999', '1103'), ''),
+            (('이편한세상신촌', '102', '1103'), ''),
+            (('마포래미안푸르지오', '', '1103'), ''),
+        ]
+        for args, want in cases:
+            with self.subTest(args=args):
+                self.assertEqual(self.js('(a) => SMSCore.maraepuUnit(a[0], a[1], a[2])', list(args)), want)
+
 
     def test_t20_vendor_contacts(self):
         # 협력업체 연락처는 코드에 넣지 않는다 — 화면에서 한 번 추가해 두고 쓴다
@@ -2287,7 +2574,7 @@ class AppTest(unittest.TestCase):
     def test_url_params_monthly_and_won_price(self):
         q = 'template=t4&dong=304&ho=201&dealType=월세&deposit=10000&monthly=350'
         ctx, page = self.open_with_query(q)
-        self.assertIn('(월세 1억/350만)', page.input_value('#preview'))
+        self.assertIn('(보증금 1억 / 월세 350만 원)', page.input_value('#preview'))
         ctx.close()
 
         q2 = 'template=t7&dong=404&ho=2503&price=2300000000'   # 원 단위로 넘어와도 만 원으로
@@ -2391,8 +2678,11 @@ class AppTest(unittest.TestCase):
         self.pick('t17')
         self.assertIn('추가 안 함', self.page.inner_text('#fields'))
         self.pick('t19')
-        self.assertIn('강조 문구', self.page.inner_text('#fields'))
-        self.assertIn('단지·층 자동 변환', self.page.inner_text('#fields'))
+        t19_fields = self.page.inner_text('#fields')
+        self.assertIn('강조 문구', t19_fields)
+        # 단지·층 / 평형 / 동·호로 빠르게 / 자동 변환은 매물 블록으로 바뀌며 사라졌다
+        for gone in ('단지·층', '평형', '빠르게', '자동 변환'):
+            self.assertNotIn(gone, t19_fields)
         self.pick('t20')
         self.assertIn('연락처 :', self.text())
 
@@ -2617,10 +2907,17 @@ class AppTest(unittest.TestCase):
         self.assertEqual(self.page.inner_text('#fields .paytable-title').strip(), '지급 일정')
         names = self.js("""() => [...document.querySelectorAll('#fields .pay-name-text')].map(e => e.textContent)""")
         self.assertEqual(names, ['계약금', '중도금', '잔금'])
-        self.page.click('#fields [data-seg="trade"][data-value="임대차"]')
+        self.page.click('#fields [data-seg="trade"][data-value="전세"]')
         self.wait(150)
         names = self.js("""() => [...document.querySelectorAll('#fields .pay-name-text')].map(e => e.textContent)""")
-        self.assertEqual(names, ['계약금', '잔금'], '임대차에는 중도금 줄이 없다')
+        self.assertEqual(names, ['계약금', '잔금'], '전세에는 중도금 줄이 없다')
+        self.assertEqual(len(self.page.query_selector_all('#fields [data-field="rent"]')), 0)
+        self.assertEqual(len(self.page.query_selector_all('#fields [data-seg="kind"]')), 0,
+                         '전세·월세는 일정이 잔금 하나뿐이다')
+        self.page.click('#fields [data-seg="trade"][data-value="월세"]')
+        self.wait(150)
+        self.assertEqual(len(self.page.query_selector_all('#fields [data-field="rent"]')), 1,
+                         '월세일 때만 월차임 칸')
         self.page.fill('#fields [data-field="deposit"]', '10000')
         self.page.fill('#fields [data-field="gyeyak"]', '1000')
         self.wait(200)
@@ -2741,18 +3038,23 @@ class AppTest(unittest.TestCase):
         self.wait(200)
         self.assertEqual(self.page.input_value('#fields [data-auto="jan"]'), '9,500')
         self.assertIn('* 잔금 : 95,000,000원', self.text())
-        # 임대차 — 보증금 − 계약금 (월차임은 따로)
-        self.page.click('#fields [data-seg="trade"][data-value="임대차"]')
+        # 전세 — 보증금 − 계약금 (월차임 칸은 없다)
+        self.page.click('#fields [data-seg="trade"][data-value="전세"]')
         self.wait(150)
         self.page.fill('#fields [data-field="deposit"]', '10000')
         self.page.fill('#fields [data-field="gyeyak"]', '1000')
-        self.page.fill('#fields [data-field="rent"]', '50')
         self.wait(200)
         self.assertEqual(self.page.input_value('#fields [data-auto="jan"]'), '9,000')
         body = self.text()
         self.assertIn('* 잔금 : 90,000,000원', body)
         self.assertIn('* 보증금 : 100,000,000원', body)
-        self.assertIn('월차임 : 500,000원', body)
+        self.assertNotIn('월차임', body)
+        # 월세 — 보증금 + 월차임이 함께 나간다
+        self.page.click('#fields [data-seg="trade"][data-value="월세"]')
+        self.wait(150)
+        self.page.fill('#fields [data-field="rent"]', '50')
+        self.wait(200)
+        self.assertIn('월차임 : 500,000원', self.text())
 
     def test_t8_autofill_uses_split(self):
         self.pick('t8')
@@ -3422,19 +3724,21 @@ class AppTest(unittest.TestCase):
         self.errors = [e for e in self.errors if 'ERR_' not in e and 'Failed to load resource' not in e]
 
     # ============================================================== 버전 · 배포 파일
-    def test_24_version_bumped_to_1_1_1(self):
+    def test_24_version_bumped_to_1_1_2(self):
         with open(os.path.join(ROOT, 'sw.js'), encoding='utf-8') as f:
             sw = f.read()
-        self.assertIn("'v1.1.1'", sw)
+        self.assertIn("'v1.1.2'", sw)
         self.assertIn("'js/sync.js'", sw)
+        # 새 파일(동호수 타입표)도 오프라인 캐시에 들어간다
+        self.assertIn("'js/maraepu-types.js'", sw)
         with open(os.path.join(ROOT, 'index.html'), encoding='utf-8') as f:
             html = f.read()
-        for f_ in ('icons', 'core', 'templates', 'sync', 'app'):
-            self.assertIn(f'js/{f_}.js?v=1.1.1', html)
-        self.assertIn('styles.css?v=1.1.1', html)
+        for f_ in ('icons', 'maraepu-types', 'core', 'templates', 'sync', 'app'):
+            self.assertIn(f'js/{f_}.js?v=1.1.2', html)
+        self.assertIn('styles.css?v=1.1.2', html)
         gradle = open(os.path.join(ROOT, 'android/app/build.gradle'), encoding='utf-8').read()
-        self.assertIn('versionCode 6', gradle)
-        self.assertIn("versionName '1.1.1'", gradle)
+        self.assertIn('versionCode 7', gradle)
+        self.assertIn("versionName '1.1.2'", gradle)
 
 
 if __name__ == '__main__':

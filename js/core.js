@@ -147,7 +147,11 @@
     var legacy = String(p.price == null ? '' : p.price).trim();
     if (amount == null && dep == null && rent == null) return legacy;
     if (trade === '월세') {
-      return '월세 ' + (dep == null ? '0' : manHint(dep)) + '/' + (rent == null ? '0' : manHint(rent));
+      // 보증금·월차임은 따로 적는다 — "보증금 1억 / 월세 350만 원"
+      var wparts = [];
+      if (dep != null) wparts.push('보증금 ' + manHint(dep));
+      if (rent != null) wparts.push('월세 ' + manHint(rent) + ' 원');
+      return wparts.join(' / ');
     }
     if (amount == null) return legacy;
     return trade + ' ' + manHint(amount);
@@ -339,7 +343,8 @@
 
   /* ---------- 매물 노출 (단지명 + 동/단지 + 호/층) ----------
      매물 줄마다 동 칸의 배지로 '동 ↔ 단지', 호 칸의 배지로 '호 ↔ 층'을 고른다.
-     단지로 볼 때는 뒤의 호수·층을 붙이지 않는다.
+     단지로 가려도 뒤의 호수·층은 그대로 붙는다 (2단지 1203호 / 2단지 12층).
+     호수 칸이 비어 있으면 단지까지만 나간다.
      예전 저장값의 한 줄짜리 노출 설정(p.mode)도 그대로 읽는다. */
   function propertyLabel(p) {
     p = p || {};
@@ -353,6 +358,11 @@
     if (complex) parts.push(complex);
     if (dongMode === 'complex') {
       if (!isNaN(dongNum)) parts.push(Math.floor(dongNum / 100) + '단지');
+      if (hoMode === 'floor') {
+        if (!isNaN(hoNum)) parts.push(Math.floor(hoNum / 100) + '층');
+      } else if (!isNaN(hoNum)) {
+        parts.push(hoNum + '호');
+      }
     } else {
       if (!isNaN(dongNum)) parts.push(dongNum + '동');
       if (hoMode === 'floor') {
@@ -363,6 +373,30 @@
       }
     }
     return parts.join(' ');
+  }
+
+  /* ---------- 마래푸 동·라인별 평형·타입·방향 ----------
+     호수 끝 두 자리가 라인 번호다 (1203호 → 3라인, 202호 → 2라인).
+     표는 js/maraepu-types.js (동호수 타입표 엑셀에서 만든 것). */
+  function isMaraepuComplex(name) {
+    var s = String(name == null ? '' : name).replace(/\s/g, '');
+    return /래미안푸르지오|마래푸/.test(s);
+  }
+
+  // "34평 84A · 남동향" — 표에 없는 동·호수나 다른 단지면 ''
+  function maraepuUnit(complex, dong, ho) {
+    if (!isMaraepuComplex(complex)) return '';
+    var table = global.MARAEPU_UNIT_TYPES;
+    if (!table) return '';
+    var d = digits(dong);
+    var h = digits(ho);
+    if (d.length !== 3 || h.length < 3) return '';
+    var lines = table[d];
+    if (!lines) return '';
+    var row = lines[String(parseInt(h.slice(-2), 10))];
+    if (!row) return '';
+    var dir = String(row[2] || '').trim();
+    return row[0] + '평 ' + row[1] + (dir ? ' · ' + dir + '향' : '');
   }
 
   /* ---------- 계좌 파서 ---------- */
@@ -531,6 +565,8 @@
     paymentSplit: paymentSplit,
     rateLabel: rateLabel,
     propertyLabel: propertyLabel,
+    isMaraepuComplex: isMaraepuComplex,
+    maraepuUnit: maraepuUnit,
     accountParse: accountParse,
     parseDateValue: parseDateValue,
     weekdayOf: weekdayOf,
