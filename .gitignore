@@ -1,0 +1,6 @@
+# 로컬 테스트·문서용(공개 저장소에 올리지 않음)
+.pytest_cache/
+__pycache__/
+*.pyc
+.DS_Store
+docs/

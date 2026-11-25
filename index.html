@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>마래푸중앙부동산 문자 도우미</title>
+<meta name="theme-color" content="#4f46e5">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="문자도우미">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="format-detection" content="telephone=no">
+<meta name="description" content="마래푸중앙부동산 업무 문자 20종과 중개보수 계산기">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
+<link rel="apple-touch-icon" sizes="192x192" href="icons/icon-192.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark" data-icon="message" data-icon-size="19" aria-hidden="true"></span>
+    <h1>마래푸중앙부동산 문자 도우미</h1>
+  </div>
+  <nav class="stage-tabs" id="stage-tabs" aria-label="업무 단계"></nav>
+  <div class="top-actions">
+    <button class="ghost has-ico" id="btn-sheet" type="button"><span data-icon="list" data-icon-size="14"></span><span class="btn-label">목록</span></button>
+    <button class="ghost has-ico" id="btn-settings" type="button"><span data-icon="settings" data-icon-size="14"></span><span class="btn-label">내 정보 설정</span></button>
+  </div>
+</header>
+
+<main class="layout" id="sms-view">
+  <aside class="panel list-panel" id="list-panel">
+    <div class="search-box">
+      <input class="inp" id="search" type="search" placeholder="검색 (예: 공동중개, 중개보수)" autocomplete="off" aria-label="문자 검색">
+    </div>
+    <div class="list-scroll" id="tpl-list"></div>
+  </aside>
+
+  <section class="panel form-panel">
+    <div class="panel-head">
+      <div class="head-text">
+        <h2 id="form-title" class="card-title">집보기 일정 안내</h2>
+      </div>
+      <button class="ghost" id="btn-reset" type="button">비우기</button>
+    </div>
+    <div class="fields" id="fields"></div>
+  </section>
+
+  <section class="panel preview-panel">
+    <div class="panel-head">
+      <div class="head-text">
+        <h2 class="card-title">미리보기 <span class="card-title-sub">(직접 수정 가능)</span></h2>
+        <p id="edited-note" class="card-desc is-edit" hidden></p>
+      </div>
+      <button class="ghost" id="btn-restore" type="button" disabled>원상복구</button>
+    </div>
+    <textarea id="preview" class="preview" spellcheck="false" aria-label="문자 미리보기"></textarea>
+    <div class="preview-foot">
+      <span class="char-count" id="char-count"></span>
+      <button class="primary has-ico" id="btn-copy" type="button"><span data-icon="copy" data-icon-size="15"></span><span class="btn-label">문자 전체 복사하기</span></button>
+    </div>
+  </section>
+</main>
+
+<div class="mobile-bar" id="sms-mobile-bar">
+  <button class="ghost is-half has-ico" id="btn-sms" type="button"><span data-icon="message" data-icon-size="16"></span><span class="btn-label">문자 앱 열기</span></button>
+  <button class="primary is-half has-ico" id="btn-copy2" type="button"><span data-icon="copy" data-icon-size="16"></span><span class="btn-label">복사하기</span></button>
+</div>
+
+<!-- 모바일 목록 시트 -->
+<div class="sheet" id="sheet" aria-hidden="true">
+  <div class="sheet-panel" role="dialog" aria-label="문자 목록">
+    <div class="sheet-head">
+      <div class="search-box is-grow">
+        <input class="inp" id="search-sheet" type="search" placeholder="검색 (예: 주차, 계약)" autocomplete="off" aria-label="문자 검색">
+      </div>
+      <button class="ghost" id="sheet-close" type="button">닫기</button>
+    </div>
+    <div class="list-scroll" id="sheet-list"></div>
+  </div>
+</div>
+
+<!-- 내 정보 설정 -->
+<div class="modal" id="settings" aria-hidden="true">
+  <div class="modal-card" role="dialog" aria-label="내 정보 설정">
+    <div class="modal-head">
+      <h2>내 정보 설정</h2>
+      <button class="icon-btn" id="btn-settings-close" type="button" aria-label="닫기">×</button>
+    </div>
+    <div class="modal-body">
+      <label class="field-label" for="set-office">상호</label>
+      <input class="inp" id="set-office" type="text" placeholder="마래푸중앙부동산">
+
+      <label class="field-label" for="set-phones">연락처</label>
+      <input class="inp" id="set-phones" type="text" placeholder="010-0000-0000 / 02-000-0000">
+
+      <label class="field-label" for="set-account">중개보수 입금 계좌</label>
+      <input class="inp" id="set-account" type="text" placeholder="은행 계좌번호 예금주">
+      <p class="account-preview" id="set-account-preview"></p>
+
+      <label class="field-label">금액 표시</label>
+      <div class="seg is-grid3">
+        <button class="seg-btn" type="button" data-set-mode="won_eokman">원단위 (억·만)</button>
+        <button class="seg-btn" type="button" data-set-mode="won">원단위만</button>
+        <button class="seg-btn" type="button" data-set-mode="eokman">억·만만</button>
+      </div>
+      <p class="modal-tip">예) 270,000,000원<br>· 원단위 (억·만) → <b>270,000,000원 (2억 7천만 원)</b><br>· 원단위만 → <b>270,000,000원</b><br>· 억·만만 → <b>2억 7천만 원</b></p>
+
+      <p class="modal-tip">입력한 정보는 이 기기 브라우저에만 저장됩니다.</p>
+    </div>
+    <div class="modal-foot">
+      <button class="primary" id="btn-settings-save" type="button">저장</button>
+    </div>
+  </div>
+</div>
+
+<div class="calpop" id="calpop" hidden></div>
+<div class="toast" id="toast"></div>
+<div class="snackbar" id="snackbar" role="status" aria-live="polite">
+  <span class="snackbar-text" id="snackbar-text"></span>
+  <button class="snackbar-undo" id="snackbar-undo" type="button">되돌리기</button>
+</div>
+
+<script src="js/icons.js"></script>
+<script src="js/core.js"></script>
+<script src="js/templates.js"></script>
+<script src="js/app.js"></script>
+<script>
+/* 오프라인 캐시 — 웹에서 열었을 때만 등록한다(file:// 로컬 열기에서는 필요 없음) */
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('./sw.js', { scope: './' }).catch(function () {});
+  });
+}
+</script>
+</body>
+</html>

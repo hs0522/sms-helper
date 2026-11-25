@@ -1,0 +1,22 @@
+{
+  "id": "./",
+  "name": "마래푸 문자 도우미",
+  "short_name": "문자도우미",
+  "description": "마래푸중앙부동산 업무 문자 20종과 중개보수 계산기",
+  "lang": "ko",
+  "dir": "ltr",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#f6f7fb",
+  "theme_color": "#4f46e5",
+  "categories": ["business", "productivity"],
+  "prefer_related_applications": false,
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
