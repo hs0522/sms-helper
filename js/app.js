@@ -154,7 +154,7 @@
       office: store.profile.office || DEFAULT_PROFILE.office,
       phones: store.profile.phones || DEFAULT_PROFILE.phones,
       feeAccount: store.profile.feeAccount || DEFAULT_PROFILE.feeAccount,
-      amountMode: store.profile.amountMode || 'won_eokman',
+      amountMode: C.normMode(store.profile.amountMode || 'won_eokman'),
       contacts: store.contacts
     };
   }
@@ -345,7 +345,7 @@
     if (t.id === 't8' || t.id === 't13' || t.id === 't15') {
       // 금액 표시 형식 안내 (설정값)
       var hint = el('div', 'form-hint');
-      var modeLabel = store.profile.amountMode === 'won' ? '원단위만' : store.profile.amountMode === 'eokman' ? '억·만만' : '원단위 (억·만)';
+      var modeLabel = { won: '만원 단위', eokman: '끊어읽기' }[C.normMode(store.profile.amountMode)] || '전체';
       hint.innerHTML = '금액 표시 : <b>' + modeLabel + '</b> · <button class="link" id="open-settings-2" type="button">변경</button>';
       box.appendChild(hint);
       var b2 = $('#open-settings-2');
@@ -1531,7 +1531,7 @@
     $('#set-phones').value = store.profile.phones;
     $('#set-account').value = store.profile.feeAccount;
     $$('[data-set-mode]').forEach(function (b) {
-      b.classList.toggle('is-active', b.dataset.setMode === store.profile.amountMode);
+      b.classList.toggle('is-active', b.dataset.setMode === C.normMode(store.profile.amountMode));
     });
     $('#set-account-preview').textContent = C.accountParse(store.profile.feeAccount) ? '→ ' + C.accountParse(store.profile.feeAccount) : '';
     m.classList.add('is-open');
@@ -1565,6 +1565,17 @@
     $('#sheet').setAttribute('aria-hidden', 'true');
   }
 
+  // 목록 버튼 — 이전에 고른 카테고리와 상관없이 전체 20종을 보여 준다
+  function openFullList() {
+    if (store.stage !== 'all') {
+      store.stage = 'all';
+      save();
+      renderTabs();
+      renderList($('#tpl-list'), { withFavorites: true });
+    }
+    openSheet();
+  }
+
   /* ---------------- 이벤트 ---------------- */
   function bind() {
     // 목록
@@ -1581,15 +1592,21 @@
       renderList($('#sheet-list'), { withFavorites: false });
     });
 
-    // 단계 탭
+    // 단계 탭 — 카테고리를 고르면 그 카테고리의 첫 문자로 넘어가고,
+    // 폰(≤ 900px)에서는 목록 시트를 바로 열어 그 카테고리 문자를 고르게 한다.
     $('#stage-tabs').addEventListener('click', function (e) {
       var b = e.target.closest('[data-stage]');
       if (!b) return;
-      store.stage = b.dataset.stage;
+      var v = b.dataset.stage;
+      store.stage = v;
+      var cur = tplById(store.current);
+      if (v !== 'all' && (!cur || String(cur.stage) !== String(v))) {
+        var first = TEMPLATES.filter(function (t) { return String(t.stage) === String(v); })[0];
+        if (first) store.current = first.id;
+      }
       save();
-      renderTabs();
-      renderList($('#tpl-list'), { withFavorites: true });
-      renderList($('#sheet-list'), { withFavorites: false });
+      renderAll();
+      if (window.innerWidth <= 900) openSheet();
     });
 
     // 화면 모드 탭 없음 (문자 도우미 한 화면)
@@ -1965,7 +1982,7 @@
     });
 
     // 모바일 시트
-    $('#btn-sheet').addEventListener('click', openSheet);
+    $('#btn-sheet').addEventListener('click', openFullList);
     $('#sheet-close').addEventListener('click', closeSheet);
     $('#sheet').addEventListener('click', function (e) { if (e.target === this) closeSheet(); });
 

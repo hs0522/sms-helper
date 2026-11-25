@@ -16,7 +16,7 @@
 <link rel="apple-touch-icon" sizes="192x192" href="icons/icon-192.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=1.0.1">
 </head>
 <body>
 
@@ -104,11 +104,11 @@
 
       <label class="field-label">금액 표시</label>
       <div class="seg is-grid3">
-        <button class="seg-btn" type="button" data-set-mode="won_eokman">원단위 (억·만)</button>
-        <button class="seg-btn" type="button" data-set-mode="won">원단위만</button>
-        <button class="seg-btn" type="button" data-set-mode="eokman">억·만만</button>
+        <button class="seg-btn" type="button" data-set-mode="won_eokman">전체</button>
+        <button class="seg-btn" type="button" data-set-mode="won">만원 단위</button>
+        <button class="seg-btn" type="button" data-set-mode="eokman">끊어읽기</button>
       </div>
-      <p class="modal-tip">예) 270,000,000원<br>· 원단위 (억·만) → <b>270,000,000원 (2억 7천만 원)</b><br>· 원단위만 → <b>270,000,000원</b><br>· 억·만만 → <b>2억 7천만 원</b></p>
+      <p class="modal-tip">예) 27,000만 원<br>· 전체 → <b>270,000,000원 (2억 7천만 원)</b><br>· 만원 단위 → <b>27,000만 원</b><br>· 끊어읽기 → <b>2억7천만 원</b></p>
 
       <p class="modal-tip">입력한 정보는 이 기기 브라우저에만 저장됩니다.</p>
     </div>
@@ -125,17 +125,28 @@
   <button class="snackbar-undo" id="snackbar-undo" type="button">되돌리기</button>
 </div>
 
-<script src="js/icons.js"></script>
-<script src="js/core.js"></script>
-<script src="js/templates.js"></script>
-<script src="js/app.js"></script>
+<script src="js/icons.js?v=1.0.1"></script>
+<script src="js/core.js?v=1.0.1"></script>
+<script src="js/templates.js?v=1.0.1"></script>
+<script src="js/app.js?v=1.0.1"></script>
 <script>
 /* 오프라인 캐시 — 웹에서 열었을 때만 등록한다(file:// 로컬 열기에서는 필요 없음) */
-if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-  window.addEventListener('load', function () {
-    navigator.serviceWorker.register('./sw.js', { scope: './' }).catch(function () {});
+(function () {
+  if (!('serviceWorker' in navigator) || location.protocol === 'file:') return;
+  var hadController = !!navigator.serviceWorker.controller;
+  var reloading = false;
+  // 새 버전이 화면을 넘겨받으면 한 번만 새로 고쳐 최신 파일로 바꾼다
+  navigator.serviceWorker.addEventListener('controllerchange', function () {
+    if (!hadController || reloading) return;
+    reloading = true;
+    location.reload();
   });
-}
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('./sw.js', { scope: './', updateViaCache: 'none' })
+      .then(function (reg) { return reg.update(); })
+      .catch(function () {});
+  });
+})();
 </script>
 </body>
 </html>

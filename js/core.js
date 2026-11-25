@@ -45,6 +45,7 @@
   function group(n) { return Number(n).toLocaleString('en-US'); }
 
   // 270,000,000 -> "2억 7천만" / 237,000,000 -> "2억 3,700만" / 30,000,000 -> "3천만"
+  // opts.noSpace = true 이면 "2억7천만" 처럼 띄어쓰기 없이 끊어 읽는다
   function koreanAmount(wonValue, opts) {
     opts = opts || {};
     var n = Math.round(Math.abs(Number(wonValue) || 0));
@@ -57,22 +58,38 @@
     if (eok) parts.push(group(eok) + '억');
     if (man) parts.push((man % 1000 === 0 ? group(man / 1000) + '천' : group(man)) + '만');
     if (wonPart) parts.push(group(wonPart) + '원');
-    var out = parts.join(' ');
+    var out = parts.join(opts.noSpace ? '' : ' ');
     if (!wonPart && !opts.omitWon) out += ' 원';
     return sign + out;
   }
 
   function formatWonPlain(wonValue) { return group(Math.round(Number(wonValue) || 0)) + '원'; }
 
-  // mode: 'won_eokman'(기본) | 'won' | 'eokman'
+  // 금액 표시 방식 — 값은 예전 저장값까지 받아 준다
+  //   'won_eokman' = 전체     : 270,000,000원 (2억 7천만 원)
+  //   'won'        = 만원 단위 : 27,000만 원
+  //   'eokman'     = 끊어읽기  : 2억7천만 원
+  function normMode(mode) {
+    var m = String(mode == null ? '' : mode).toLowerCase().replace(/[\s_-]/g, '');
+    if (m === 'won' || m === 'man' || m === 'manwon' || m === '만원' || m === '만원단위') return 'won';
+    if (m === 'eokman' || m === 'eok' || m === '억만' || m === '끊어읽기' || m === 'korean') return 'eokman';
+    return 'won_eokman';
+  }
+
+  // 만원 단위 숫자 → "27,000" (소수는 둘째 자리까지)
+  function manNumber(manValue) {
+    var v = Math.round(Number(manValue) * 100) / 100;
+    return group(v);
+  }
+
+  // mode: 위 세 가지 (기본 'won_eokman' = 전체)
   function formatAmount(manValue, mode) {
     if (manValue == null || manValue === '' || isNaN(manValue)) return '';
+    var m = normMode(mode);
     var w = Math.round(Number(manValue) * 10000);
-    var plain = formatWonPlain(w);
-    var km = koreanAmount(w, { omitWon: true });
-    if (mode === 'eokman') return km + ' 원';
-    if (mode === 'won') return plain;
-    return plain + ' (' + km + ' 원)';
+    if (m === 'won') return manNumber(manValue) + '만 원';
+    if (m === 'eokman') return koreanAmount(w, { noSpace: true });
+    return formatWonPlain(w) + ' (' + koreanAmount(w, { omitWon: true }) + ' 원)';
   }
 
   // 만원 입력 옆 도우미: 27000 -> "2억 7천만"
@@ -503,6 +520,7 @@
     koreanAmount: koreanAmount,
     formatWonPlain: formatWonPlain,
     formatAmount: formatAmount,
+    normMode: normMode,
     manHint: manHint,
     moneyHintLine: moneyHintLine,
     propPrice: propPrice,

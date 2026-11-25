@@ -129,15 +129,26 @@ class AppTest(unittest.TestCase):
     # ================================================================== 금액 표기
     def test_amount_formatting_modes(self):
         cases = [
+            # 전체 — 원단위 + (억·만)
             ([27000, 'won_eokman'], '270,000,000원 (2억 7천만 원)'),
-            ([27000, 'won'], '270,000,000원'),
-            ([27000, 'eokman'], '2억 7천만 원'),
             ([20000, 'won_eokman'], '200,000,000원 (2억 원)'),
             ([500, 'won_eokman'], '5,000,000원 (500만 원)'),
-            ([23700, 'eokman'], '2억 3,700만 원'),
             ([1, 'won_eokman'], '10,000원 (1만 원)'),
-            ([0, 'won'], '0원'),
             ([12345, 'won_eokman'], '123,450,000원 (1억 2,345만 원)'),
+            # 만원 단위 — 만 원 단위 쉼표 + '만 원'
+            ([27000, 'won'], '27,000만 원'),
+            ([160550, 'won'], '160,550만 원'),
+            ([0, 'won'], '0만 원'),
+            # 끊어읽기 — 띄어쓰기 없이
+            ([27000, 'eokman'], '2억7천만 원'),
+            ([23700, 'eokman'], '2억3,700만 원'),
+            ([3000, 'eokman'], '3천만 원'),
+            ([247000, 'eokman'], '24억7천만 원'),
+            ([160550, 'eokman'], '16억550만 원'),
+            # 예전 저장값도 그대로 받는다
+            ([27000, 'won_eok'], '270,000,000원 (2억 7천만 원)'),
+            ([27000, 'eok'], '2억7천만 원'),
+            ([27000, None], '270,000,000원 (2억 7천만 원)'),
         ]
         for args, want in cases:
             with self.subTest(args=args):
@@ -1258,21 +1269,31 @@ class AppTest(unittest.TestCase):
         self.page.fill('#fields [data-field="price"]', '67500')
         self.wait(120)
         self.assertIn('675,000,000원 (6억 7,500만 원)', self.text())
+        # 설정 모달 버튼 이름 — 전체 / 만원 단위 / 끊어읽기
         self.page.click('#btn-settings')
         self.wait(100)
+        labels = [b.inner_text().strip() for b in self.page.query_selector_all('[data-set-mode]')]
+        self.assertEqual(labels, ['전체', '만원 단위', '끊어읽기'])
         self.page.click('[data-set-mode="won"]')
         self.page.click('#btn-settings-save')
         self.wait(150)
         body = self.text()
-        self.assertIn('675,000,000원', body)
+        self.assertIn('67,500만 원', body)
         self.assertNotIn('(6억 7,500만 원)', body)
         self.page.click('#btn-settings')
         self.wait(100)
         self.page.click('[data-set-mode="eokman"]')
         self.page.click('#btn-settings-save')
         self.wait(150)
-        self.assertIn('6억 7,500만 원', self.text())
+        self.assertIn('6억7,500만 원', self.text())
         self.assertNotIn('675,000,000원', self.text())
+        # 다시 '전체'로 두면 처음 모양으로 돌아온다
+        self.page.click('#btn-settings')
+        self.wait(100)
+        self.page.click('[data-set-mode="won_eokman"]')
+        self.page.click('#btn-settings-save')
+        self.wait(150)
+        self.assertIn('675,000,000원 (6억 7,500만 원)', self.text())
 
     def test_sms_url(self):
         url = self.js("() => SMSUI.smsUrl('안녕 😊')")
@@ -1312,6 +1333,63 @@ class AppTest(unittest.TestCase):
         self.page.click('#btn-settings-save')
         self.wait(150)
         self.assertIn('* 신한은행 110-123-456789 황호선', self.text())
+
+    def test_mobile_stage_tab_opens_sheet_and_switches_text(self):
+        # 폰(390×844)에서 상단 카테고리 탭을 누르면 그 카테고리 첫 문자로 넘어가고
+        # 목록 시트가 바로 열린다 (예전에는 목록만 다시 그리고 화면은 첫 문자에 머물렀다)
+        ctx = self.browser.new_context(viewport={'width': 390, 'height': 844}, is_mobile=True, has_touch=True)
+        page = ctx.new_page()
+        errors = []
+        page.on('pageerror', lambda e: errors.append(str(e)))
+        page.goto(BASE, wait_until='networkidle')
+        page.evaluate('localStorage.clear()')
+        page.reload(wait_until='networkidle')
+        page.wait_for_timeout(200)
+        for label, cnt in (('고객 응대·매물 관리', 5), ('집보기·방문 안내', 6),
+                           ('약정·계약 진행', 5), ('잔금·사후관리', 4)):
+            with self.subTest(tab=label):
+                page.click(f'.stage-tabs .tab:has-text("{label}")')
+                page.wait_for_timeout(200)
+                self.assertTrue(page.is_visible('#sheet'), '카테고리 탭을 누르면 목록 시트가 열려야 한다')
+                self.assertEqual(len(page.query_selector_all('#sheet-list .row')), cnt, label)
+                head = page.inner_text('#form-title .title-text')
+                first = page.evaluate("""() => { const s = document.querySelector('#sheet-list .row.is-active .row-title-text');
+                    return s ? s.textContent.trim() : null; }""")
+                self.assertEqual(first, head.strip(), '카테고리 첫 문자로 바뀌어야 한다')
+                # 시트에서 문자를 고르면 시트가 닫힌다 (기존 selectTemplate)
+                page.click('#sheet-list .row .row-main')
+                page.wait_for_timeout(180)
+                self.assertFalse(page.is_visible('#sheet'))
+        self.assertEqual(errors, [])
+        ctx.close()
+
+    def test_mobile_list_button_shows_all_twenty(self):
+        # 카테고리를 고른 뒤에도 '목록' 버튼은 전체 20종을 보여 준다 (상단 탭도 '전체'로 돌아간다)
+        ctx = self.browser.new_context(viewport={'width': 390, 'height': 844}, is_mobile=True, has_touch=True)
+        page = ctx.new_page()
+        errors = []
+        page.on('pageerror', lambda e: errors.append(str(e)))
+        page.goto(BASE, wait_until='networkidle')
+        page.evaluate('localStorage.clear()')
+        page.reload(wait_until='networkidle')
+        page.wait_for_timeout(200)
+        page.click('.stage-tabs .tab:has-text("약정·계약 진행")')
+        page.wait_for_timeout(200)
+        self.assertEqual(len(page.query_selector_all('#sheet-list .row')), 5)
+        page.click('#sheet-close')
+        page.wait_for_timeout(150)
+        page.click('#btn-sheet')
+        page.wait_for_timeout(220)
+        self.assertTrue(page.is_visible('#sheet'))
+        self.assertEqual(len(page.query_selector_all('#sheet-list .row')), 20, '목록 버튼은 전체 20종')
+        self.assertEqual(page.inner_text('.stage-tabs .tab.is-active').strip(), '전체')
+        # 전체 목록에서 다른 카테고리 문자도 바로 고를 수 있다
+        page.click('#sheet-list [data-id="t14"]')
+        page.wait_for_timeout(200)
+        self.assertFalse(page.is_visible('#sheet'))
+        self.assertIn('중개보수', page.inner_text('#form-title'))
+        self.assertEqual(errors, [])
+        ctx.close()
 
     def test_mobile_layout(self):
         ctx = self.browser.new_context(viewport={'width': 390, 'height': 844})
