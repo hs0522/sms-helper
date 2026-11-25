@@ -39,8 +39,8 @@ python3 -m http.server 8000
 | **안드로이드** | 아래 `.apk`를 내려받아 설치 (오프라인 내장) |
 
 - 웹: https://hs0522.github.io/sms-helper/ (GitHub Pages · `gh-pages` 브랜치 루트)
-- 안드로이드 설치 파일: https://github.com/hs0522/sms-helper/releases/download/v1.1.0/Maraepu-SMS-Helper-v1.1.0.apk
-- 릴리즈 페이지: https://github.com/hs0522/sms-helper/releases/tag/v1.1.0
+- 안드로이드 설치 파일: https://github.com/hs0522/sms-helper/releases/download/v1.1.1/Maraepu-SMS-Helper-v1.1.1.apk
+- 릴리즈 페이지: https://github.com/hs0522/sms-helper/releases/tag/v1.1.1
 
 ### 안드로이드 앱(.apk)
 
@@ -328,3 +328,9 @@ projects/sms-helper/
 > 2026-11-25 여섯 번째 수정(v1.1.0): **내 문구 추가·수정·삭제**, **기존 20종 문구 영구 수정/기본값 되돌리기**,
 > **백업(클립보드 복사·JSON 파일) · 불러오기**, **PC·폰 GitHub 비공개 Gist 자동 동기화**(앱 열 때 자동 받기, 변경 시 2.5초 뒤 자동 올리기,
 > `updatedAt` 최신 우선, 상단 `동기화됨`/`오프라인` 표시, 토큰은 각 기기 localStorage에만). 서비스 워커 캐시 `v1.1.0`, 안드로이드 `versionCode 5`.
+>
+> 2026-11-25 일곱 번째 수정(v1.1.1): **아이폰에서 화면 맨 아래가 하단 바에 가려지던 문제** — 모바일에서 `body` 높이를 풀어
+> 페이지 전체가 자연스럽게 스크롤되게 하고, 끝 여백을 `104px + 홈 인디케이터`로 넓혀 끝까지 내리면 `미리보기` 카드의 아래 테두리까지
+> `문자 앱 열기 / 복사하기` 바 위로 다 보입니다. 카드 안에 겹쳐 보이던 **`문자 전체 복사하기` 버튼은 폰에서 숨기고**(글자수만 표시),
+> 목록 시트·모달도 실제 보이는 높이(`dvh`)와 홈 인디케이터 여백 기준으로 아래 버튼이 잘리지 않게 했습니다. PC 화면은 그대로입니다.
+> 서비스 워커 캐시 `v1.1.1`, 안드로이드 `versionCode 6`.

@@ -642,9 +642,10 @@ input, textarea, select { font-family: inherit; letter-spacing: inherit; }
   position: absolute;
   left: 0; right: 0; bottom: 0;
   max-height: 84vh;
+  max-height: 84dvh;   /* 아이폰 사파리 주소창까지 포함한 100vh 대신 실제 보이는 높이 기준 */
   background: #fff;
   border-radius: 20px 20px 0 0;
-  padding: 14px 14px calc(16px + env(safe-area-inset-bottom));
+  padding: 14px 14px calc(16px + env(safe-area-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
   box-shadow: 0 -8px 30px rgba(23, 24, 28, .16);
@@ -670,6 +671,7 @@ input, textarea, select { font-family: inherit; letter-spacing: inherit; }
   border-radius: 18px;
   box-shadow: 0 20px 60px rgba(23, 24, 28, .24);
   max-height: 88vh;
+  max-height: 88dvh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -772,7 +774,15 @@ input, textarea, select { font-family: inherit; letter-spacing: inherit; }
 }
 
 @media (max-width: 900px) {
-  body { overflow: auto; display: block; padding-bottom: calc(74px + env(safe-area-inset-bottom)); }
+  /* 폰 — 스크롤이 화면(body) 높이에 갇히지 않게 풀고, 하단 고정 바 높이보다 넉넉한 끝 여백을 준다.
+     끝까지 내리면 미리보기 카드의 아래 테두리까지 '문자 앱 열기 / 복사하기' 바 위로 다 보인다. */
+  html, body { height: auto; min-height: 100%; }
+  body {
+    overflow-x: hidden;
+    overflow-y: auto;
+    display: block;
+    padding-bottom: calc(104px + env(safe-area-inset-bottom, 16px));
+  }
   /* 아이폰 사파리 — 입력칸 글자가 16px보다 작으면 초점을 맞을 때 화면이 저절로 확대된다.
      검색창·동·호·금액·퍼센트·모달 입력칸·미리보기까지 모든 입력칸을 16px 이상으로 고정. */
   input, textarea, select { font-size: 16px !important; }
@@ -807,8 +817,12 @@ input, textarea, select { font-family: inherit; letter-spacing: inherit; }
   .panel { border-radius: 14px; }
   .form-panel { padding: 14px var(--ppad) 0; }
   .fields { overflow: visible; padding-bottom: 16px; }
-  .preview-panel { padding: 14px var(--ppad); }
+  .preview-panel { padding: 14px var(--ppad) 12px; }
   .preview { min-height: 52vh; font-size: 13.6px; }
+  /* 하단 고정 바에 '복사하기'가 이미 있으니 카드 안 복사 버튼은 숨기고 글자수만 남긴다 */
+  .preview-foot { justify-content: flex-end; margin-top: 8px; gap: 8px; }
+  .preview-foot #btn-copy { display: none; }
+  .preview-foot .char-count { font-size: 11.5px; }
   .card-title { font-size: 15px; }
   .fields { gap: 12px; }
   .prop-top { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px; }
@@ -821,7 +835,7 @@ input, textarea, select { font-family: inherit; letter-spacing: inherit; }
     gap: 8px;
     position: fixed;
     left: 0; right: 0; bottom: 0;
-    padding: 10px var(--edge) calc(10px + env(safe-area-inset-bottom));
+    padding: 10px var(--edge) calc(10px + env(safe-area-inset-bottom, 0px));
     background: rgba(255, 255, 255, .94);
     backdrop-filter: saturate(180%) blur(10px);
     border-top: 1px solid var(--line);
@@ -829,9 +843,17 @@ input, textarea, select { font-family: inherit; letter-spacing: inherit; }
   }
   .mobile-bar .is-half { flex: 1 1 0; padding: 13px 10px; font-size: 14px; border-radius: 12px; }
   .mobile-bar .ghost.is-half { background: #fff; color: var(--label); }
-  .toast { bottom: calc(88px + env(safe-area-inset-bottom)); }
+  .toast { bottom: calc(88px + env(safe-area-inset-bottom, 0px)); }
   .modal { align-items: flex-end; padding: 0; }
-  .modal-card { width: 100%; border-radius: 20px 20px 0 0; max-height: 88vh; padding-bottom: env(safe-area-inset-bottom); }
+  /* 모달도 실제 보이는 높이(dvh) + 홈 인디케이터 여백 기준 — 아래 버튼이 화면 밖으로 잘리지 않는다 */
+  .modal-card {
+    width: 100%;
+    border-radius: 20px 20px 0 0;
+    max-height: 88vh;
+    max-height: 88dvh;
+    padding-bottom: calc(0px + env(safe-area-inset-bottom, 0px));
+  }
+  .sheet-panel { max-height: 84dvh; }
   .calpop { width: min(300px, calc(100vw - 16px)); }
 }
 

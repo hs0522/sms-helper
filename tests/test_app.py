@@ -831,6 +831,7 @@ class AppTest(unittest.TestCase):
                           firstInput: box('#fields .inp'), addBtn: box('#fields .add-btn'), toggleBox: box('#fields .is-toggle'),
                           previewTitle: box('.preview-panel .card-title'),
                           preview: box('#preview'), foot: box('.preview-foot'), copy: box('#btn-copy'),
+                          charCount: box('#char-count'),
                           search: box('#search'), head: box('#tpl-list .list-head'),
                           rowTitle: box('#tpl-list .row-title'), mobileBar: box('#sms-mobile-bar'),
                           mobileInner: innerBox('#sms-mobile-bar'),
@@ -854,7 +855,12 @@ class AppTest(unittest.TestCase):
                 self.assertAlmostEqual(info['preview']['l'], info['previewInner']['l'], delta=1.0)
                 self.assertAlmostEqual(info['preview']['r'], info['previewInner']['r'], delta=1.0)
                 self.assertAlmostEqual(info['foot']['l'], info['previewInner']['l'], delta=1.0)
-                self.assertAlmostEqual(info['copy']['r'], info['previewInner']['r'], delta=1.0)
+                if info['copy']:
+                    self.assertAlmostEqual(info['copy']['r'], info['previewInner']['r'], delta=1.0)
+                else:
+                    # 폰에서는 카드 안 복사 버튼을 숨기고 글자수만 오른쪽 끝선에 맞춘다
+                    self.assertIsNotNone(info['charCount'], '폰에서 글자수가 보여야 한다')
+                    self.assertAlmostEqual(info['charCount']['r'], info['previewInner']['r'], delta=1.0)
                 # 4) 목록 패널 — 검색칸·머리글이 같은 선, 줄 제목은 아이콘만큼만 들여쓰기
                 if info['search']:
                     lbase = info['listInner']['l']
@@ -1521,6 +1527,56 @@ class AppTest(unittest.TestCase):
         self.assertTrue(clipped['inBox'], "'만원'은 칸 안")
         self.assertTrue(clipped['inside'])
         self.assertEqual(errors, [])
+        ctx.close()
+
+    def test_mobile_bottom_not_hidden_behind_mobile_bar(self):
+        # 폰(390×844 · 360×740)에서 맨 아래까지 내리면 미리보기 카드의 아래 테두리까지
+        # 하단 고정 바('문자 앱 열기 / 복사하기') 위로 다 보이고, 카드 안 중복 복사 버튼은 사라진다.
+        for w, h in ((390, 844), (360, 740)):
+            with self.subTest(viewport=f'{w}x{h}'):
+                ctx = self.browser.new_context(viewport={'width': w, 'height': h},
+                                               is_mobile=True, has_touch=True)
+                page = ctx.new_page()
+                page.goto(BASE, wait_until='networkidle')
+                page.evaluate('localStorage.clear()')
+                page.reload(wait_until='networkidle')
+                page.wait_for_timeout(250)
+                page.evaluate('window.scrollTo(0, document.documentElement.scrollHeight)')
+                page.wait_for_timeout(350)
+                info = page.evaluate("""() => {
+                  const card = document.querySelector('.preview-panel').getBoundingClientRect();
+                  const bar = document.querySelector('#sms-mobile-bar').getBoundingClientRect();
+                  const foot = document.querySelector('.preview-foot').getBoundingClientRect();
+                  const copy = document.querySelector('#btn-copy').getBoundingClientRect();
+                  const cc = document.querySelector('#char-count');
+                  const cs = getComputedStyle(document.body);
+                  return {cardBottom: card.bottom, barTop: bar.top, footBottom: foot.bottom,
+                          copyShown: copy.width > 0 && copy.height > 0,
+                          charText: cc.textContent, charShown: cc.getBoundingClientRect().height > 0,
+                          bodyPadBottom: parseFloat(cs.paddingBottom),
+                          atBottom: Math.abs((document.documentElement.scrollHeight - window.innerHeight) - window.scrollY) <= 2,
+                          scrollable: document.documentElement.scrollHeight > window.innerHeight + 40,
+                          hOverflow: document.documentElement.scrollWidth - window.innerWidth};
+                }""")
+                self.assertTrue(info['scrollable'], '폰에서는 세로 스크롤이 되어야 한다')
+                self.assertTrue(info['atBottom'], '맨 아래까지 스크롤되어야 한다')
+                self.assertGreaterEqual(info['bodyPadBottom'], 100, '하단 고정 바 높이만큼 끝 여백을 둔다')
+                self.assertLessEqual(info['cardBottom'], info['barTop'] - 6,
+                                     '미리보기 카드 아래 테두리가 하단 바에 가려지면 안 된다')
+                self.assertLessEqual(info['footBottom'], info['barTop'] - 6, '글자수 줄도 바 위에 있어야 한다')
+                self.assertFalse(info['copyShown'], '폰에서는 카드 안 중복 복사 버튼을 숨긴다')
+                self.assertTrue(info['charShown'], '글자수는 남아 있어야 한다')
+                self.assertRegex(info['charText'], r'^\d[\d,]*자$')
+                self.assertLessEqual(info['hOverflow'], 0, '가로 넘침 없음')
+                ctx.close()
+
+        # PC(1440)에서는 카드 안 '문자 전체 복사하기' 버튼을 그대로 쓴다
+        ctx = self.browser.new_context(viewport={'width': 1440, 'height': 900})
+        page = ctx.new_page()
+        page.goto(BASE, wait_until='networkidle')
+        page.wait_for_timeout(250)
+        self.assertTrue(page.is_visible('#btn-copy'))
+        self.assertTrue(page.is_hidden('#sms-mobile-bar'))
         ctx.close()
 
     def test_mobile_inputs_16px_no_zoom(self):
@@ -3366,19 +3422,19 @@ class AppTest(unittest.TestCase):
         self.errors = [e for e in self.errors if 'ERR_' not in e and 'Failed to load resource' not in e]
 
     # ============================================================== 버전 · 배포 파일
-    def test_24_version_bumped_to_1_1_0(self):
+    def test_24_version_bumped_to_1_1_1(self):
         with open(os.path.join(ROOT, 'sw.js'), encoding='utf-8') as f:
             sw = f.read()
-        self.assertIn("'v1.1.0'", sw)
+        self.assertIn("'v1.1.1'", sw)
         self.assertIn("'js/sync.js'", sw)
         with open(os.path.join(ROOT, 'index.html'), encoding='utf-8') as f:
             html = f.read()
         for f_ in ('icons', 'core', 'templates', 'sync', 'app'):
-            self.assertIn(f'js/{f_}.js?v=1.1.0', html)
-        self.assertIn('styles.css?v=1.1.0', html)
+            self.assertIn(f'js/{f_}.js?v=1.1.1', html)
+        self.assertIn('styles.css?v=1.1.1', html)
         gradle = open(os.path.join(ROOT, 'android/app/build.gradle'), encoding='utf-8').read()
-        self.assertIn('versionCode 5', gradle)
-        self.assertIn("versionName '1.1.0'", gradle)
+        self.assertIn('versionCode 6', gradle)
+        self.assertIn("versionName '1.1.1'", gradle)
 
 
 if __name__ == '__main__':
