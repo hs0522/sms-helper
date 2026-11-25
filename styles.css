@@ -998,6 +998,12 @@ input, textarea, select { font-family: inherit; letter-spacing: inherit; }
 @media (max-width: 900px) {
   /* 16px 글씨에서도 '010-0000-0000' 안내가 잘리지 않게 전화번호 칸을 조금 넓힌다 */
   .contact-add { grid-template-columns: minmax(0, 1fr) 140px; }
+
+  /* 달력의 시간 고르기 — 오전·오후는 윗줄, 시·분은 아랫줄로 나눠 잘리지 않게 */
+  .cal-time { row-gap: 6px; }
+  .cal-time .seg.is-small { flex: 1 0 100%; }
+  .cal-time .seg.is-small .seg-btn { flex: 1 1 0; }
+  .cal-time .sel.is-time { flex: 1 1 0; min-width: 0; }
 }
 
 /* ==================================================================
