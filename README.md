@@ -38,8 +38,8 @@ python3 -m http.server 8000
 | **안드로이드** | 아래 `.apk`를 내려받아 설치 (오프라인 내장) |
 
 - 웹: https://hs0522.github.io/sms-helper/ (GitHub Pages · `gh-pages` 브랜치 루트)
-- 안드로이드 설치 파일: https://github.com/hs0522/sms-helper/releases/download/v1.0.0/Maraepu-SMS-Helper-v1.0.0.apk
-- 릴리즈 페이지: https://github.com/hs0522/sms-helper/releases/tag/v1.0.0
+- 안드로이드 설치 파일: https://github.com/hs0522/sms-helper/releases/download/v1.0.1/Maraepu-SMS-Helper-v1.0.1.apk
+- 릴리즈 페이지: https://github.com/hs0522/sms-helper/releases/tag/v1.0.1
 
 ### 안드로이드 앱(.apk)
 
