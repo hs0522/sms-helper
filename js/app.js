@@ -1512,6 +1512,10 @@
   function openSms() {
     var text = $('#preview').value;
     if (!text) { toast('문자 내용이 비어 있어요'); return; }
+    // 안드로이드 앱(.apk) 안에서는 인텐트를 직접 띄운다
+    if (window.AndroidSms && window.AndroidSms.open) {
+      try { window.AndroidSms.open(text); return; } catch (e) { /* 아래 기본 방식으로 */ }
+    }
     var a = document.createElement('a');
     a.href = smsUrl(text);
     a.rel = 'noopener';

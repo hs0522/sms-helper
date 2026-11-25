@@ -79,8 +79,9 @@ public class MainActivity extends Activity {
             }
         });
 
-        // 복사가 브라우저 방식으로 막힐 때를 위한 안전망 (js/app.js fallbackCopy에서 부른다)
+        // 복사·문자 앱 열기 통로 (안드로이드 앱 껍데기에서만 생긴다)
         webView.addJavascriptInterface(new CopyBridge(), "AndroidCopy");
+        webView.addJavascriptInterface(new SmsBridge(), "AndroidSms");
 
         if (savedInstanceState != null) {
             webView.restoreState(savedInstanceState);
@@ -175,6 +176,30 @@ public class MainActivity extends Activity {
                 }
             } catch (Exception ignored) {
             }
+        }
+    }
+
+    /** 문자 앱 열기 — 웹에서는 sms: 링크로 하지만, 앱 안에서는 인텐트를 직접 띄우는 편이 확실하다. */
+    public class SmsBridge {
+        @JavascriptInterface
+        public void open(final String text) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    Uri target = Uri.parse("sms:?body=" + URLEncoder.encode(text == null ? "" : text));
+                    try {
+                        startActivity(new Intent(Intent.ACTION_VIEW, target));
+                    } catch (Exception e1) {
+                        try {
+                            Intent alt = new Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:"));
+                            alt.putExtra("sms_body", text);
+                            startActivity(alt);
+                        } catch (Exception e2) {
+                            toast("문자 앱을 열 수 없어요. 본문을 복사해 붙여넣어 주세요.");
+                        }
+                    }
+                }
+            });
         }
     }
 
