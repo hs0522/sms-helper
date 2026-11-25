@@ -773,6 +773,9 @@ input, textarea, select { font-family: inherit; letter-spacing: inherit; }
 
 @media (max-width: 900px) {
   body { overflow: auto; display: block; padding-bottom: calc(74px + env(safe-area-inset-bottom)); }
+  /* 아이폰 사파리 — 입력칸 글자가 16px보다 작으면 초점을 맞을 때 화면이 저절로 확대된다.
+     검색창·동·호·금액·퍼센트·모달 입력칸·미리보기까지 모든 입력칸을 16px 이상으로 고정. */
+  input, textarea, select { font-size: 16px !important; }
   .topbar {
     height: auto;
     flex-wrap: wrap;
@@ -834,6 +837,10 @@ input, textarea, select { font-family: inherit; letter-spacing: inherit; }
 
 @media (max-width: 380px) {
   .seg-btn { font-size: 12px; padding: 8px 4px; }
+  /* 아주 좁은 폰 — 지급 일정 칸을 한 단계 더 쬐끔 줄인다 */
+  .pay-row { grid-template-columns: 50px minmax(0, 1fr); }
+  .pay-row .date-btn.is-compact,
+  .pay-amount { max-width: 190px; }
 }
 
 .date-ico { display: inline-flex; align-items: center; color: var(--muted); }
@@ -989,7 +996,8 @@ input, textarea, select { font-family: inherit; letter-spacing: inherit; }
 .contact-add .add-btn { grid-column: 1 / -1; margin-top: 0; justify-self: start; }
 
 @media (max-width: 900px) {
-  .contact-add { grid-template-columns: minmax(0, 1fr) 124px; }
+  /* 16px 글씨에서도 '010-0000-0000' 안내가 잘리지 않게 전화번호 칸을 조금 넓힌다 */
+  .contact-add { grid-template-columns: minmax(0, 1fr) 140px; }
 }
 
 /* ==================================================================
@@ -1150,11 +1158,32 @@ input, textarea, select { font-family: inherit; letter-spacing: inherit; }
 .pay-total.is-bad .pay-total-note { color: var(--danger); }
 
 @media (max-width: 900px) {
+  /* 지급 일정 — 위줄은 구분+일정, 아래줄은 퍼센트+금액으로 컴팩트하게
+     두 줄의 오른쪽 끝을 같게(200px) 두고, 가로 전체를 채우지 않는다. */
   .paytable-head { display: none; }
-  .pay-row { grid-template-columns: auto minmax(0, 1fr); }
-  .pay-amount { grid-column: 1 / -1; }
-  .pay-name { padding-top: 6px; }
-  .pay-row .date-btn.is-compact { padding: 11px 10px; font-size: 12.5px; }
+  .pay-row {
+    grid-template-columns: 54px minmax(0, 1fr);
+    grid-template-areas:
+      "name date"
+      "rate amount";
+    column-gap: 8px;
+    row-gap: 6px;
+    align-items: center;
+    padding: 10px 0;
+  }
+  .pay-name { display: contents; }
+  .pay-name-text { grid-area: name; font-size: 12.5px; }
+  .pay-rate { grid-area: rate; align-self: start; margin-top: 8px; }
+  .pay-rate-inp { width: 44px; padding: 1px 2px; }
+  .pay-row .date-btn.is-compact {
+    grid-area: date;
+    width: 100%;
+    max-width: 200px;
+    justify-self: start;
+    padding: 10px 9px;
+    font-size: 12.5px;
+  }
+  .pay-amount { grid-area: amount; width: 100%; max-width: 200px; min-width: 0; }
 }
 
 /* 지급 일정 표 — 좁은 칸에서도 환산 줄이 잘리지 않게 두 줄까지 */

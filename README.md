@@ -38,8 +38,8 @@ python3 -m http.server 8000
 | **안드로이드** | 아래 `.apk`를 내려받아 설치 (오프라인 내장) |
 
 - 웹: https://hs0522.github.io/sms-helper/ (GitHub Pages · `gh-pages` 브랜치 루트)
-- 안드로이드 설치 파일: https://github.com/hs0522/sms-helper/releases/download/v1.0.1/Maraepu-SMS-Helper-v1.0.1.apk
-- 릴리즈 페이지: https://github.com/hs0522/sms-helper/releases/tag/v1.0.1
+- 안드로이드 설치 파일: https://github.com/hs0522/sms-helper/releases/download/v1.0.2/Maraepu-SMS-Helper-v1.0.2.apk
+- 릴리즈 페이지: https://github.com/hs0522/sms-helper/releases/tag/v1.0.2
 
 ### 안드로이드 앱(.apk)
 
@@ -285,3 +285,7 @@ projects/sms-helper/
 > 바꾸지 않던 문제) 수정 — 카테고리 첫 문자로 전환 + 모바일에서 목록 시트 자동 열림, `목록` 버튼은 전체 20종.
 > 금액 표시 방식을 `전체` / `만원 단위`(`27,000만 원`) / `끊어읽기`(`2억7천만 원`)로 바꾸고, 서비스 워커 캐시를 `v1.0.1`로 올려
 > 아이폰 홈 화면 앱에서도 새 버전이 바로 반영되게 했습니다(새 워커가 화면을 넘겨받으면 한 번 새로 고침).
+> 2026-11-25 네 번째 수정(v1.0.2): 아이폰 사파리에서 입력칸을 누르면 화면이 저절로 확대되던 문제 — 모바일에서 모든
+> `input`·`textarea`·`select`를 `16px` 이상으로 고정. 모바일 지급 일정 표를 컴팩트하게(위줄 구분+일정, 아래줄 `%`+금액,
+> 두 줄의 오른쪽 끝을 맞춰 폭을 줄임). 문자 본문의 대괄호 `[ ]` 를 모두 없앰 — 섹션 머리말은 `■ 계약 구성`·`■ 특약`,
+> 아직 넣지 않은 자리는 `(계좌번호)`·`(금액)` 같은 소괄호. 서비스 워커 캐시 `v1.0.2`, 안드로이드 `versionCode 3`.

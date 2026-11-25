@@ -471,6 +471,85 @@ class AppTest(unittest.TestCase):
         }""")
         self.assertEqual(bad, [], '서명이 빠지거나 맨 아래가 아닌 조합: %s' % bad)
 
+    def test_no_brackets_in_any_template(self):
+        # 20종 어느 조합에서도 문자 본문에 대괄호 [ ] 가 나오지 않는다
+        # (빈 값 자리는 소괄호, 섹션 머리말은 ■ 로 바쳤다)
+        bad = self.js(r"""() => {
+          const ctx = { office: '마래푸중앙부동산', phones: '010-4585-7365 / 02-312-7365',
+                        feeAccount: '우리은행 1002-762-106047 황호선', amountMode: 'won_eokman',
+                        contacts: SMSTemplates.defaultContacts() };
+          const out = [];
+          const check = (t, patch, tag) => {
+            const d = Object.assign({ mode: 'ho' }, SMSTemplates.defaultData(t), patch || {});
+            let body;
+            try { body = t.build(d, ctx); } catch (e) { out.push(t.id + ' ' + tag + ' ERROR ' + e.message); return; }
+            const hits = body.split('\n').filter(l => l.indexOf('[') !== -1 || l.indexOf(']') !== -1);
+            if (hits.length) out.push(t.id + ' ' + tag + ' :: ' + hits.join(' / '));
+          };
+          const combos = {
+            t2: [{}, { trade: '전세', price: '11억 5천만' }],
+            t3: [{ ver: 'simple' }, { ver: 'detail' }, { ver: 'detail', times: '2026년 12월 5일 토요일 오전 10시' }],
+            t5: [{ status: 'confirmed' }, { status: 'pending', detail: true }],
+            t8: [{}, { price: '247000', jeongAmount: '3000', gyeyakAmount: '24700', jungAmount: '61750',
+                   permit: true, mortgage: true }, { mortgage: true, mortgageAmount: '12000', mortgageHolder: '카카오뱅크' }],
+            t9: [{}, { when: { date: '2026-11-28', hour: 10, min: 0 } }],
+            t10: [{ trade: '매매' }, { trade: '임대차', priority: true }, { trade: '매매', jeongyakReturn: true }],
+            t11: [{ trade: '매매' }, { trade: '임대차' }],
+            t12: [{ owner: '공동' }, { owner: '단독' }],
+            t13: [{ trade: '매매', kind: '중도금' }, { trade: '매매', kind: '잔금', docs: true },
+                  { trade: '임대차', kind: '잔금', registry: true },
+                  { trade: '매매', kind: '잔금', price: '247000', gyeyak: '24700', jung: '61750' }],
+            t14: [{}, { calcAmount: '230000' }, { calcKind: 'commercial', calcTrade: '월세', calcDeposit: '10000', calcRent: '100' }],
+            t15: [{ role: '임대인' }, { role: '임차인' }],
+            t16: [{ trade: '매매' }, { trade: '전세' }, { trade: '월세' }],
+            t18: [{ trade: '임대차' }, { trade: '매매', amount: '90000', area: '34' }],
+            t19: [{ trade: '매매' }, { trade: '전세', price: '210000', spot: '4단지 19층', area: '24' }],
+            t20: [{ vendorCat: '대출' }, { vendorCat: '법무사' }]
+          };
+          SMSTemplates.TEMPLATES.forEach(t => {
+            check(t, {}, 'blank');
+            (combos[t.id] || [{}]).forEach((patch, i) => check(t, patch, 'combo' + i));
+          });
+          // 감사 인사는 대상 3 × 문구 7 × 안부 5 전부
+          const t17 = SMSTemplates.TEMPLATES.find(t => t.id === 't17');
+          ['owner', 'coagent', 'guest'].forEach(target => {
+            SMSTemplates.VARIANTS[target].forEach((_, idx) => {
+              SMSTemplates.GREETINGS.forEach(g => {
+                check(t17, { target: target, vpick: { owner: idx, coagent: idx, guest: idx }, greet: g.v },
+                      target + '/' + idx + '/' + g.v);
+              });
+            });
+          });
+          return out;
+        }""")
+        self.assertEqual(bad, [], '문자 본문에 대괄호가 남아 있다: %s' % bad)
+
+    def test_section_heads_use_square_mark(self):
+        # 섹션 머리말은 ■, 아직 넣지 않은 자리는 소괄호로 보인다
+        self.pick('t8')
+        body = self.text()
+        self.assertIn('■ 계약 구성', body)
+        self.assertIn('■ 특약', body)
+        self.assertIn('(계좌번호)', body)
+        self.pick('t9')
+        body = self.text()
+        self.assertIn('■ 매도인 준비사항', body)
+        self.assertIn('■ 매수인 준비사항', body)
+        self.assertIn('(약정 일시)', body)
+        self.pick('t12')
+        body = self.text()
+        self.assertIn('■ 온라인 제출 방법', body)
+        self.assertIn('■ 준비하실 증빙서류', body)
+        self.pick('t13')
+        body = self.text()
+        self.assertIn('■ 금액 세부사항', body)
+        self.assertIn('(계좌번호)', body)
+        self.pick('t14')
+        body = self.text()
+        self.assertIn('(요율)%', body)
+        self.assertIn('(중개보수)', body)
+        self.assertIn('(입금 계좌)', body)
+
     def test_first_greeting_keeps_owner_signature(self):
         self.pick('t1')
         body = self.text()
@@ -692,7 +771,7 @@ class AppTest(unittest.TestCase):
                             'prop': {'complex': '마포래미안푸르지오', 'dong': '304', 'ho': '1103'}}}
         })
         body = page.input_value('#preview')
-        self.assertIn('[전세] 문의 손님이', body)
+        self.assertIn('전세 문의 손님이', body)
         self.assertIn('* 마포래미안푸르지오 304동 1103호 (전세 11억 5천만)', body)
         self.assertEqual(page.input_value('#fields [data-money="amount"]'), '115,000')
         ctx.close()
@@ -853,7 +932,7 @@ class AppTest(unittest.TestCase):
 
     def test_clear_date_icon(self):
         self.pick('t9')
-        self.assertIn('[약정 일시]', self.text())
+        self.assertIn('(약정 일시)', self.text())
         self.page.click('#fields [data-date="when"]')
         self.wait(120)
         self.page.click('#calpop [data-cal-day="20"]')
@@ -862,7 +941,7 @@ class AppTest(unittest.TestCase):
         self.assertIn('2026년 11월 20일 금요일', self.text())
         self.page.click('#fields .date-clear')
         self.wait(120)
-        self.assertIn('[약정 일시]', self.text())
+        self.assertIn('(약정 일시)', self.text())
         self.assertFalse(self.page.is_visible('#calpop'))
 
     def test_no_today_tomorrow_chips(self):
@@ -890,7 +969,7 @@ class AppTest(unittest.TestCase):
         self.wait(100)
         self.page.click('#btn-reset')
         self.wait(120)
-        self.assertIn('[금액]', self.text())
+        self.assertIn('(금액)', self.text())
         self.assertEqual(self.page.input_value('#fields [data-prop="prop"][data-key="dong"]'), '')
 
     def test_state_saved_across_reload(self):
@@ -950,7 +1029,14 @@ class AppTest(unittest.TestCase):
         self.assertIn('마래푸공인중개사 드림', self.text())
 
     def test_fee_sms_account_spaced(self):
+        # 내 정보 설정에 넣은 계좌는 띄어 써도 '은행 + 계좌 + 예금주' 모양으로 정리돼 문자에 들어간다
+        # (개인 계좌는 코드에 넣지 않으므로 화면에서 한 번 넣어 둔다)
         self.pick('t14')
+        self.page.click('#btn-settings')
+        self.wait(100)
+        self.page.fill('#set-account', '우리 1002-762-106047 황호선')
+        self.page.click('#btn-settings-save')
+        self.wait(150)
         body = self.text()
         self.assertIn('* 우리은행 1002-762-106047 황호선', body)
         line = [l for l in body.split('\n') if '우리은행' in l][0]
@@ -1437,6 +1523,124 @@ class AppTest(unittest.TestCase):
         self.assertEqual(errors, [])
         ctx.close()
 
+    def test_mobile_inputs_16px_no_zoom(self):
+        # 아이폰 사파리는 입력칸 글자가 16px보다 작으면 초점을 맞을 때 화면을 저절로 확대한다.
+        # 모바일(≤900px)에서는 검색창·동·호·금액·퍼센트·모달 입력칸·미리보기까지 모두 16px 이상이다.
+        ctx = self.browser.new_context(viewport={'width': 390, 'height': 844}, is_mobile=True, has_touch=True)
+        page = ctx.new_page()
+        errors = []
+        page.on('pageerror', lambda e: errors.append(str(e)))
+        page.goto(BASE, wait_until='networkidle')
+        page.evaluate('localStorage.clear()')
+        page.reload(wait_until='networkidle')
+        page.wait_for_timeout(200)
+
+        def small(tag):
+            return page.evaluate("""() => [...document.querySelectorAll('input, textarea, select')]
+                .filter(e => e.offsetParent !== null)
+                .map(e => [e.id || e.className || e.tagName, parseFloat(getComputedStyle(e).fontSize)])
+                .filter(([, f]) => f < 16)""")
+
+        self.assertEqual(small('처음'), [], '처음 화면에 16px 미만 입력칸이 있다')
+        for tid in ('t8', 't13', 't7', 't3', 't14', 't20', 't18', 't19'):
+            with self.subTest(tid=tid):
+                page.click('#btn-sheet')
+                page.wait_for_timeout(120)
+                page.click(f'#sheet-list [data-id="{tid}"]')
+                page.wait_for_timeout(180)
+                self.assertEqual(small(tid), [], f'{tid} 화면에 16px 미만 입력칸이 있다')
+        # 설정 모달·목록 시트의 입력칸도
+        page.click('#btn-settings')
+        page.wait_for_timeout(200)
+        self.assertEqual(small('설정'), [], '설정 모달에 16px 미만 입력칸이 있다')
+        page.click('#btn-settings-close')
+        page.wait_for_timeout(150)
+        page.click('#btn-sheet')
+        page.wait_for_timeout(200)
+        self.assertEqual(small('목록 시트'), [], '목록 시트에 16px 미만 입력칸이 있다')
+        self.assertEqual(errors, [])
+        ctx.close()
+
+    def test_mobile_pay_table_compact_layout(self):
+        # 390×844 — 지급 일정 표는 위줄 구분+일정, 아래줄 퍼센트+금액으로 컴팩트하게 놓인다.
+        # 금액·일정 칸이 가로 전체를 채우지 않고, 두 줄의 오른쪽 끝이 같으며, 가로 넘침이 없다.
+        ctx = self.browser.new_context(viewport={'width': 390, 'height': 844}, is_mobile=True, has_touch=True)
+        page = ctx.new_page()
+        errors = []
+        page.on('pageerror', lambda e: errors.append(str(e)))
+        page.goto(BASE, wait_until='networkidle')
+        page.evaluate('localStorage.clear()')
+        page.reload(wait_until='networkidle')
+        page.wait_for_timeout(200)
+        page.click('#btn-sheet')
+        page.wait_for_timeout(150)
+        page.click('#sheet-list [data-id="t8"]')
+        page.wait_for_timeout(220)
+        page.fill('#fields [data-field="price"]', '247000')
+        page.fill('#fields [data-field="jeongAmount"]', '3000')
+        page.click('#fields [data-action="autoFill"]')
+        page.wait_for_timeout(250)
+        info = page.evaluate("""() => {
+          const table = document.querySelector('#fields .paytable');
+          const tb = table.getBoundingClientRect();
+          const rows = [...table.querySelectorAll('.pay-row')].map(r => {
+            const g = s => r.querySelector(s);
+            const box = e => { const b = e.getBoundingClientRect();
+              return {l:+b.left.toFixed(1), r:+b.right.toFixed(1), t:+b.top.toFixed(1), w:+b.width.toFixed(1)}; };
+            const rate = g('.pay-rate-inp'), date = g('.date-btn'), amount = g('.pay-amount input');
+            return { label: g('.pay-name-text').textContent.trim(),
+                     rate: rate ? box(rate) : null, date: box(date), amount: box(amount),
+                     amountFont: parseFloat(getComputedStyle(amount).fontSize),
+                     rateFont: rate ? parseFloat(getComputedStyle(rate).fontSize) : null,
+                     rateSameRowAsAmount: rate ? (Math.abs(rate.getBoundingClientRect().top - amount.getBoundingClientRect().top) < 20) : null,
+                     rateLeftOfAmount: rate ? (rate.getBoundingClientRect().right <= amount.getBoundingClientRect().left + 0.5) : null };
+          });
+          return { table: {l:+tb.left.toFixed(1), r:+tb.right.toFixed(1), w:+tb.width.toFixed(1)}, rows,
+                   scrollW: document.documentElement.scrollWidth, winW: window.innerWidth,
+                   panelRight: +document.querySelector('.form-panel').getBoundingClientRect().right.toFixed(1)};
+        }""")
+        self.assertLessEqual(info['scrollW'], info['winW'], '390px 가로 넘침')
+        self.assertEqual([r['label'] for r in info['rows']], ['약정금', '계약금', '중도금', '잔금'])
+        for r in info['rows']:
+            with self.subTest(row=r['label']):
+                self.assertGreaterEqual(r['amountFont'], 16, '금액 칸 글씨가 16px 미만')
+                self.assertLessEqual(r['amount']['r'], info['panelRight'] + 0.5, '금액 칸이 패널 밖으로')
+                # 일정·금액 칸은 표 폭의 3분의 2를 넘지 않는다 (가로 전체를 채우지 않음)
+                self.assertLess(r['date']['w'], info['table']['w'] * 0.68, '일정 칸이 너무 넓다')
+                self.assertLess(r['amount']['w'], info['table']['w'] * 0.68, '금액 칸이 너무 넓다')
+                # 두 줄의 오른쪽 끝을 맞춘다
+                self.assertAlmostEqual(r['date']['r'], r['amount']['r'], delta=1.0, msg='일정·금액 칸 오른쪽 끝이 어긋난다')
+                self.assertAlmostEqual(r['date']['l'], r['amount']['l'], delta=1.0, msg='일정·금액 칸 왼쪽 끝이 어긋난다')
+                if r['rate']:
+                    self.assertGreaterEqual(r['rateFont'], 16, '퍼센트 칸 글씨가 16px 미만')
+                    self.assertTrue(r['rateLeftOfAmount'], '퍼센트 칸이 금액 칸 왼쪽에 있지 않다')
+                    self.assertTrue(r['rateSameRowAsAmount'], '퍼센트 칸이 금액 칸과 같은 줄이 아니다')
+                else:
+                    self.assertIn(r['label'], ('약정금', '잔금'), '퍼센트가 필요한 항목에 퍼센트 칸이 없다')
+        # t13도 같은 규칙
+        page.click('#btn-sheet')
+        page.wait_for_timeout(150)
+        page.click('#sheet-list [data-id="t13"]')
+        page.wait_for_timeout(220)
+        info2 = page.evaluate("""() => {
+          const rows = [...document.querySelectorAll('#fields .pay-row')].map(r => {
+            const rate = r.querySelector('.pay-rate-inp'), amount = r.querySelector('.pay-amount input');
+            return { label: r.querySelector('.pay-name-text').textContent.trim(),
+                     hasRate: !!rate,
+                     rateLeftOfAmount: rate ? rate.getBoundingClientRect().right <= amount.getBoundingClientRect().left + 0.5 : null };
+          });
+          return { rows, scrollW: document.documentElement.scrollWidth, winW: window.innerWidth };
+        }""")
+        self.assertLessEqual(info2['scrollW'], info2['winW'], 't13 390px 가로 넘침')
+        self.assertEqual([r['label'] for r in info2['rows']], ['계약금', '중도금', '잔금'])
+        for r in info2['rows']:
+            with self.subTest(row='t13 ' + r['label']):
+                self.assertEqual(r['hasRate'], r['label'] != '잔금', '퍼센트 칸 자리')
+                if r['hasRate']:
+                    self.assertTrue(r['rateLeftOfAmount'])
+        self.assertEqual(errors, [])
+        ctx.close()
+
     def test_mobile_new_templates_no_overflow(self):
         ctx = self.browser.new_context(viewport={'width': 390, 'height': 844})
         page = ctx.new_page()
@@ -1584,7 +1788,7 @@ class AppTest(unittest.TestCase):
         self.wait(120)
         self.page.click('#btn-reset')
         self.wait(120)
-        self.assertIn('[금액]', self.text())
+        self.assertIn('(금액)', self.text())
         self.assertTrue(self.page.is_visible('#snackbar'))
         self.assertIn('입력 내용을 비웠어요', self.page.inner_text('#snackbar'))
         self.page.click('#snackbar-undo')
@@ -1723,8 +1927,8 @@ class AppTest(unittest.TestCase):
     def test_t3_simple_and_detail_switch(self):
         self.pick('t3')
         body = self.text()
-        self.assertIn('[매수] 손님이 있어서 연락드렸습니다', body)
-        self.assertIn('[방문 일시]에 손님 모시고 방문드릴 수 있을까요?', body)
+        self.assertIn('매수 손님이 있어서 연락드렸습니다', body)
+        self.assertIn('방문 일시에 손님 모시고 방문드릴 수 있을까요?', body)
         self.assertEqual(len(self.page.query_selector_all('#fields [data-field="times"]')), 0)
 
         # 달력으로 일시를 고르면 짧은 표기로 들어간다 (오늘/내일/모레 또는 M/D)
@@ -1738,13 +1942,13 @@ class AppTest(unittest.TestCase):
         self.wait(120)
         self.page.click('#calpop [data-cal-close]')
         body = self.text()
-        self.assertIn('오전 9시30분]에 손님 모시고 방문드릴 수 있을까요?', body)
-        self.assertNotIn('[방문 일시]', body)
+        self.assertIn('오전 9시30분에 손님 모시고 방문드릴 수 있을까요?', body)
+        self.assertNotIn('(방문 일시)', body)
 
         # 전세 / 월세
         self.page.click('#fields [data-seg="guest"][data-value="월세"]')
         self.wait(100)
-        self.assertIn('[월세] 손님이 있어서', self.text())
+        self.assertIn('월세 손님이 있어서', self.text())
 
         # 상세 버전으로 바꾸면 후보 시간대 입력이 나온다
         self.page.click('#fields [data-seg="ver"][data-value="detail"]')
@@ -1752,11 +1956,11 @@ class AppTest(unittest.TestCase):
         self.assertIsNotNone(self.page.query_selector('#fields [data-field="times"]'))
         body = self.text()
         self.assertIn('집을 보시고자 하는 월세 손님이 계셔서', body)
-        self.assertIn('* [방문 희망 시간]', body)
+        self.assertIn('* (방문 희망 시간)', body)
         # 다시 간단으로 돌아와도 고른 일시는 남아 있다
         self.page.click('#fields [data-seg="ver"][data-value="simple"]')
         self.wait(120)
-        self.assertIn('오전 9시30분]에 손님 모시고', self.text())
+        self.assertIn('오전 9시30분에 손님 모시고', self.text())
 
     def test_t17_thanks_variants(self):
         counts = self.js("""() => Object.keys(SMSTemplates.VARIANTS).map(k => SMSTemplates.VARIANTS[k].length)""")
@@ -1806,7 +2010,7 @@ class AppTest(unittest.TestCase):
         self.pick('t18')
         body = self.text()
         self.assertIn('요즘 임대매물 귀한데, 염치없이 전화드렸어요', body)
-        self.assertIn('보증금 [금액]까지', body)
+        self.assertIn('보증금 (금액)까지', body)
         self.assertIn('입주 27년 2월', body)
         self.assertIn('염리초 보내고 싶은 학부모입니다', body)
         self.page.fill('#fields [data-field="amount"]', '90000')
@@ -1830,8 +2034,8 @@ class AppTest(unittest.TestCase):
 
     def test_t19_promo_unit_convert_and_amount(self):
         self.pick('t19')
-        self.assertIn('🔑[단지·층·평형]', self.text())
-        self.assertIn('🔑매매 [금액]으로 최저가 조율 가능합니다', self.text())
+        self.assertIn('🔑(단지·층·평형)', self.text())
+        self.assertIn('🔑매매 (금액)으로 최저가 조율 가능합니다', self.text())
         self.page.fill('#fields [data-field="unit"]', '404동 1903호')
         self.wait(100)
         self.page.click('#fields [data-action="promoUnit"]')
@@ -1852,20 +2056,32 @@ class AppTest(unittest.TestCase):
         self.assertIn('🔑전세 21억으로 급매로 조율 가능합니다', body)
 
     def test_t20_vendor_contacts(self):
+        # 협력업체 연락처는 코드에 넣지 않는다 — 화면에서 한 번 추가해 두고 쓴다
         self.pick('t20')
         body = self.text()
         self.assertIn('마포구 일대를 잘 아는 대출 상담사분들입니다', body)
-        self.assertIn('[이름] 신한 대출 안종미\n[연락처] 010-4757-2152', body)
-        self.assertIn('[이름] 하나 대출 김효원\n[연락처] 010-5241-5262', body)
+        self.assertIn('이름 : 상담사 이름\n연락처 : 전화번호', body)   # 저장된 연락처가 없을 때
 
-        # 한 명 빼기
-        self.page.click('#fields [data-contact-pick="loan2"]')
+        # 두 명을 추가하면 바로 문자에 들어간다
+        for name, phone in (('신한 대출 안종미', '01047572152'), ('하나 대출 김효원', '01052415262')):
+            self.page.fill('#fields [data-contact-new="name"]', name)
+            self.page.fill('#fields [data-contact-new="phone"]', phone)
+            self.page.click('#fields [data-contact-add]')
+            self.wait(150)
+        body = self.text()
+        self.assertIn('이름 : 신한 대출 안종미\n연락처 : 010-4757-2152', body)
+        self.assertIn('이름 : 하나 대출 김효원\n연락처 : 010-5241-5262', body)
+
+        # 한 명 빼기 — 체크를 끄면 문자에서 빠진다 (체크 버튼과 이름 영역 둘 다 고를 수 있다)
+        picks = self.page.query_selector_all('#fields .contact-list .contact')
+        self.assertEqual(len(picks), 2)
+        picks[1].query_selector('.contact-check').click()
         self.wait(120)
         body = self.text()
         self.assertIn('안종미', body)
         self.assertNotIn('김효원', body)
         # 다시 넣기
-        self.page.click('#fields [data-contact-pick="loan2"]')
+        self.page.query_selector_all('#fields .contact-list .contact')[1].query_selector('.contact-check').click()
         self.wait(120)
         self.assertIn('김효원', self.text())
 
@@ -1874,7 +2090,7 @@ class AppTest(unittest.TestCase):
         self.wait(120)
         body = self.text()
         self.assertIn('등기 업무를 도와드리는 법무사입니다', body)
-        self.assertIn('[이름] 상담사 이름\n[연락처] 전화번호', body)   # 저장된 연락처가 없을 때
+        self.assertIn('이름 : 상담사 이름\n연락처 : 전화번호', body)   # 저장된 연락처가 없을 때
 
         # 새 연락처 추가
         self.page.fill('#fields [data-contact-new="name"]', '박법무 법무사')
@@ -1882,7 +2098,7 @@ class AppTest(unittest.TestCase):
         self.page.click('#fields [data-contact-add]')
         self.wait(200)
         body = self.text()
-        self.assertIn('[이름] 박법무 법무사\n[연락처] 010-9876-5432', body)
+        self.assertIn('이름 : 박법무 법무사\n연락처 : 010-9876-5432', body)
         self.assertIn('연락처를 추가했어요', self.page.inner_text('#toast'))
 
         # 새로 고쳐도 남아 있다
@@ -1973,7 +2189,7 @@ class AppTest(unittest.TestCase):
         self.wait(150)
         self.assertIn('전화번호를 확인해 주세요', self.page.inner_text('#toast'))
         contacts = self.js("() => JSON.parse(localStorage.getItem('smshelper.v1')).contacts")
-        self.assertEqual(len(contacts['대출']), 2)
+        self.assertEqual(len(contacts.get('대출') or []), 0, '잘못된 입력은 저장되지 않는다')
 
     # ============================================================== URL로 값 넘기기
     def open_with_query(self, query):
@@ -2010,14 +2226,14 @@ class AppTest(unittest.TestCase):
     def test_url_params_visit_date_and_number_template(self):
         ctx, page = self.open_with_query('template=3&visitDate=2026-11-26T09:30')
         body = page.input_value('#preview')
-        self.assertIn('[매수] 손님이 있어서 연락드렸습니다', body)
-        self.assertIn('오전 9시30분]에 손님 모시고', body)
+        self.assertIn('매수 손님이 있어서 연락드렸습니다', body)
+        self.assertIn('오전 9시30분에 손님 모시고', body)
         ctx.close()
 
     def test_url_params_without_property_does_not_add_blank_row(self):
         ctx, page = self.open_with_query('template=t3')
         self.assertEqual(page.query_selector_all('#fields .prop-item').__len__(), 0)
-        self.assertNotIn('[매물]', page.input_value('#preview'))
+        self.assertNotIn('(매물)', page.input_value('#preview'))
         ctx.close()
 
     # ============================================================== 수정요청서(2026-11-25) 회귀
@@ -2106,7 +2322,7 @@ class AppTest(unittest.TestCase):
         self.assertIn('강조 문구', self.page.inner_text('#fields'))
         self.assertIn('단지·층 자동 변환', self.page.inner_text('#fields'))
         self.pick('t20')
-        self.assertIn('[연락처]', self.text())
+        self.assertIn('연락처 :', self.text())
 
     def test_line_icons_render(self):
         # 20종 모두 라인 아이콘(SVG)이고 컬러 이모지 글자가 남아 있지 않다
@@ -2417,7 +2633,7 @@ class AppTest(unittest.TestCase):
                 page.wait_for_timeout(250)
                 info = page.evaluate("""() => {
                   const rows = [...document.querySelectorAll('#fields .pay-row')].map(r => {
-                    const nm = r.querySelector('.pay-name').getBoundingClientRect();
+                    const nm = r.querySelector('.pay-name-text').getBoundingClientRect();
                     const dt = r.querySelector('.date-btn').getBoundingClientRect();
                     const am = r.querySelector('.money-field').getBoundingClientRect();
                     const hint = r.querySelector('.money-hint');

@@ -8,17 +8,18 @@
   var C = global.SMSCore;
 
   function amt(man, ctx) { return C.formatAmount(man, ctx.amountMode); }
+  // 아직 채우지 않은 자리는 대괄호 대신 소괄호로 둔다 — 문자 본문에 [ ] 가 나오지 않게
   function txt(v, ph) {
     var s = String(v == null ? '' : v).trim();
-    return s || (ph ? '[' + ph + ']' : '');
+    return s || (ph ? '(' + ph + ')' : '');
   }
   function dt(v, ph) {
     var s = C.formatDateTime(v);
-    return s || '[' + (ph || '일시') + ']';
+    return s || '(' + (ph || '일시') + ')';
   }
   function money(man, ph, ctx) {
     var s = amt(C.parseMan(man), ctx);
-    return s || '[' + (ph || '금액') + ']';
+    return s || '(' + (ph || '금액') + ')';
   }
   // 모든 문자는 맨 아래에 상호·번호 서명을 한 줄 띄워 항상 넣는다 (토글 없음)
   function sign(ctx) { return ctx.office + ' 드림\n' + ctx.phones; }
@@ -41,13 +42,13 @@
     var label = C.propertyLabel(o);
     // 단지명만 있고 동·호수가 비어 있으면 아직 채우지 않은 것으로 본다
     var complex = String(o.complex || '').trim();
-    if (label && complex && label === complex) return '[매물]';
-    return label || '[매물]';
+    if (label && complex && label === complex) return '(매물)';
+    return label || '(매물)';
   }
   function propWithPrice(p, mode) {
     var base = prop(p, mode);
     var price = C.propPrice(p);
-    return price ? base + ' (' + price + ')' : base + ' ([가격])';
+    return price ? base + ' (' + price + ')' : base + ' (가격)';
   }
   function itemsOf(data, key, mode) {
     var list = data[key];
@@ -134,9 +135,9 @@
 
   function contactBlock(list, ids) {
     var picked = list.filter(function (c) { return ids.indexOf(c.id) !== -1; });
-    if (!picked.length) return '[이름] 상담사 이름\n[연락처] 전화번호';
+    if (!picked.length) return '이름 : 상담사 이름\n연락처 : 전화번호';
     return picked.map(function (c) {
-      return '[이름] ' + String(c.name || '').trim() + '\n[연락처] ' + C.formatPhone(c.phone);
+      return '이름 : ' + String(c.name || '').trim() + '\n연락처 : ' + C.formatPhone(c.phone);
     }).join('\n\n');
   }
 
@@ -246,14 +247,14 @@
           var when = C.formatShortDateTime(d.when) || '방문 일시';
           var simple = [
             '안녕하세요, ' + ctx.office + '입니다 😊',
-            '[' + guest + '] 손님이 있어서 연락드렸습니다',
-            '[' + when + ']에 손님 모시고 방문드릴 수 있을까요?'
+            guest + ' 손님이 있어서 연락드렸습니다',
+            when + '에 손님 모시고 방문드릴 수 있을까요?'
           ];
           simple.push(sign(ctx));
           return join(simple);
         }
         var lines = String(d.times || '').split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
-        var when2 = lines.length ? lines.map(function (l) { return '* ' + l; }).join('\n') : '* [방문 희망 시간]';
+        var when2 = lines.length ? lines.map(function (l) { return '* ' + l; }).join('\n') : '* (방문 희망 시간)';
         var blocks = [
           '안녕하세요, ' + ctx.office + '입니다 😊',
           '집을 보시고자 하는 ' + guest + ' 손님이 계셔서 일정 여쭙고자 연락드립니다.\n방문 희망 시간은 아래와 같습니다.',
@@ -286,9 +287,9 @@
         var trade = p.trade === '전세' || p.trade === '월세' ? p.trade : '매매';
         var blocks = [
           '사장님, 안녕하세요 😊',
-          '[' + trade + '] 문의 손님이 계셔서 공동중개 및 집보기 가능 여부 여쭙고자 연락드립니다.',
+          trade + ' 문의 손님이 계셔서 공동중개 및 집보기 가능 여부 여쭙고자 연락드립니다.',
           '* ' + propWithPrice(p, d.mode),
-          '손님께서는 [' + (C.formatDateTime(d.when) || '방문 희망 일시') + '] 방문을 희망하고 계십니다.\n해당 시간에 집보기가 가능하실지 확인 부탁드리며, 혹시 어려우시다면 가능하신 시간을 알려주시면 손님과 조율해 보겠습니다.',
+          '손님께서는 ' + (C.formatDateTime(d.when) || '방문 희망 일시') + ' 방문을 희망하고 계십니다.\n해당 시간에 집보기가 가능하실지 확인 부탁드리며, 혹시 어려우시다면 가능하신 시간을 알려주시면 손님과 조율해 보겠습니다.',
           '감사합니다!'
         ];
         blocks.push(sign(ctx));
@@ -315,7 +316,7 @@
         if (d.status === 'pending') {
           var lines = list.length
             ? list.map(function (p) { return '* ' + propWithPrice(p, d.mode); }).join('\n')
-            : '* [매물]';
+            : '* (매물)';
           return join([
             '안녕하세요, ' + ctx.office + '입니다 😊',
             '아래 매물은 현재 집보기 조율 중입니다.',
@@ -332,7 +333,7 @@
         if (d.detail) {
           var mlines = list.length
             ? list.map(function (p) { return propWithPrice(p, d.mode); }).join(' · ')
-            : '[매물]';
+            : '(매물)';
           blocks.push('* 매물 : ' + mlines);
         }
         blocks.push(d.parking
@@ -376,7 +377,7 @@
         var list = itemsOf(d, 'items', d.mode);
         var lines = list.length
           ? list.map(function (p) { return '* ' + propWithPrice(p, d.mode); }).join('\n')
-          : '* [매물] ([가격])';
+          : '* (매물) (가격)';
         return join([
           '안녕하세요, ' + ctx.office + '입니다 😊',
           '함께 보신 매물 핵심 내용 정리해서 보내드립니다.',
@@ -429,7 +430,7 @@
       ],
       build: function (d, ctx) {
         var rent = d.trade === '임대차';
-        var amount = hint(d.amount) || '[금액]';
+        var amount = hint(d.amount) || '(금액)';
         var area = String(d.area == null ? '' : d.area).trim().replace(/평$/, '');
         var first = rent
           ? '요즘 임대매물 귀한데, 염치없이 전화드렸어요 🥲\n혹시 매물 나오면 꼭 부탁드립니다~!'
@@ -464,12 +465,12 @@
         { t: 'text', id: 'emphasis', label: '강조 문구', ph: '예: 최저가 조율 가능합니다' }
       ],
       build: function (d, ctx) {
-        var spot = String(d.spot == null ? '' : d.spot).trim() || spotFromUnit(d.unit) || '[단지·층·평형]';
+        var spot = String(d.spot == null ? '' : d.spot).trim() || spotFromUnit(d.unit) || '(단지·층·평형)';
         // 평형은 "24" / "24평" / "24평형" 어느 쪽으로 적어도 "24평형"으로
         var area = String(d.area == null ? '' : d.area).trim().replace(/\s*(평형|평)$/, '');
         var spotLine = area ? spot + ' ' + area + '평형' : spot;
         var trade = d.trade === '전세' || d.trade === '월세' ? d.trade : '매매';
-        var amount = hint(d.price) || '[금액]';
+        var amount = hint(d.price) || '(금액)';
         var emph = String(d.emphasis == null ? '' : d.emphasis).trim() || '최저가 조율 가능합니다';
         var blocks = [
           '안녕하세요, ' + ctx.office + '입니다 😊',
@@ -512,21 +513,20 @@
       ],
       build: function (d, ctx) {
         var jeongAmt = amt(C.parseMan(d.jeongAmount), ctx);
-        var intro = '아래 표시부동산의 매매계약 주요내용을 보내드리오니, 내용 확인 후 동의하시면 아래 계좌로 ' + (jeongAmt || '[약정금]') + '을 입금해 주세요.';
+        var intro = '아래 표시부동산의 매매계약 주요내용을 보내드리오니, 내용 확인 후 동의하시면 아래 계좌로 ' + (jeongAmt || '(약정금)') + '을 입금해 주세요.';
 
-        var jeongLine = '* 약정금 : ' + (jeongAmt || '[약정금]');
+        var jeongLine = '* 약정금 : ' + (jeongAmt || '(약정금)');
         var jd = C.formatDateTime(d.jeongDate);
         if (jd) jeongLine += ' (' + jd + ')';
 
-        var gyeyakLine = '* 계약금' + pctLabel(pctOf(d.gyeyakAmount, d.price), '10') + ' : ' + (amt(C.parseMan(d.gyeyakAmount), ctx) || '[계약금]');
+        var gyeyakLine = '* 계약금' + pctLabel(pctOf(d.gyeyakAmount, d.price), '10') + ' : ' + (amt(C.parseMan(d.gyeyakAmount), ctx) || '(계약금)');
         var gd = C.formatDateTime(d.gyeyakDate);
         // 날짜 대신 "토지허가받은후" 같은 글자 일정도 넣을 수 있다 (진행 거래 엑셀에서 옮겨 온 값)
-        gyeyakLine += ' (' + (gd || String(d.gyeyakText || '').trim() || '[일정]') + ')';
-        var sub = [];
+        gyeyakLine += ' (' + (gd || String(d.gyeyakText || '').trim() || '일정') + ')';        var sub = [];
         if (d.permit) sub.push('  - 단, 토지거래허가 일정에 맞춰 쌍방이 협의할 수 있다.');
         if (jeongAmt) sub.push('  - 약정금 ' + jeongAmt + '은 반환받고, 계약금 전체를 입금하기로 한다.');
 
-        var jungLine = '* 중도금' + pctLabel(pctOf(d.jungAmount, d.price), '25') + ' : ' + (amt(C.parseMan(d.jungAmount), ctx) || '[중도금]') + ' (' + (C.formatDateTime(d.jungDate) || String(d.jungText || '').trim() || '[일정]') + ')';
+        var jungLine = '* 중도금' + pctLabel(pctOf(d.jungAmount, d.price), '25') + ' : ' + (amt(C.parseMan(d.jungAmount), ctx) || '(중도금)') + ' (' + (C.formatDateTime(d.jungDate) || String(d.jungText || '').trim() || '일정') + ')';
         // 잔금 = 매매대금 − 계약금 − 중도금 (중도금이 비면 0원) — core.paymentSplit 하나로 계산한다
         var split = C.paymentSplit({
           totalMan: C.parseMan(d.price),
@@ -534,10 +534,9 @@
           jungMan: C.parseMan(d.jungAmount)
         });
         var janAmtText = split.ok ? amt(split.janMan, ctx) : '';
-        var janLabel = janAmtText || (split.over ? '확인 필요 (계약금·중도금이 매매대금을 넘음)' : '[잔금]');
+        var janLabel = janAmtText || (split.over ? '확인 필요 (계약금·중도금이 매매대금을 넘음)' : '(잔금)');
         var janWhen = C.formatDateTime(d.janDate) || String(d.janText || '').trim();
-        var janParen = (split.over || split.negative) ? '' : ' (' + (janWhen || '[일정]') + ')';
-        var janLine = '* 잔금 : ' + janLabel + janParen;
+        var janParen = (split.over || split.negative) ? '' : ' (' + (janWhen || '일정') + ')';        var janLine = '* 잔금 : ' + janLabel + janParen;
         var splitWarn = '';
         if (split.over) {
           splitWarn = '※ 계약금·중도금 합계 ' + amt(split.paidMan, ctx) + '이 매매대금 ' + amt(split.baseMan, ctx) +
@@ -555,23 +554,23 @@
         }
         clauses.push(++n + '. 매수인이 약정금 입금 후 계약 효력이 발생하며, 정당한 사유 없이 본계약 체결에 응하지 않거나 본 약정을 일방적으로 철회할 경우, 매수약정인의 귀책이면 매수약정인은 입금된 금액을 포기하고 매도약정인의 귀책이면 매도약정인은 약정계약금의 배액을 배상하기로 한다. 중개사의 과실 없는 해제 시 중개보수는 지급하여야 한다.');
         if (d.mortgage) {
-          var mAmt = amt(C.parseMan(d.mortgageAmount), ctx) || '[채권최고액]';
+          var mAmt = amt(C.parseMan(d.mortgageAmount), ctx) || '(채권최고액)';
           var holder = String(d.mortgageHolder || '').trim();
-          clauses.push(++n + '. 현 등기부등본상 채권최고액 [1건 금 ' + mAmt + (holder ? ' (' + holder + ')' : '') + '] 상태의 계약이며, 매도인은 잔금 시 전액 상환 말소한다. (설정해지비용 매도인 부담)');
+          clauses.push(++n + '. 현 등기부등본상 채권최고액 1건 금 ' + mAmt + (holder ? ' (' + holder + ')' : '') + ' 상태의 계약이며, 매도인은 잔금 시 전액 상환 말소한다. (설정해지비용 매도인 부담)');
         }
         clauses.push(++n + '. 매도인은 잔금일까지 채무를 부담하는 등의 새로운 권리변동을 일으키지 않도록 한다.');
         clauses.push(++n + '. 본 특약사항에 기재되지 않은 사항은 민법상 계약에 관한 규정과 부동산매매 일반 관례에 따른다.');
 
         var address = String(d.address || '').trim();
         var place = prop(d.prop, d.mode);
-        var placeLine = [address, place === '[매물]' ? '' : place].filter(Boolean).join(' ');
+        var placeLine = [address, place === '(매물)' ? '' : place].filter(Boolean).join(' ');
 
         return join([
           '안녕하세요, ' + ctx.office + '입니다 😊',
           intro,
-          '* 매도인 계좌번호 : ' + (C.accountParse(d.account) || '[계좌번호]') + '\n* 물건지 : ' + (placeLine || '[물건지]'),
-          '[계약 구성]\n' + [
-            '* 매매가 : ' + (amt(C.parseMan(d.price), ctx) || '[매매가]'),
+          '* 매도인 계좌번호 : ' + (C.accountParse(d.account) || '(계좌번호)') + '\n* 물건지 : ' + (placeLine || '(물건지)'),
+          '■ 계약 구성\n' + [
+            '* 매매가 : ' + (amt(C.parseMan(d.price), ctx) || '(매매가)'),
             jeongLine,
             gyeyakLine
           ].concat(sub).concat([
@@ -579,8 +578,9 @@
             janLine
           ]).join('\n'),
           splitWarn,
-          '[' + (C.formatDateTime(d.jeongDate) || '약정일') + '] ' + (jeongAmt || '[약정금]') + ' 입금과 동시에 계약의 효력이 발생합니다.',
-          '[특약]\n' + clauses.join('\n'),
+          (C.formatDateTime(d.jeongDate) ? C.formatDateTime(d.jeongDate) + '에 ' + (jeongAmt || '(약정금)') + '을 입금하면 계약의 효력이 발생합니다.'
+            : (jeongAmt || '(약정금)') + '을 입금하면 계약의 효력이 발생합니다.'),
+          '■ 특약\n' + clauses.join('\n'),
           '위 계약 내용에 동의하시면 매도인께서는 계좌번호를 회신해 주시기 바랍니다.',
           sign(ctx)
         ]);
@@ -603,8 +603,8 @@
           '안녕하세요, ' + ctx.office + '입니다 😊',
           prop(d.prop, d.mode) + ' 약정서 작성 일정 및 준비물을 안내드립니다.',
           '* 일시 : ' + dt(d.when, '약정 일시'),
-          '[매도인 준비사항]\n1. 신분증\n2. 도장\n3. 주민등록등본 (세대원 전원의 주민등록번호 전체 공개)',
-          '[매수인 준비사항]\n1. 신분증\n2. 도장\n3. 주민등록등본 (세대원 전원의 주민등록번호 전체 공개)\n4. 가족관계증명서(상세)\n5. 약정금 (OTP 배터리·이체한도 1일 전 확인 부탁드립니다)\n☆ 공동명의로 취득하시는 경우, 명의자 각각 위 매수인 준비물을 지참해 주시기 바랍니다.',
+          '■ 매도인 준비사항\n1. 신분증\n2. 도장\n3. 주민등록등본 (세대원 전원의 주민등록번호 전체 공개)',
+          '■ 매수인 준비사항\n1. 신분증\n2. 도장\n3. 주민등록등본 (세대원 전원의 주민등록번호 전체 공개)\n4. 가족관계증명서(상세)\n5. 약정금 (OTP 배터리·이체한도 1일 전 확인 부탁드립니다)\n☆ 공동명의로 취득하시는 경우, 명의자 각각 위 매수인 준비물을 지참해 주시기 바랍니다.',
           '궁금하신 점이 있으시면 언제든 편하게 연락 주세요. 감사합니다!',
           sign(ctx)
         ]);
@@ -628,7 +628,7 @@
       build: function (d, ctx) {
         var place = prop(d.prop, d.mode);
         if (d.trade === '임대차') {
-          var seller = '[임대인 준비사항]\n1. 확정일자 부여현황 (주민센터 발급)\n2. 전입세대 확인서 (전국 주민센터 / 신분증, 기존 임대차계약서 등 지참)\n3. 국세 납세증명서 (주민센터, 무인민원발급기, 정부24, 세무서, 홈택스)\n4. 지방세 납세증명서 (주민센터, 무인민원발급기, 정부24)\n5. 관리비 세부 내역 (관리사무소)\n6. 신분증\n7. 도장 (서명 가능)';
+          var seller = '■ 임대인 준비사항\n1. 확정일자 부여현황 (주민센터 발급)\n2. 전입세대 확인서 (전국 주민센터 / 신분증, 기존 임대차계약서 등 지참)\n3. 국세 납세증명서 (주민센터, 무인민원발급기, 정부24, 세무서, 홈택스)\n4. 지방세 납세증명서 (주민센터, 무인민원발급기, 정부24)\n5. 관리비 세부 내역 (관리사무소)\n6. 신분증\n7. 도장 (서명 가능)';
           var blocks = [
             '안녕하세요, ' + ctx.office + '입니다 😊',
             place + ' 임대차계약 일정 및 준비물을 안내드립니다.',
@@ -636,21 +636,21 @@
             seller
           ];
           if (d.priority) {
-            blocks.push('[선순위 권리내역 추가]\n* 기존 임대차계약서를 첨부하여 선순위 임차인들의 보증금액 및 임대차 기간 확인이 필요합니다.');
+            blocks.push('■ 선순위 권리내역 추가\n* 기존 임대차계약서를 첨부하여 선순위 임차인들의 보증금액 및 임대차 기간 확인이 필요합니다.');
           }
-          blocks.push('[임차인 준비사항]\n1. 신분증\n2. 도장 (서명 가능)\n3. 계약금 (OTP 배터리·이체한도 1일 전 확인 부탁드립니다)');
+          blocks.push('■ 임차인 준비사항\n1. 신분증\n2. 도장 (서명 가능)\n3. 계약금 (OTP 배터리·이체한도 1일 전 확인 부탁드립니다)');
           blocks.push('궁금하신 점이 있으시면 언제든 편하게 연락 주세요. 감사합니다!');
           blocks.push(sign(ctx));
           return join(blocks);
         }
-        var sellerSale = '[매도인 준비사항]\n1. 신분증\n2. 도장 (서명 가능)\n3. 등기권리증' +
+        var sellerSale = '■ 매도인 준비사항\n1. 신분증\n2. 도장 (서명 가능)\n3. 등기권리증' +
           (d.jeongyakReturn ? '\n4. 약정금 반환 (OTP 배터리·이체한도 1일 전 확인 부탁드립니다)' : '');
         return join([
           '안녕하세요, ' + ctx.office + '입니다 😊',
           place + ' 매매계약 일정 및 준비물을 안내드립니다.',
           '* 일시 : ' + dt(d.when, '계약 일시'),
           sellerSale,
-          '[매수인 준비사항]\n1. 신분증\n2. 도장 (서명 가능)\n3. 계약금 (OTP 배터리·이체한도 1일 전 확인 부탁드립니다)',
+          '■ 매수인 준비사항\n1. 신분증\n2. 도장 (서명 가능)\n3. 계약금 (OTP 배터리·이체한도 1일 전 확인 부탁드립니다)',
           '궁금하신 점이 있으시면 언제든 편하게 연락 주세요. 감사합니다!',
           sign(ctx)
         ]);
@@ -677,7 +677,7 @@
           '안녕하세요, ' + ctx.office + '입니다 😊\n전자계약 진행 순서를 안내드립니다.',
           '1. ' + ctx.office + '에서 계약서를 생성합니다.\n' +
           '2. ' + parties + '에게 카카오톡 또는 문자가 발송됩니다.\n' +
-          '본인 명의의 휴대폰에서 [부동산 전자계약] 앱을 설치하신 뒤 링크를 누르시면 자동으로 ' + doc + '가 열립니다.\n' +
+          '본인 명의의 휴대폰에서 부동산 전자계약 앱을 설치하신 뒤 링크를 누르시면 자동으로 ' + doc + '가 열립니다.\n' +
           '내용을 확인하시고, 성함 정자 서명 후 신분증을 촬영해 주시면 됩니다.\n' +
           '3. ' + ctx.office + '에서 전자서명을 진행합니다.\n' +
           '4. ' + report + '가 자동으로 접수됩니다.\n' +
@@ -709,8 +709,8 @@
           '안녕하세요, ' + ctx.office + '입니다 😊\n전자계약 후 자금조달계획서 제출 절차를 안내드립니다.',
           '전자계약을 완료하셨더라도 ‘주택취득자금 조달 및 입주계획서’는 별도로 제출하셔야 하며, 제출 기한은 계약체결일로부터 30일 이내입니다.',
           body,
-          '[온라인 제출 방법]\n국토교통부 부동산거래관리시스템 접속 및 본인인증 로그인 → 해당 계약 조회 → 자금조달 및 입주계획 입력 → 증빙서류 첨부 → 제출 및 접수 상태 확인',
-          '[준비하실 증빙서류]\n' + [
+          '■ 온라인 제출 방법\n국토교통부 부동산거래관리시스템 접속 및 본인인증 로그인 → 해당 계약 조회 → 자금조달 및 입주계획 입력 → 증빙서류 첨부 → 제출 및 접수 상태 확인',
+          '■ 준비하실 증빙서류\n' + [
             '* 예금·적금 : 예금잔액증명서 등',
             '* 주식 매도대금 : 주식거래내역서 등',
             '* 기존 주택 매도대금 : 해당 매매계약서',
@@ -788,7 +788,7 @@
         var blocks = [
           '안녕하세요, ' + ctx.office + '입니다 😊',
           place + ' ' + (d.kind || '중도금') + ' 일정 안내드립니다.',
-          '* 일시 : ' + (whenVal || '[입금 일시]') +
+          '* 일시 : ' + (whenVal || '(입금 일시)') +
             (d.trade === '임대차' && d.registry
               ? '\n* 당일 제가 본 소재지 등기부를 발급해 새로운 권리변동이 없음을 확인시켜 드린 후 입금 진행하시면 됩니다.'
               : '')
@@ -800,7 +800,7 @@
           jungMan: d.trade === '임대차' ? null : C.parseMan(d.jung)
         });
         var janAmt = split.ok ? amt(split.janMan, ctx) : '';
-        var janText = janAmt || (split.over ? '확인 필요 (계약금이 보증금을 넘음)' : '[잔금]');
+        var janText = janAmt || (split.over ? '확인 필요 (계약금이 보증금을 넘음)' : '(잔금)');
         var warn = '';
         if (split.over) {
           warn = '※ 계약금' + (d.trade === '임대차' ? '' : '·중도금') + ' 합계 ' + amt(split.paidMan, ctx) +
@@ -814,24 +814,24 @@
           var dep = amt(C.parseMan(d.deposit), ctx);
           var rent = amt(C.parseMan(d.rent), ctx);
           rows = [
-            '* 보증금 : ' + (dep || '[보증금]') + (rent ? ' / 월차임 : ' + rent : ''),
-            '* 계약금 : ' + (amt(C.parseMan(d.gyeyak), ctx) || '[계약금]'),
+            '* 보증금 : ' + (dep || '(보증금)') + (rent ? ' / 월차임 : ' + rent : ''),
+            '* 계약금 : ' + (amt(C.parseMan(d.gyeyak), ctx) || '(계약금)'),
             '* 잔금 : ' + janText
           ];
         } else {
           rows = [
-            '* 매매대금 : ' + (amt(C.parseMan(d.price), ctx) || '[매매대금]'),
-            '* 계약금 : ' + (amt(C.parseMan(d.gyeyak), ctx) || '[계약금]'),
-            '* 중도금 : ' + (amt(C.parseMan(d.jung), ctx) || '[중도금]'),
+            '* 매매대금 : ' + (amt(C.parseMan(d.price), ctx) || '(매매대금)'),
+            '* 계약금 : ' + (amt(C.parseMan(d.gyeyak), ctx) || '(계약금)'),
+            '* 중도금 : ' + (amt(C.parseMan(d.jung), ctx) || '(중도금)'),
             '* 잔금 : ' + janText
           ];
         }
-        blocks.push('[금액 세부사항]\n' + rows.join('\n'));
+        blocks.push('■ 금액 세부사항\n' + rows.join('\n'));
         if (warn) blocks.push(warn);
-        blocks.push('* 입금 계좌 : ' + (C.accountParse(d.account) || '[계좌번호]'));
+        blocks.push('* 입금 계좌 : ' + (C.accountParse(d.account) || '(계좌번호)'));
         if (d.trade !== '임대차' && d.kind === '잔금' && d.docs) {
-          blocks.push('[매도인 구비서류]\n1. 인감도장, 신분증\n2. 매도용 인감증명서 1통 (매수인 인적사항 기재)\n3. 등기권리증\n4. 주민등록초본 1통 (전체 주소 이력 포함)\n5. 관리비·가스비 정산서\n6. 각종 리모컨, 카드키 등 전달품');
-          blocks.push('[매수인 구비서류]\n1. 도장\n2. 매매계약서 원본\n3. 가족관계증명서(상세) : 매수인 각각 본인 기준 발급\n4. 주민등록등본 1통 (세대원 전원 주민등록번호 뒷자리 공개)\n5. 취득세 등 이전비용');
+          blocks.push('■ 매도인 구비서류\n1. 인감도장, 신분증\n2. 매도용 인감증명서 1통 (매수인 인적사항 기재)\n3. 등기권리증\n4. 주민등록초본 1통 (전체 주소 이력 포함)\n5. 관리비·가스비 정산서\n6. 각종 리모컨, 카드키 등 전달품');
+          blocks.push('■ 매수인 구비서류\n1. 도장\n2. 매매계약서 원본\n3. 가족관계증명서(상세) : 매수인 각각 본인 기준 발급\n4. 주민등록등본 1통 (세대원 전원 주민등록번호 뒷자리 공개)\n5. 취득세 등 이전비용');
         }
         blocks.push('궁금하신 점이 있으시면 언제든 편하게 연락 주세요. 감사합니다!');
         blocks.push(sign(ctx));
@@ -884,10 +884,10 @@
           '* 합계 : ' + C.formatWonPlain(r.total) + (r.vatMode === 'none' ? ' (부가세 별도)' : '')
         ].concat(r.capped ? ['* 한도액 ' + C.formatWonPlain(r.capWon) + ' 적용'] : []).join('\n') : [
           '* 거래 유형 : ' + kindLabel + ' · ' + (d.calcTrade || '매매'),
-          '* 중개보수 요율 : [요율]%',
-          '* 중개보수(공급가액) : [중개보수]',
-          '* 부가세 : [부가세]',
-          '* 합계 : [중개보수]'
+          '* 중개보수 요율 : (요율)%',
+          '* 중개보수(공급가액) : (중개보수)',
+          '* 부가세 : (부가세)',
+          '* 합계 : (중개보수)'
         ].join('\n');
         var overLine = r.ok && r.rateOver
           ? '* 요청하신 ' + C.rateLabel(r.requestedPct) + '%는 상한요율 ' + C.rateLabel(r.capRatePct) +
@@ -898,7 +898,7 @@
           '거래 관련 중개보수 안내드립니다.',
           moneyLines,
           overLine,
-          '아래 계좌로 입금해 주시면 됩니다.\n* ' + (ctx.feeAccount || '[입금 계좌]'),
+          '아래 계좌로 입금해 주시면 됩니다.\n* ' + (ctx.feeAccount || '(입금 계좌)'),
           '입금 후 현금영수증 발행받으실 번호를 문자로 알려주시면 바로 처리해 드리겠습니다. 감사합니다!',
           sign(ctx)
         ]);
@@ -918,7 +918,7 @@
       ],
       build: function (d, ctx) {
         var role = d.role === '임차인' ? '임차인' : '임대인';
-        var months = String(d.months == null || d.months === '' ? '' : d.months).trim() || '[N]';
+        var months = String(d.months == null || d.months === '' ? '' : d.months).trim() || '(N)';
         return join([
           '안녕하세요, ' + ctx.office + '입니다 😊',
           '그동안 잘 지내고 계시죠?\n어느새 시간이 흘러 약 ' + months + '개월 후 임대차 만기가 다가오고 있어 안부 겸 연락드렸습니다.',
