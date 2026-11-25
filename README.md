@@ -39,8 +39,8 @@ python3 -m http.server 8000
 | **안드로이드** | 아래 `.apk`를 내려받아 설치 (오프라인 내장) |
 
 - 웹: https://hs0522.github.io/sms-helper/ (GitHub Pages · `gh-pages` 브랜치 루트)
-- 안드로이드 설치 파일: https://github.com/hs0522/sms-helper/releases/download/v1.1.4/Maraepu-SMS-Helper-v1.1.4.apk
-- 릴리즈 페이지: https://github.com/hs0522/sms-helper/releases/tag/v1.1.4
+- 안드로이드 설치 파일: https://github.com/hs0522/sms-helper/releases/download/v1.1.5/Maraepu-SMS-Helper-v1.1.5.apk
+- 릴리즈 페이지: https://github.com/hs0522/sms-helper/releases/tag/v1.1.5
 
 ### 안드로이드 앱(.apk)
 
@@ -264,7 +264,7 @@ LD_LIBRARY_PATH=/workspace/.libs/root/usr/lib/x86_64-linux-gnu python3 tests/tes
 ```
 
 - 단위 테스트: 중개보수 계산(구간·경계값 5천만/2억/6억/9억/12억/15억·한도·부가세 0/4/10·협의요율·상한초과·월세환산·음수), 지급액 분할(`paymentSplit` 675,000,000→95,000,000/607,500,000·초과·음수), 노출 변환(동·단지 / 호·층 배지, 예전 mode 값), 금액 표기·환산 줄, 계좌 파서, 날짜 표기
-- 화면 테스트: 20종 전환, 카테고리 5/6/5/4와 순서·제목·부제목 20종, 용어 통일(옛 표현이 화면·본문에 남지 않는지), SVG 라인 아이콘(20종·문구 교체·브랜드·복사), 같은 달력 아이콘(12·13·14·18번), 동·호 전체 표시(계약 쪽)와 전환 배지(매물 안내), 지급 일정 표(지급 일정 라벨·좁은 구분 열·% 아래줄·점선 잔금·총합계·초과 경고·1000×720·390 두 줄), 중개보수 계산기(한 줄 결과·기본 간이 4%), 토글·달력·복사·저장/복원, 모바일 레이아웃, 컴팩트 위젯 레이아웃, 끝선 정렬, 콘솔 오류 0건
+- 화면 테스트: 20종 전환, 카테고리 5/6/5/4와 순서·제목·부제목 20종, 용어 통일(옛 표현이 화면·본문에 남지 않는지), SVG 라인 아이콘(20종·문구 교체·브랜드·복사), 같은 달력 아이콘(12·13·14·18번), 동·호 전체 표시(계약 쪽)와 전환 배지(매물 안내), 지급 일정 표(지급 일정 라벨·좁은 구분 열·% 아래줄·점선 잔금·총합계·초과 경고·1000×720·390 두 줄), 중개보수 계산기(한 줄 결과·기본 간이 4%), 시간 휠 피커(3열·세 줄·스크롤 스냅·5분 단위·네이티브 select 없음)·방문 희망 시간 한 줄(시작/종료 반반·칸 폭 확장 팝업)·4번/5번 같은 시간 박스, 토글·달력·복사·저장/복원, 모바일 레이아웃, 컴팩트 위젯 레이아웃, 끝선 정렬, 콘솔 오류 0건
 - 서명: 20종 × 모든 옵션 조합(감사 인사 3×7×5 포함)에서 맨 아래 상호·번호가 빠지지 않는지
 - PWA: manifest 값·아이콘 크기(192/512/maskable)·애플 메타·manifest/아이콘 실제 응답
 - 연동: URL 쿼리로 매물·금액·일시 채우기, 주소 정리, 빈 매물 줄 방지
@@ -273,7 +273,7 @@ LD_LIBRARY_PATH=/workspace/.libs/root/usr/lib/x86_64-linux-gnu python3 tests/tes
 - 영구 수정: 기존 문구 저장/되돌리기, 일회성 수정과의 구분, 대괄호 → 소괄호
 - 백업: 내보내기 JSON(토큰·Gist 미포함) · 새 기기 불러오기 복원 · 깨진 파일 거부
 - PC·폰 동기화: 백업 덩어리 만들기/되살리기/최신 판단, 비공개 Gist 자동 생성(POST `public:false`), 변경 뒤 자동 올리기, 다른 기기 최신 내용 자동 받기, 오프라인 표시·연결 해제, 토큰 로컬 보관
-- 스크린샷 산출물 존재 확인 — **147개 테스트 전체 통과**
+- 스크린샷 산출물 존재 확인 — **150개 테스트 전체 통과**
 
 화면 캡처(테스트와 별개):
 
@@ -281,7 +281,7 @@ LD_LIBRARY_PATH=/workspace/.libs/root/usr/lib/x86_64-linux-gnu python3 tests/tes
 LD_LIBRARY_PATH=/workspace/.libs/root/usr/lib/x86_64-linux-gnu python3 tests/capture.py
 ```
 
-→ `downloads/sms-app-pc.png` · `sms-app-1000x720.png`(12번 지급 일정 표) · `sms-app-pay.png` · `sms-app-mobile.png` · `sms-app-calc.png` · `sms-app-vendor*.png` · `sms-app-thanks.png` · `sms-app-myungdan.png` · `sms-app-custom-editor.png`(폰 새 문구 추가) · `sms-app-times-modes.png`(방문 희망 시간 — 한 시각 · 범위) (문서용 `docs/shot-*.png` · 모바일 지급 일정 표 `docs/shot-mobile-pay.png`)
+→ `downloads/sms-app-pc.png` · `sms-app-1000x720.png`(12번 지급 일정 표) · `sms-app-pay.png` · `sms-app-mobile.png` · `sms-app-calc.png` · `sms-app-vendor*.png` · `sms-app-thanks.png` · `sms-app-myungdan.png` · `sms-app-custom-editor.png`(폰 새 문구 추가) · `sms-app-times-modes.png`(방문 희망 시간 — 한 줄 시작~종료 + 추가) · `sms-app-time-wheel.png`(시작 칸에서 펼쳐진 휠 피커) · `sms-app-cal-popup.png`(달력 + 휠 피커) (문서용 `docs/shot-*.png` · 모바일 지급 일정 표 `docs/shot-mobile-pay.png`)
 
 ## 파일 구조
 
@@ -301,7 +301,7 @@ projects/sms-helper/
   sw.js                      오프라인 캐시(Service Worker · 상대경로)
   android/                   안드로이드 WebView 래퍼 (MainActivity · build.gradle · keystore)
   .github/workflows-disabled/ GitHub Actions APK 빌드 워크플로우(권한 때문에 비활성 위치에 둠)
-  tests/test_app.py          자동 테스트 147개
+  tests/test_app.py          자동 테스트 150개
   tests/capture.py           스크린샷 캡처
 ```
 
@@ -366,3 +366,13 @@ projects/sms-helper/
 > **종료를 비우면** `11월 26일 (목) 오후 2:15`처럼 한 시각, **둘 다 넣으면** `11월 26일 (목) 오후 2:15 ~ 오후 3:30`처럼 범위로 들어갑니다.
 > **시각은 앱 어디서나 5분 단위**(`00분 · 05분 · … · 55분`) — 달력+시간 팝업의 분 선택도 같게 맞췄습니다.
 > 서비스 워커 캐시 `v1.1.4`, 안드로이드 `versionCode 9`.
+>
+> 2026-11-25 열한 번째 수정(v1.1.5): **시간을 고르는 곳을 모두 3열 휠 피커로** — 아이폰 사파리에서 네이티브 `<select>`가
+> 화면 전체를 덮는 목록으로 펼쳐지던 문제를 없애고, `오전/오후 | 시(없음·1~12시) | 분(00·05·…·55분)` 세 열을 세로로 굴려
+> 고르는 컴팩트한 휠(세 줄 · 가운데 강조 띠 · 위아래 흐림)로 바꿨습니다. 손가락·마우스 휠·클릭 모두 됩니다.
+> **방문 희망 시간(4번 상세형)은 날짜 아래 한 줄** — `[시작 시각] ~ [종료 시각] [추가]`가 390px 폰에서도 한 줄에 들어가고,
+> 시작·종료 칸은 **반반(1fr ~ 1fr)**, 칸을 누르면 **그 칸 폭 그대로 위아래로 펼쳐지는** 휠이 열립니다(우측 아래 `초기화 · 닫기`).
+> **달력+시간 팝업**의 시간도 같은 3열 휠(높이 120px)로 바꾸고 `초기화 · 닫기`는 그대로 우측 아래에 두었습니다.
+> **소유자 집보기 문의(4번)와 공동중개 집보기 문의(5번)는 같은 `날짜 + 시간` 박스**를 씁니다 —
+> 방문 일시·방문 희망 일시·방문 희망 시간이 모두 같은 달력 단추(38px)와 같은 박스 규격입니다.
+> 서비스 워커 캐시 `v1.1.5`, 안드로이드 `versionCode 10`.

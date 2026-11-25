@@ -960,10 +960,7 @@ class AppTest(unittest.TestCase):
         self.page.click('#calpop [data-cal-day="5"]')
         self.wait(120)
         self.assertIn('2026년 12월 5일 토요일', self.text())
-        self.page.select_option('#calpop [data-cal-hour]', '10')
-        self.wait(100)
-        self.page.select_option('#calpop [data-cal-min]', '30')
-        self.wait(120)
+        self.pick_time('#calpop', 'am', '10', '30')
         self.assertIn('2026년 12월 5일 토요일 오전 10시 30분', self.text())
         self.page.click('#calpop [data-cal-close]')
         self.assertFalse(self.page.is_visible('#calpop'))
@@ -1466,11 +1463,28 @@ class AppTest(unittest.TestCase):
         segs = self.page.query_selector_all('#fields [data-seg="calcTrade"]')
         self.assertEqual(len(segs), 1)
 
+    def wheel_pick(self, scope, col, val):
+        """3열 휠 피커에서 한 칸을 누른다 (scope: '#calpop' | '#wheelpop')"""
+        self.page.click(f'{scope} .wheel [data-wheel-col="{col}"] .wheel-item[data-wheel-val="{val}"]')
+        self.wait(110)
+
+    def pick_time(self, scope, period, hour, minute):
+        """휠 피커로 오전/오후 · 시 · 분을 고른다 (값을 None으로 두면 그 열은 건드리지 않는다)"""
+        if period is not None:
+            self.wheel_pick(scope, 'p', period)
+        if hour is not None:
+            self.wheel_pick(scope, 'h', hour)
+        if minute is not None:
+            self.wheel_pick(scope, 'm', minute)
+        self.wait(80)
+
     def range_time(self, which, period, hour, minute):
-        self.page.select_option(f'#fields [data-range-part="P"][data-range-time="{which}"]', period)
-        self.page.select_option(f'#fields [data-range-part="H"][data-range-time="{which}"]', hour)
-        self.page.select_option(f'#fields [data-range-part="M"][data-range-time="{which}"]', minute)
-        self.wait(60)
+        """방문 희망 시간 — 시작/종료 칸을 눌러 열린 휠 피커로 고른다"""
+        self.page.click(f'#fields [data-time-chip="{which}"]')
+        self.wait(200)
+        self.pick_time('#wheelpop', period, hour, minute)
+        self.page.click('#wheelpop [data-wheel-close]')
+        self.wait(120)
 
     def test_time_range_helper(self):
         # 방문 희망 시간 — 날짜 + 시작 시각 ~ 끝 시각(비우면 한 시각) + 추가
@@ -1507,9 +1521,8 @@ class AppTest(unittest.TestCase):
         self.assertNotIn('마포래미안푸르지오', body)
 
         # ③ 시각을 비우고 날짜만 추가 → 날짜 한 줄
-        self.page.select_option('#fields [data-range-part="H"][data-range-time="start"]', '')
-        self.page.select_option('#fields [data-range-part="H"][data-range-time="end"]', '')
-        self.wait(80)
+        self.range_time('start', None, '', None)
+        self.range_time('end', None, '', None)
         self.page.click('#fields [data-range-add="times"]')
         self.wait(150)
         self.assertIn('* 12월 5일 (토)', self.text())
@@ -1537,42 +1550,257 @@ class AppTest(unittest.TestCase):
         self.assertEqual(self.js('() => SMSCore.slotClock(0, 5)'), '오전 12:05')
         self.assertEqual(self.js('() => SMSCore.slotClock(12, 55)'), '오후 12:55')
 
-    def test_every_time_select_uses_5_minute_steps(self):
-        # 앱 어디서나 분은 5분 단위 — 달력+시간 팝업 · 방문 희망 시간 모두
+    def test_no_native_time_select_and_wheel_steps(self):
+        # 시간을 고르는 곳에는 네이티브 <select>가 하나도 없다 — 전부 3열 휠 피커
+        expect_min = [str(m) for m in range(0, 60, 5)]
+        expect_min_labels = [(m < 10 and '0' + str(m) or str(m)) + '분' for m in range(0, 60, 5)]
         scan = """() => [...document.querySelectorAll('select')]
-          .filter(s => (s.dataset.calMin || s.dataset.rangePart === 'M') && !s.closest('#calpop[hidden]'))
-          .map(s => ({kind: s.dataset.calMin ? 'cal' : 'range',
-                      values: [...s.options].map(o => o.value),
-                      labels: [...s.options].map(o => o.textContent.trim())}))"""
-        expect = [str(m) for m in range(0, 60, 5)]
-        labels = [(m < 10 and '0' + str(m) or str(m)) + '분' for m in range(0, 60, 5)]
+          .filter(s => s.dataset.calMin || s.dataset.calHour || s.dataset.rangePart)
+          .map(s => s.dataset.calMin ? 'cal' : s.dataset.calHour ? 'cal' : 'range')"""
 
-        # ① 달력 + 시간 팝업 (모든 날짜 칸이 같은 팝업을 쓴다)
+        # ① 달력 + 시간 팝업 — 휠 피커 세 열 (오전/오후 · 시 · 분)
         self.pick('t9')
         self.page.click('#fields [data-date="when"]')
-        self.wait(150)
-        found = self.js(scan)
-        self.assertEqual([f['kind'] for f in found], ['cal'])
-        self.assertEqual(found[0]['values'], expect)
-        self.assertEqual(found[0]['labels'], labels)
+        self.wait(180)
+        self.assertEqual(self.js(scan), [], '달력 팝업에 시간 셀렉트가 남아 있으면 안 된다')
+        cols = self.js("""() => [...document.querySelectorAll('#calpop .wheel .wheel-col')].map(c => c.dataset.wheelCol)""")
+        self.assertEqual(cols, ['p', 'h', 'm'])
+        periods = self.js("""() => [...document.querySelectorAll('#calpop [data-wheel-col="p"] .wheel-item')].map(i => i.textContent.trim())""")
+        self.assertEqual(periods, ['오전', '오후'])
+        hours = self.js("""() => [...document.querySelectorAll('#calpop [data-wheel-col="h"] .wheel-item')].map(i => i.dataset.wheelVal)""")
+        self.assertEqual(hours, [''] + [str(h) for h in range(1, 13)], '시 열은 없음 + 1~12시')
+        mins = self.js("""() => [...document.querySelectorAll('#calpop [data-wheel-col="m"] .wheel-item')].map(i => i.dataset.wheelVal)""")
+        labels = self.js("""() => [...document.querySelectorAll('#calpop [data-wheel-col="m"] .wheel-item')].map(i => i.textContent.trim())""")
+        self.assertEqual(mins, expect_min, '분은 앱 어디서나 5분 단위')
+        self.assertEqual(labels, expect_min_labels)
         self.page.click('#calpop [data-cal-close]')
 
-        # ② 방문 희망 시간 (시작·끝 두 벌)
+        # ② 방문 희망 시간 — 시작·종료 칸을 누르면 뜨는 휠도 같은 5분 단위
         self.pick('t3')
         self.page.click('#fields [data-seg="ver"][data-value="detail"]')
         self.wait(150)
-        found = self.js(scan)
-        self.assertEqual([f['kind'] for f in found], ['range', 'range'])
-        for f in found:
-            self.assertEqual(f['values'], expect)
-            self.assertEqual(f['labels'], labels)
+        self.assertEqual(self.js(scan), [], '방문 희망 시간에도 시간 셀렉트가 없다')
+        for which in ('start', 'end'):
+            with self.subTest(which=which):
+                self.page.click(f'#fields [data-time-chip="{which}"]')
+                self.wait(220)
+                labels = self.js("""() => [...document.querySelectorAll('#wheelpop [data-wheel-col="m"] .wheel-item')].map(i => i.textContent.trim())""")
+                self.assertEqual(labels, expect_min_labels)
+                self.page.click('#wheelpop [data-wheel-close]')
+                self.wait(120)
 
-        # ③ 다른 템플릿·다른 버전에도 시간 셀렉트가 따로 남아 있지 않다
-        for tid in ('t2', 't5', 't8', 't10', 't13', 't18'):
+        # ③ 다른 템플릿에도 시간 셀렉트가 따로 남아 있지 않다
+        for tid in ('t2', 't4', 't5', 't8', 't10', 't13', 't18'):
             with self.subTest(tid=tid):
                 self.pick(tid)
                 self.wait(80)
-                self.assertEqual(self.js(scan), [], '시간 셀렉트는 위 두 곳뿐')
+                self.assertEqual(self.js(scan), [], '시간 셀렉트는 어디에도 없다')
+
+    # ------------------------------------------------------------ 시간 휠 피커 (v1.1.5)
+    WHEEL_INFO_JS = """(scope) => {
+      const w = document.querySelector(scope + ' .wheel');
+      if (!w) return null;
+      const r = w.getBoundingClientRect();
+      const col = w.querySelector('.wheel-col');
+      const ccs = getComputedStyle(col);
+      const item = col.querySelector('.wheel-item');
+      const bar = w.querySelector('.wheel-bar');
+      const ir = item.getBoundingClientRect();
+      return {
+        w: +r.width.toFixed(1), h: +r.height.toFixed(1),
+        cols: w.querySelectorAll('.wheel-col').length,
+        snap: ccs.scrollSnapType,
+        mask: ccs.maskImage || ccs.webkitMaskImage || 'none',
+        itemH: ir.height, itemLine: getComputedStyle(item).lineHeight,
+        barH: bar ? +bar.getBoundingClientRect().height.toFixed(1) : null,
+        barTop: bar ? +(bar.getBoundingClientRect().top - r.top).toFixed(1) : null,
+        active: (w.querySelector('.wheel-item.is-active') || {}).textContent
+      };
+    }"""
+
+    def wheel_info(self, scope):
+        return self.js(self.WHEEL_INFO_JS, scope)
+
+    def wheel_value(self, scope):
+        """각 열의 가운데(고른) 값"""
+        return self.js("""(scope) => [...document.querySelectorAll(scope + ' .wheel-col')]
+            .map(c => c.querySelector('.wheel-item.is-active').dataset.wheelVal)""", scope)
+
+    def test_calendar_wheel_picker_compact(self):
+        # 달력 + 시간 팝업 — 큰 모달이 아니라 달력 폭 안의 컴팩트한 3열 휠
+        self.pick('t9')
+        self.page.click('#fields [data-date="when"]')
+        self.wait(220)
+        info = self.wheel_info('#calpop')
+        self.assertEqual(info['cols'], 3, '오전/오후 · 시 · 분 세 열')
+        self.assertGreaterEqual(info['h'], 108, '세 줄이 보일 높이')
+        self.assertLessEqual(info['h'], 132, '달력 팝업 안에 들어가는 높이')
+        self.assertAlmostEqual(info['h'], info['itemH'] * 3, delta=1.5, msg='세 줄만 보인다')
+        self.assertIn('mandatory', info['snap'])
+        self.assertTrue(info['snap'].startswith('y'))
+        self.assertAlmostEqual(info['barH'], info['itemH'], delta=1.0, msg='가운데 강조 띠는 한 줄 높이')
+        self.assertAlmostEqual(info['barTop'], info['itemH'], delta=1.5)
+        self.assertNotEqual(info['mask'], 'none', '위아래가 흐리게 사라진다')
+        pop_w = self.js("() => +document.querySelector('#calpop').getBoundingClientRect().width.toFixed(1)")
+        self.assertLessEqual(info['w'], pop_w - 16, '달력 폭 안에 들어간다')
+
+        # 휠을 돌려 고르면 날짜 칸 글자와 미리보기가 바로 바뀐다
+        self.page.click('#calpop [data-cal-day="26"]')
+        self.wait(220)
+        unset = self.wheel_value('#calpop')
+        self.assertEqual(unset[1], '', '시간을 아직 안 골랐다')
+        self.assertEqual(unset[2], '0')
+        self.pick_time('#calpop', 'pm', '2', '30')
+        self.assertEqual(self.wheel_value('#calpop'), ['pm', '2', '30'])
+        self.assertIn('2026년 11월 26일 목요일 오후 2시 30분', self.text())
+        self.assertIn('2026.11.26 (목) 오후 2:30', self.page.inner_text('#fields [data-date="when"]'))
+
+        # 마우스 휠로도 돌아간다 (2시 → 세 칸 아래 5시)
+        box = self.page.eval_on_selector('#calpop [data-wheel-col="h"]',
+                                         "e => { const r = e.getBoundingClientRect(); return {x: r.x + r.width / 2, y: r.y + r.height / 2}; }")
+        self.page.mouse.move(box['x'], box['y'])
+        self.page.mouse.wheel(0, 120)
+        self.wait(500)
+        self.assertEqual(self.wheel_value('#calpop')[1], '5', '휠을 굴리면 값이 따라 움직인다')
+
+        # 초기화 · 닫기는 팝업 우측 아래
+        foot = self.js("""() => {
+          const pop = document.querySelector('#calpop').getBoundingClientRect();
+          const b = [...document.querySelectorAll('#calpop .cal-foot button')].map(x => x.getBoundingClientRect());
+          return { mid: pop.left + pop.width / 2, bottom: pop.bottom,
+                   names: [...document.querySelectorAll('#calpop .cal-foot button')].map(x => x.textContent.trim()),
+                   lefts: b.map(r => +r.left.toFixed(1)), tops: b.map(r => +r.top.toFixed(1)),
+                   rights: b.map(r => +r.right.toFixed(1)) };
+        }""")
+        self.assertEqual(foot['names'], ['초기화', '닫기'])
+        self.assertGreater(foot['lefts'][0], foot['mid'], '오른쪽 아래에 초기화·닫기')
+        self.assertAlmostEqual(foot['tops'][0], foot['tops'][1], delta=1.0)
+        self.assertLess(foot['lefts'][0], foot['lefts'][1], '초기화가 닫기 왼쪽')
+        self.page.click('#calpop [data-cal-close]')
+        self.assertFalse(self.page.is_visible('#calpop'))
+
+    def test_visit_time_row_one_line(self):
+        # 방문 희망 시간 — 날짜 아래 한 줄에 시작 ~ 종료 + 추가
+        self.pick('t3')
+        self.page.click('#fields [data-seg="ver"][data-value="detail"]')
+        self.wait(200)
+        geo = self.js("""() => {
+          const q = s => document.querySelector(s).getBoundingClientRect();
+          const a = q('#fields [data-time-chip="start"]'), t = q('#fields .range-tilde');
+          const b = q('#fields [data-time-chip="end"]'), c = q('#fields [data-range-add]');
+          const box = q('#fields .range-add');
+          return { start: {l: a.left, t: a.top, r: a.right, w: a.width, h: a.height, b: a.bottom},
+                   tilde: {l: t.left, t: t.top, r: t.right, c: (t.top + t.bottom) / 2,
+                           e: (t.top + t.bottom) / 2},
+                   end: {l: b.left, t: b.top, r: b.right, w: b.width, h: b.height},
+                   add: {l: c.left, t: c.top, r: c.right, w: c.width},
+                   box: {l: box.left, r: box.right, w: box.width, h: box.height} };
+        }""")
+        # 한 줄 — 시작·종료·추가는 윗변 Y가 같고, '~'는 세로 가운데가 같다 (줄바꿈 없음)
+        for key in ('end', 'add'):
+            self.assertAlmostEqual(geo[key]['t'], geo['start']['t'], delta=1.0, msg=f'{key}가 같은 줄에 없다')
+        self.assertAlmostEqual(geo['tilde']['c'], (geo['start']['t'] + geo['start']['b']) / 2, delta=2.0,
+                               msg="'~'가 같은 줄 가운데에 없다")
+        # 왼쪽→오른쪽 차례: 시작 · ~ · 종료 · 추가
+        self.assertLess(geo['start']['r'], geo['tilde']['l'])
+        self.assertLess(geo['tilde']['r'], geo['end']['l'])
+        self.assertLess(geo['end']['r'], geo['add']['l'])
+        # 시작·종료는 반반
+        self.assertAlmostEqual(geo['start']['w'], geo['end']['w'], delta=1.0, msg='시작·종료 칸이 반반')
+        self.assertGreater(geo['start']['w'], geo['box']['w'] * 0.34)
+        # 줄 전체가 박스 안에 들어간다
+        self.assertLessEqual(geo['add']['r'], geo['box']['r'] + 0.5)
+        self.assertLessEqual(geo['box']['h'], 38 * 3 + 20, '날짜 줄 + 시각 줄만큼만')
+
+        # 시작 칸을 누르면 그 칸 폭 그대로 위아래로 펼쳐진 휠 (큰 모달 아님)
+        self.page.click('#fields [data-time-chip="start"]')
+        self.wait(260)
+        pop = self.js("""() => {
+          const p = document.querySelector('#wheelpop').getBoundingClientRect();
+          const c = document.querySelector('#fields [data-time-chip="start"]').getBoundingClientRect();
+          return {pl: p.left, pt: p.top, pw: p.width, ph: p.height, pr: p.right,
+                  cl: c.left, ct: c.top, cw: c.width, cb: c.bottom};
+        }""")
+        self.assertTrue(self.page.is_visible('#wheelpop'))
+        self.assertAlmostEqual(pop['pw'], pop['cw'], delta=2.0, msg='누른 칸 폭 그대로 펼쳐진다')
+        self.assertAlmostEqual(pop['pl'], pop['cl'], delta=2.0)
+        self.assertGreaterEqual(pop['pt'], pop['cb'] - 1, '칸 아래로 펼쳐진다')
+        self.assertLessEqual(pop['ph'], 240, '크게 뜨지 않는다')
+        info = self.wheel_info('#wheelpop')
+        self.assertEqual(info['cols'], 3)
+        self.assertAlmostEqual(info['h'], info['itemH'] * 3, delta=1.5)
+        self.assertIn('mandatory', info['snap'])
+
+        # 고르는 즉시 칸 글자가 바뀐다 (팝업은 열린 채)
+        self.pick_time('#wheelpop', 'pm', '2', '15')
+        self.assertEqual(self.page.inner_text('#fields [data-time-chip="start"]').strip(), '오후 2:15')
+        self.assertTrue(self.page.is_visible('#wheelpop'))
+        wf = self.js("""() => {
+          const p = document.querySelector('#wheelpop').getBoundingClientRect();
+          const b = [...document.querySelectorAll('#wheelpop .wheelpop-foot button')].map(x => x.getBoundingClientRect());
+          return {right: p.right, midY: p.top + p.height / 2,
+                  lefts: b.map(r => +r.left.toFixed(1)), rights: b.map(r => +r.right.toFixed(1)),
+                  tops: b.map(r => +r.top.toFixed(1)),
+                  names: [...document.querySelectorAll('#wheelpop .wheelpop-foot button')].map(x => x.textContent.trim())};
+        }""")
+        self.assertEqual(wf['names'], ['초기화', '닫기'])
+        self.assertAlmostEqual(wf['rights'][1], wf['right'], delta=16, msg='우측에 붙어 있다')
+        self.assertGreater(wf['tops'][0], wf['midY'], '아래쪽에 있다')
+        self.assertAlmostEqual(wf['tops'][0], wf['tops'][1], delta=1.0)
+
+        # 종료 칸도 같은 방식, 초기화는 시각만 지운다
+        self.page.click('#wheelpop [data-wheel-close]')
+        self.page.click('#fields [data-time-chip="end"]')
+        self.wait(240)
+        self.pick_time('#wheelpop', 'pm', '3', '30')
+        self.assertEqual(self.page.inner_text('#fields [data-time-chip="end"]').strip(), '오후 3:30')
+        self.page.click('#wheelpop [data-wheel-reset]')
+        self.wait(240)
+        self.assertEqual(self.page.inner_text('#fields [data-time-chip="end"]').strip(), '종료 시각')
+        self.assertEqual(self.page.inner_text('#fields [data-time-chip="start"]').strip(), '오후 2:15', '반대 칸은 그대로')
+        self.page.click('#wheelpop [data-wheel-close]')
+
+        # 바깥을 누르면 닫힌다
+        self.page.click('#fields [data-time-chip="start"]')
+        self.wait(200)
+        self.page.click('#form-title')
+        self.wait(200)
+        self.assertFalse(self.page.is_visible('#wheelpop'))
+
+    def test_t3_t4_time_box_same(self):
+        # 소유자 집보기 문의(t3) · 공동중개 집보기 문의(t4) — 같은 날짜 + 휠 시간 박스
+        BOX_JS = """() => {
+          const b = document.querySelector('#fields .time-box');
+          const d = b.querySelector('.date-btn');
+          const cs = getComputedStyle(b), ds = getComputedStyle(d);
+          const br = b.getBoundingClientRect(), dr = d.getBoundingClientRect();
+          return {pad: cs.padding, gap: cs.gap, radius: cs.borderRadius, bg: cs.backgroundColor,
+                  border: cs.borderTopColor, borderW: cs.borderTopWidth, bw: +br.width.toFixed(1),
+                  dbg: ds.backgroundColor, dh: +dr.height.toFixed(1), dw: +dr.width.toFixed(1),
+                  dsize: ds.fontSize, dradius: ds.borderRadius};
+        }"""
+        seen = {}
+        for tid, ver in (('t3', 'simple'), ('t3', 'detail'), ('t4', None)):
+            with self.subTest(tid=tid, ver=ver):
+                self.pick(tid)
+                if ver:
+                    self.page.click(f'#fields [data-seg="ver"][data-value="{ver}"]')
+                    self.wait(180)
+                seen[(tid, ver)] = self.js(BOX_JS)
+                if (tid, ver) == ('t3', 'detail'):
+                    # 방문 희망 시간도 같은 박스 안에 날짜 칸 + 시각 한 줄
+                    self.assertIsNotNone(self.page.query_selector('#fields .time-box [data-time-chip="start"]'))
+                    self.assertIsNotNone(self.page.query_selector('#fields .time-box [data-date="times__range"]'))
+                    chips = self.js("""() => [...document.querySelectorAll('#fields .time-chip')]
+                        .map(c => +c.getBoundingClientRect().height.toFixed(1))""")
+                    self.assertEqual(len(chips), 2)
+                    self.assertAlmostEqual(chips[0], seen[(tid, ver)]['dh'], delta=1.0, msg='시각 칸 높이 = 날짜 칸 높이')
+                else:
+                    self.assertIsNotNone(self.page.query_selector('#fields .time-box .date-btn'))
+        base = seen[('t4', None)]
+        for key, got in seen.items():
+            for field in ('pad', 'gap', 'radius', 'bg', 'border', 'borderW', 'bw', 'dbg', 'dh', 'dw', 'dsize', 'dradius'):
+                self.assertEqual(got[field], base[field], f'{key} {field}가 t4와 다르다')
 
     def test_parking_toggle(self):
         self.pick('t5')
@@ -2325,10 +2553,7 @@ class AppTest(unittest.TestCase):
         self.wait(120)
         self.page.click('#calpop [data-cal-day="26"]')
         self.wait(120)
-        self.page.select_option('#calpop [data-cal-hour]', '9')
-        self.wait(100)
-        self.page.select_option('#calpop [data-cal-min]', '30')
-        self.wait(120)
+        self.pick_time('#calpop', 'am', '9', '30')
         self.page.click('#calpop [data-cal-close]')
         body = self.text()
         self.assertIn('오전 9시30분에 손님 모시고 방문드릴 수 있을까요?', body)
@@ -2851,7 +3076,7 @@ class AppTest(unittest.TestCase):
                 self.page.click('#fields .date-btn')
                 self.wait(80)
                 self.assertTrue(self.page.is_visible('#calpop'))
-                self.assertIsNotNone(self.page.query_selector('#calpop [data-cal-hour]'))
+                self.assertIsNotNone(self.page.query_selector('#calpop .wheel [data-wheel-col="h"]'))
                 self.page.click('#calpop [data-cal-close]')
 
     def split(self, **kw):
@@ -3919,10 +4144,9 @@ class AppTest(unittest.TestCase):
 
     def cal_time_widths(self):
         return self.js("""() => {
-          const h = document.querySelector('#calpop [data-cal-hour]');
-          const m = document.querySelector('#calpop [data-cal-min]');
-          if (!h || !m) return null;
-          return [+h.getBoundingClientRect().width.toFixed(1), +m.getBoundingClientRect().width.toFixed(1)];
+          const cols = [...document.querySelectorAll('#calpop .wheel .wheel-col')];
+          if (cols.length !== 3) return null;
+          return cols.map(c => +c.getBoundingClientRect().width.toFixed(1));
         }""")
 
     def cal_foot(self):
@@ -4024,10 +4248,7 @@ class AppTest(unittest.TestCase):
                 self.wait(160)
                 pop_day = self.cal_time_widths()
                 if pop_day:
-                    self.page.select_option('#calpop [data-cal-hour]', '10')
-                    self.wait(160)
-                    self.page.select_option('#calpop [data-cal-min]', '30')
-                    self.wait(160)
+                    self.pick_time('#calpop', 'am', '10', '30')
                 pop_time = self.cal_time_widths()
                 if pop_day:
                     self.assertEqual(pop_day, pop_empty, f'{tid} 날짜를 골라 팝업 시·분 칸 폭이 밀렸다')
@@ -4049,10 +4270,7 @@ class AppTest(unittest.TestCase):
         self.assertAlmostEqual(foot['top'][0], foot['top'][1], delta=1.0, msg='같은 줄에 있어야 한다')
         self.page.click('#calpop [data-cal-day="26"]')
         self.wait(160)
-        self.page.select_option('#calpop [data-cal-hour]', '10')
-        self.wait(160)
-        self.page.select_option('#calpop [data-cal-min]', '30')
-        self.wait(160)
+        self.pick_time('#calpop', 'am', '10', '30')
         # 시간을 골라도 버튼 자리·시분 칸 폭이 그대로 (예전의 '시간 지우기'는 없다)
         self.assertEqual(self.cal_foot(), foot)
         self.assertEqual(len(self.page.query_selector_all('#calpop .link')), 0)
@@ -4099,25 +4317,25 @@ class AppTest(unittest.TestCase):
                     ctx.close()
 
     # ============================================================== 버전 · 배포 파일
-    def test_24_version_bumped_to_1_1_4(self):
+    def test_24_version_bumped_to_1_1_5(self):
         # 서비스 워커 · 화면 캐시 주소 · 안드로이드 빌드 번호가 모두 같은 버전을 가리킨다
         with open(os.path.join(ROOT, 'sw.js'), encoding='utf-8') as f:
             sw = f.read()
         m = re.search(r"var VERSION = '(v\d+\.\d+\.\d+)';", sw)
         self.assertIsNotNone(m, 'sw.js에 VERSION이 있다')
         ver = m.group(1)
-        self.assertEqual(ver, 'v1.1.4')
+        self.assertEqual(ver, 'v1.1.5')
         self.assertIn("'js/sync.js'", sw)
         # 새 파일(동호수 타입표)도 오프라인 캐시에 들어간다
         self.assertIn("'js/maraepu-types.js'", sw)
         with open(os.path.join(ROOT, 'index.html'), encoding='utf-8') as f:
             html = f.read()
         for f_ in ('icons', 'maraepu-types', 'core', 'templates', 'sync', 'app'):
-            self.assertIn(f'js/{f_}.js?v=1.1.4', html)
-        self.assertIn('styles.css?v=1.1.4', html)
+            self.assertIn(f'js/{f_}.js?v=1.1.5', html)
+        self.assertIn('styles.css?v=1.1.5', html)
         gradle = open(os.path.join(ROOT, 'android/app/build.gradle'), encoding='utf-8').read()
-        self.assertIn('versionCode 9', gradle)
-        self.assertIn("versionName '1.1.4'", gradle)
+        self.assertIn('versionCode 10', gradle)
+        self.assertIn("versionName '1.1.5'", gradle)
 
 
 if __name__ == '__main__':

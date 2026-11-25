@@ -554,7 +554,7 @@ input, textarea, select { font-family: inherit; letter-spacing: inherit; }
 .form-hint b { color: var(--label); }
 
 .range-add {
-  /* 날짜는 윗줄에 폭 그대로, 아래줄에 [시작] ~ [끝] 시각, 맨 아래 '추가' */
+  /* 날짜는 윗줄에 폭 그대로, 아래 한 줄에 [시작] ~ [종료] [추가] */
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -562,29 +562,59 @@ input, textarea, select { font-family: inherit; letter-spacing: inherit; }
   margin-top: 8px;
 }
 .range-add .date-btn { width: 100%; }
-/* 시각 줄 — 1줄: [오전/오후][시][분] ~ , 2줄: [오전/오후][시][분]
-   좁은 폰에서도 넘치지 않고, '~'는 시작 시각 바로 뒤에 붙는다 */
+/* 날짜 칸 + 시간 칸을 한 박스로 — 방문 희망 시간(t3)과 방문 희망 일시(t4)가 같은 규격 */
+.time-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 7px;
+  border: 1px solid var(--line-soft);
+  background: #FBFBFE;
+  border-radius: 12px;
+}
+.range-add.time-box { margin-top: 8px; }
+.time-box .date-btn { background: #fff; }
+/* 시각 한 줄 — [시작 시각] ~ [종료 시각] [추가]. 좁은 폰(390px)에서도 한 줄에 들어간다 */
 .range-times {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) auto;
+  display: flex;
   align-items: center;
-  gap: 6px 5px;
+  gap: 5px;
+  flex-wrap: nowrap;
 }
 .range-who { font-size: 10.5px; font-weight: 600; color: var(--muted); letter-spacing: -0.01em; }
-.range-times .sel { min-width: 0; padding: 8px 4px; text-align: center; text-align-last: center; }
-.range-add .sel { min-width: 0; }
-.range-tilde { font-size: 12px; color: var(--muted2); text-align: center; }
-.sel {
+.range-times .add-btn { margin: 0; height: 38px; padding: 0 12px; flex: 0 0 auto; }
+.range-tilde { flex: 0 0 auto; font-size: 12px; color: var(--muted2); text-align: center; }
+/* 시작·종료 시각 칸 — 누르면 3열 휠 피커가 열린다 */
+.time-chip {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
   border: 1px solid var(--line);
   background: #fff;
-  border-radius: 9px;
-  padding: 8px 6px;
-  font-size: 12px;
+  border-radius: 10px;
+  padding: 0 8px;
+  font-size: 12.5px;
   color: var(--ink);
-  outline: none;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+  transition: border-color .14s, background .14s;
 }
-.sel.is-time { padding: 6px 4px; font-size: 11.5px; }
-.range-add .add-btn { margin-top: 0; }
+.time-chip:hover { border-color: var(--accent); }
+.time-chip.is-empty { color: #B4B7C2; }
+.time-chip-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.time-chip-caret {
+  flex: 0 0 auto;
+  width: 0;
+  height: 0;
+  border-left: 3.5px solid transparent;
+  border-right: 3.5px solid transparent;
+  border-top: 4.5px solid currentColor;
+  opacity: .5;
+}
 
 /* ---------------- 계산기 ---------------- */
 .calc { display: flex; flex-direction: column; gap: 11px; }
@@ -792,18 +822,105 @@ select.inp,
 .cal-cell.is-today { box-shadow: inset 0 0 0 1px #C9CBF0; }
 .cal-cell.is-sel { background: var(--accent); color: #fff; font-weight: 700; }
 .cal-time {
-  display: grid;
-  /* 시 · 분 두 칸은 늘 1fr 1fr — 시간을 골라도 초기화 버튼이 생겨도 폭이 움직이지 않는다 */
-  grid-template-columns: auto 1fr 1fr;
-  align-items: center;
-  gap: 5px;
-  margin-top: 10px;
+  margin-top: 8px;
 }
-.cal-time .sel.is-time { width: 100%; min-width: 0; }
 .cal-tip { font-size: 10.5px; color: var(--muted2); margin-top: 8px; line-height: 1.5; }
 .cal-foot { display: flex; justify-content: flex-end; gap: 6px; margin-top: 8px; }
 .cal-foot .ghost { padding: 6px 12px; font-size: 11.5px; }
 .cal-foot .cal-reset { color: var(--muted); }
+
+/* ---------------- 시간 휠 피커 (오전/오후 · 시 · 분) ----------------
+   세 줄(120px)만 보이고 가운데 띠에 온 값이 고른 값이다.
+   위아래는 흐리게 사라지고, 굴리다 멈추면 한 칸에 딱 붙는다(scroll-snap). */
+.wheel {
+  --wrow: 40px;
+  position: relative;
+  display: grid;
+  grid-template-columns: 0.86fr 1.06fr 1.06fr;
+  height: calc(var(--wrow) * 3);
+  width: 100%;
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+}
+.wheel.is-compact { grid-template-columns: 1fr 1fr 1fr; border-radius: 10px; }
+.wheel-bar {
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  top: var(--wrow);
+  height: var(--wrow);
+  border-radius: 9px;
+  background: #EFEFFA;
+  pointer-events: none;
+}
+.wheel-col {
+  position: relative;
+  z-index: 1;
+  height: calc(var(--wrow) * 3);
+  overflow-y: auto;
+  overflow-x: hidden;
+  scroll-snap-type: y mandatory;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  scrollbar-width: none;
+  outline: none;
+  cursor: pointer;
+  /* 위아래 줄은 흐리게 사라지고 가운데 줄이 또렷하다 */
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,.22) 0, #000 30%, #000 70%, rgba(0,0,0,.22) 100%);
+  mask-image: linear-gradient(to bottom, rgba(0,0,0,.22) 0, #000 30%, #000 70%, rgba(0,0,0,.22) 100%);
+}
+.wheel-col::-webkit-scrollbar { display: none; }
+.wheel-track { padding: var(--wrow) 0; }
+.wheel-item {
+  height: var(--wrow);
+  line-height: var(--wrow);
+  text-align: center;
+  scroll-snap-align: center;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wheel.is-compact .wheel-item { font-size: 11.5px; }
+.wheel-item.is-active { color: var(--accent); font-weight: 700; }
+.wheel-col:focus-visible .wheel-item.is-active { text-decoration: underline; text-underline-offset: 3px; }
+
+/* 방문 희망 시간의 시작·종료 시각 팝업 — 누른 칸 폭 그대로, 그 칸이 위아래로 펼쳐지는 느낌 */
+.wheelpop {
+  position: fixed;
+  z-index: 80;
+  width: 140px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 18px 44px rgba(23, 24, 28, .18);
+  padding: 10px 10px 8px;
+  transform-origin: top center;
+  animation: wheelpop-in .16s ease-out;
+}
+@keyframes wheelpop-in {
+  from { opacity: 0; transform: scaleY(.55); }
+  to { opacity: 1; transform: scaleY(1); }
+}
+.wheelpop-head {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--label);
+  padding: 0 1px 7px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wheelpop .wheel { background: #FCFCFE; }
+.wheelpop-foot { display: flex; justify-content: flex-end; gap: 5px; margin-top: 7px; }
+.wheelpop-foot .ghost { padding: 5px 8px; font-size: 10.5px; }
+.wheelpop.is-narrow .wheelpop-foot .ghost { padding: 5px 6px; font-size: 10px; }
+.wheelpop.is-narrow .wheelpop-head { font-size: 10.5px; }
 
 /* ---------------- 토스트 ---------------- */
 .toast {
@@ -1079,11 +1196,6 @@ select.inp,
 @media (max-width: 900px) {
   /* 16px 글씨에서도 '010-0000-0000' 안내가 잘리지 않게 전화번호 칸을 조금 넓힌다 */
   .contact-add { grid-template-columns: minmax(0, 1fr) 140px; }
-
-  /* 달력의 시간 고르기 — 오전·오후는 윗줄, 시·분은 아랫줄로 나눠 잘리지 않게 */
-  .cal-time { grid-template-columns: 1fr 1fr; row-gap: 6px; }
-  .cal-time .seg.is-small { grid-column: 1 / -1; }
-  .cal-time .seg.is-small .seg-btn { flex: 1 1 0; }
 }
 
 /* ==================================================================

@@ -432,6 +432,8 @@
     var t = tplById(store.current);
     var data = dataOf(t);
     var box = $('#fields');
+    // 폼을 다시 그리면 시간 칸이 사라지므로 열려 있던 휠 피커 팝업은 닫는다
+    if (timePop && timePop.open) closeTimeWheel();
     box.innerHTML = '';
     $('#form-title').innerHTML = iconSvg(t.icon, 15) + '<span class="title-text"></span>';
     var titleText = $('#form-title .title-text');
@@ -652,17 +654,51 @@
     var db = el('button', 'date-btn' + (cls ? ' ' + cls : ''));
     db.type = 'button';
     db.dataset.date = fieldId;
+    db.dataset.emptyLabel = emptyLabel || '날짜';
     if (opts.dateOnly) db.dataset.dateOnly = '1';
-    var label = opts.dateOnly ? C.compactDate(value) : C.compactDateTime(value);
+    if (opts.clearTitle) db.dataset.clearTitle = opts.clearTitle;
     db.appendChild(dateIcon());
-    db.appendChild(el('span', 'date-text' + (label ? '' : ' is-empty'), label || emptyLabel));
-    if (label) {
-      var clr = el('span', 'date-clear', '×');
-      clr.dataset.clearDate = fieldId;
-      clr.title = opts.clearTitle || '일시 지우기';
-      db.appendChild(clr);
-    }
+    db.appendChild(el('span', 'date-text'));
+    setDateTriggerLabel(db, value);
     return db;
+  }
+
+  // 날짜 칸의 글자·지우기 버튼만 바꾼다 (휠 피커로 시간을 고칠 때 폼 전체를 다시 그리지 않게)
+  function setDateTriggerLabel(db, value) {
+    if (!db) return;
+    var dateOnly = db.dataset.dateOnly === '1';
+    var label = dateOnly ? C.compactDate(value) : C.compactDateTime(value);
+    var text = db.querySelector('.date-text');
+    if (text) {
+      text.textContent = label || db.dataset.emptyLabel || '날짜';
+      text.classList.toggle('is-empty', !label);
+    }
+    var clr = db.querySelector('.date-clear');
+    if (label && !clr) {
+      clr = el('span', 'date-clear', '×');
+      clr.dataset.clearDate = db.dataset.date;
+      clr.title = db.dataset.clearTitle || '일시 지우기';
+      db.appendChild(clr);
+    } else if (!label && clr) {
+      clr.parentNode.removeChild(clr);
+    }
+  }
+
+  // 화면에 있는 그 날짜 칸의 글자만 새 값으로 (달력·휠 피커에서 고른 즉시)
+  function refreshDateTrigger(fieldId) {
+    var t = tplById(store.current);
+    if (!t) return;
+    var data = dataOf(t);
+    var value;
+    if (String(fieldId).indexOf('__range') !== -1) {
+      var rs = rangeState[t.id] || {};
+      value = rs.date ? { date: rs.date } : null;
+    } else {
+      value = data[fieldId];
+    }
+    $$('#fields [data-date="' + fieldId + '"]').forEach(function (db) {
+      setDateTriggerLabel(db, value);
+    });
   }
 
   function dateButton(fieldId, value, emptyLabel) {
@@ -1001,8 +1037,12 @@
 
       case 'date': {
         if (f.mode3 || f.freeText) return dateModeField(f, data);
+        // 방문 일시·계약 일시도 방문 희망 시간과 같은 박스(날짜 칸 + 휠 피커 시간)를 쓴다
         row = fieldRow(f.label);
-        row.appendChild(dateTrigger(f.id, data[f.id], '날짜 · 시간 선택'));
+        var timeBox = el('div', 'time-box');
+        timeBox.dataset.timeBox = f.id;
+        timeBox.appendChild(dateTrigger(f.id, data[f.id], '날짜 · 시간 선택'));
+        row.appendChild(timeBox);
         return row;
       }
 
@@ -1029,8 +1069,8 @@
       case 'times': {
         row = fieldRow(f.label, { hintText: '한 줄에 시간대 하나' });
         var ta2 = el('textarea', 'inp inp-area');
-        ta2.rows = 3;
-        ta2.placeholder = '예: 2026년 11월 28일 토요일 오전 10시 ~ 오후 12시';
+        ta2.rows = 2;
+        ta2.placeholder = '예: 11월 28일 (토) 오전 10:00 ~ 오후 12:00';
         ta2.dataset.field = f.id;
         ta2.value = data[f.id] == null ? '' : data[f.id];
         row.appendChild(ta2);
@@ -1240,43 +1280,149 @@
     return out;
   }
 
-  function hourOptions12() {
-    var out = [];
+  /* ---------------- 시간 휠 피커 (오전/오후 · 시 · 분 3열) ----------------
+     네이티브 <select>는 아이폰 사파리에서 화면 전체를 덮는 목록으로 펼쳐진다.
+     그래서 세로 스크롤 스냅으로 돌아가는 3열 휠을 쓴다 — 손가락·마우스 휠·클릭 모두 되고,
+     가운데 줄(강조 띠)에 온 값이 고른 값이다. 높이는 세 줄(120px). */
+  var WHEEL_ROW = 40;     // 한 칸 높이 기본값 — 세 줄이면 120px (좁은 팝업은 36px 로 줄인다)
+
+  function wheelHourItems() {
+    var out = [{ v: '', l: '없음' }];
     for (var h = 1; h <= 12; h++) out.push({ v: String(h), l: h + '시' });
     return out;
   }
 
-  function rangeSelect(kind, which, options, selected, placeholder) {
-    var sel = el('select', 'sel');
-    sel.dataset.rangePart = kind;
-    sel.dataset.rangeTime = which;
-    if (placeholder) {
-      var ph = el('option', null, placeholder);
-      ph.value = '';
-      ph.selected = selected == null || selected === '';
-      sel.appendChild(ph);
-    }
-    options.forEach(function (o) {
-      var op = el('option', null, o.l);
-      op.value = o.v;
-      if (String(selected) === o.v) op.selected = true;
-      sel.appendChild(op);
+  function wheelMinItems() {
+    return minOptions().map(function (o) { return { v: o.v, l: o.l }; });
+  }
+
+  // 휠 한 줄 — 항목을 세로로 늘어놓고 스크롤 스냅으로 가운데에 붙인다
+  function wheelColumn(kind, items, selected) {
+    var col = el('div', 'wheel-col');
+    col.dataset.wheelCol = kind;
+    col.tabIndex = 0;
+    col.setAttribute('role', 'listbox');
+    col.setAttribute('aria-label', kind === 'p' ? '오전 오후' : kind === 'h' ? '시' : '분');
+    var track = el('div', 'wheel-track');
+    var idx = 0;
+    items.forEach(function (it, i) {
+      var cell = el('div', 'wheel-item', it.l);
+      cell.dataset.wheelVal = it.v;
+      cell.dataset.wheelCol = kind;
+      cell.setAttribute('role', 'option');
+      if (String(it.v) === String(selected)) {
+        idx = i;
+        cell.classList.add('is-active');
+        cell.setAttribute('aria-selected', 'true');
+      }
+      track.appendChild(cell);
     });
-    return sel;
+    col.appendChild(track);
+    col.__items = items;
+    col.__last = idx;
+    return col;
   }
 
-  // 시각 한 벌 — [오전/오후][시][분] (분은 5분 단위)
-  function rangeTimeSelects(which, rs) {
-    return [
-      rangeSelect('P', which, [{ v: 'am', l: '오전' }, { v: 'pm', l: '오후' }], rs[which + 'P'] || 'am'),
-      rangeSelect('H', which, hourOptions12(), rs[which + 'H'], '시'),
-      rangeSelect('M', which, minOptions(), rs[which + 'M'] || '0')
-    ];
+  // 가운데 띠에 온 항목만 밝게
+  function wheelMark(col, idx) {
+    var kids = col.querySelectorAll('.wheel-item');
+    for (var i = 0; i < kids.length; i++) {
+      kids[i].classList.toggle('is-active', i === idx);
+      kids[i].setAttribute('aria-selected', i === idx ? 'true' : 'false');
+    }
   }
 
-  // 방문 희망 시간 — 날짜 + 시작 시각 ~ 끝 시각(비워 두면 한 시각) + 추가
-  function renderRangeAdd(t, f) {
-    var rs = rangeState[t.id] = rangeState[t.id] || {};
+  function wheelIndexAt(col, row) {
+    var i = Math.round(col.scrollTop / (row || WHEEL_ROW));
+    return Math.max(0, Math.min(col.__items.length - 1, i));
+  }
+
+  // 휠 피커 한 벌 — o = { key, value:{p:'am'|'pm', h:'', m:'15'}, row:36|40, onPick:function(v) }
+  function wheelPicker(o) {
+    o = o || {};
+    var v = o.value || {};
+    var row = o.row || WHEEL_ROW;
+    var box = el('div', 'wheel');
+    if (o.key) box.dataset.wheel = o.key;
+    box.style.setProperty('--wrow', row + 'px');
+    if (row !== WHEEL_ROW) box.classList.add('is-compact');
+    var cols = {
+      p: wheelColumn('p', [{ v: 'am', l: '오전' }, { v: 'pm', l: '오후' }], v.p === 'pm' ? 'pm' : 'am'),
+      h: wheelColumn('h', wheelHourItems(), v.h == null ? '' : String(v.h)),
+      m: wheelColumn('m', wheelMinItems(), v.m == null ? '0' : String(v.m))
+    };
+    ['p', 'h', 'm'].forEach(function (k) { box.appendChild(cols[k]); });
+    box.appendChild(el('div', 'wheel-bar'));
+
+    function read() {
+      return {
+        p: cols.p.__items[cols.p.__last].v,
+        h: cols.h.__items[cols.h.__last].v,
+        m: cols.m.__items[cols.m.__last].v
+      };
+    }
+    function pick(k, idx) {
+      var c = cols[k];
+      var changed = c.__last !== idx;
+      c.__last = idx;
+      wheelMark(c, idx);
+      if (changed && o.onPick) o.onPick(read());
+    }
+
+    Object.keys(cols).forEach(function (k) {
+      var c = cols[k];
+      var timer = null;
+      // 손가락·마우스 휠로 굴리다 멈추면 그 자리를 고른 것으로 본다
+      c.addEventListener('scroll', function () {
+        wheelMark(c, wheelIndexAt(c, row));
+        clearTimeout(timer);
+        timer = setTimeout(function () { pick(k, wheelIndexAt(c, row)); }, 70);
+      }, { passive: true });
+      // 항목을 누르면 그 줄이 가운데로 온다
+      c.addEventListener('click', function (e) {
+        var cell = e.target.closest ? e.target.closest('.wheel-item') : null;
+        if (!cell) return;
+        var idx = 0;
+        for (var i = 0; i < c.__items.length; i++) if (String(c.__items[i].v) === cell.dataset.wheelVal) { idx = i; break; }
+        c.scrollTo({ top: idx * row, behavior: 'smooth' });
+        pick(k, idx);
+      });
+      // 키보드 위·아래
+      c.addEventListener('keydown', function (e) {
+        var d = e.key === 'ArrowDown' ? 1 : e.key === 'ArrowUp' ? -1 : 0;
+        if (!d) return;
+        e.preventDefault();
+        var idx = Math.max(0, Math.min(c.__items.length - 1, c.__last + d));
+        c.scrollTo({ top: idx * row, behavior: 'smooth' });
+        pick(k, idx);
+      });
+    });
+
+    // 처음 자리를 가운데로 — 화면에 붙은 뒤에 옮긴다
+    requestAnimationFrame(function () {
+      Object.keys(cols).forEach(function (k) {
+        var c = cols[k];
+        c.scrollTop = c.__last * row;
+        wheelMark(c, c.__last);
+      });
+    });
+    return box;
+  }
+
+  // 방문 희망 시간의 시작·종료 칸 — 누르면 휠 피커가 열린다
+  function timeChip(which, rs) {
+    var h = toHour24(rs[which + 'P'], rs[which + 'H']);
+    var label = h == null ? (which === 'start' ? '시작 시각' : '종료 시각') : C.slotClock(h, rs[which + 'M']);
+    var b = el('button', 'time-chip' + (h == null ? ' is-empty' : ''));
+    b.type = 'button';
+    b.dataset.timeChip = which;
+    b.setAttribute('aria-label', which === 'start' ? '시작 시각 고르기' : '종료 시각 고르기');
+    b.appendChild(el('span', 'time-chip-text', label));
+    b.appendChild(el('span', 'time-chip-caret'));
+    return b;
+  }
+
+  function rangeDefaults(rs) {
     if (rs.date === undefined) rs.date = null;
     if (rs.startP === undefined) rs.startP = 'am';
     if (rs.startH === undefined) rs.startH = '';
@@ -1284,24 +1430,26 @@
     if (rs.endP === undefined) rs.endP = 'am';
     if (rs.endH === undefined) rs.endH = '';
     if (rs.endM === undefined) rs.endM = '0';
+    return rs;
+  }
 
-    var box = el('div', 'range-add');
-    var db = dateTrigger(f.id + '__range', rs.date ? { date: rs.date } : null, '날짜', 'is-compact', { dateOnly: true });
-    box.appendChild(db);
+  // 방문 희망 시간 — 날짜 아래 한 줄 [시작 시각] ~ [종료 시각] [추가]
+  //   시작만 고르면 한 시각, 둘 다 고르면 범위. 시각 칸을 누르면 3열 휠 피커가 열린다.
+  function renderRangeAdd(t, f) {
+    var rs = rangeDefaults(rangeState[t.id] = rangeState[t.id] || {});
+    var box = el('div', 'range-add time-box');
+    box.dataset.timeBox = f.id;
+    box.appendChild(dateTrigger(f.id + '__range', rs.date ? { date: rs.date } : null, '날짜', '', { dateOnly: true }));
 
-    // 1줄: 시작 [오전/오후][시][분] ~  ·  2줄: 종료 [오전/오후][시][분] — 종료를 비우면 한 시각
     var row = el('div', 'range-times');
-    row.appendChild(el('span', 'range-who', '시작'));
-    rangeTimeSelects('start', rs).forEach(function (s) { row.appendChild(s); });
+    row.appendChild(timeChip('start', rs));
     row.appendChild(el('span', 'range-tilde', '~'));
-    row.appendChild(el('span', 'range-who', '종료'));
-    rangeTimeSelects('end', rs).forEach(function (s) { row.appendChild(s); });
-    box.appendChild(row);
-
+    row.appendChild(timeChip('end', rs));
     var add = el('button', 'ghost add-btn', '추가');
     add.type = 'button';
     add.dataset.rangeAdd = f.id;
-    box.appendChild(add);
+    row.appendChild(add);
+    box.appendChild(row);
     return box;
   }
 
@@ -1572,6 +1720,70 @@
     $('#calpop').hidden = true;
   }
 
+  /* ---------------- 방문 희망 시간 — 휠 피커 팝업 ----------------
+     시작·종료 칸을 누르면 그 아래에 3열 휠 피커가 뜬다. 고르는 즉시 칸 글자가 바뀐다. */
+  var timePop = { open: false, which: null, anchor: null };
+
+  function openTimeWheel(anchor, which) {
+    var t = tplById(store.current);
+    if (!t) return;
+    var rs = rangeDefaults(rangeState[t.id] = rangeState[t.id] || {});
+    var pop = $('#wheelpop');
+    var box = anchor && anchor.getBoundingClientRect ? anchor.getBoundingClientRect() : { width: 140 };
+    // 누른 칸 폭 그대로 — 크게 뜨지 않고 그 칸이 위아래로 펼쳐지는 느낌
+    pop.style.width = Math.round(box.width) + 'px';
+    pop.classList.toggle('is-narrow', box.width < 168);
+    pop.innerHTML = '';
+    pop.appendChild(el('div', 'wheelpop-head', which === 'start' ? '시작 시각' : '종료 시각'));
+    pop.appendChild(wheelPicker({
+      key: 'range-' + which,
+      row: 36,
+      value: { p: rs[which + 'P'], h: rs[which + 'H'], m: rs[which + 'M'] },
+      onPick: function (v) {
+        var live = rangeState[t.id];
+        live[which + 'P'] = v.p;
+        live[which + 'H'] = v.h;
+        live[which + 'M'] = v.m;
+        refreshTimeChip(which);
+      }
+    }));
+    var foot = el('div', 'wheelpop-foot');
+    var reset = el('button', 'ghost', '초기화');
+    reset.type = 'button';
+    reset.dataset.wheelReset = which;
+    var close = el('button', 'ghost', '닫기');
+    close.type = 'button';
+    close.dataset.wheelClose = '1';
+    foot.appendChild(reset);
+    foot.appendChild(close);
+    pop.appendChild(foot);
+    pop.hidden = false;
+    positionPop(pop, anchor);
+    timePop.open = true;
+    timePop.which = which;
+    timePop.anchor = anchor;
+  }
+
+  function closeTimeWheel() {
+    timePop.open = false;
+    timePop.which = null;
+    timePop.anchor = null;
+    $('#wheelpop').hidden = true;
+  }
+
+  // 시작·종료 칸의 글자만 바꾼다 (폼 전체를 다시 그리지 않는다)
+  function refreshTimeChip(which) {
+    var t = tplById(store.current);
+    var rs = rangeState[t.id] || {};
+    var h = toHour24(rs[which + 'P'], rs[which + 'H']);
+    var label = h == null ? (which === 'start' ? '시작 시각' : '종료 시각') : C.slotClock(h, rs[which + 'M']);
+    $$('#fields [data-time-chip="' + which + '"]').forEach(function (b) {
+      var txt = b.querySelector('.time-chip-text');
+      if (txt) txt.textContent = label;
+      b.classList.toggle('is-empty', h == null);
+    });
+  }
+
   function positionPop(pop, anchor) {
     pop.style.visibility = 'hidden';
     pop.style.left = '0px';
@@ -1579,8 +1791,15 @@
     var r = anchor.getBoundingClientRect();
     var w = pop.offsetWidth, h = pop.offsetHeight;
     var left = Math.min(Math.max(8, r.left), window.innerWidth - w - 8);
+    // 폰에서는 하단 고정 바(문자 앱 열기·복사하기)에 가리지 않게 그 높이만큼 빼고 본다
+    var bottomPad = 8;
+    if (window.matchMedia && window.matchMedia('(max-width: 900px)').matches) {
+      var bar = document.querySelector('.mobile-bar');
+      if (bar && bar.offsetParent !== null) bottomPad = bar.offsetHeight + 10;
+    }
     var top = r.bottom + 8;
-    if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 8);
+    if (top + h > window.innerHeight - bottomPad) top = Math.max(8, r.top - h - 8);
+    top = Math.min(top, Math.max(8, window.innerHeight - bottomPad - h));
     pop.style.left = left + 'px';
     pop.style.top = top + 'px';
     pop.style.visibility = 'visible';
@@ -1638,47 +1857,22 @@
     pop.appendChild(grid);
 
     if (!cal.rangeMode && !cal.dateOnly) {
-      var time = el('div', 'cal-time');
+      // 시간도 3열 휠 피커로 — 오전/오후 · 시(선택안함 포함) · 분(5분 단위)
       var cur = (val && typeof val === 'object') ? val : { hour: null, min: 0 };
       var hour = cur.hour == null ? null : Number(cur.hour);
-      var period = hour == null ? (new Date().getHours() < 12 ? '오전' : '오후') : (hour < 12 ? '오전' : '오후');
-      var pseg = el('div', 'seg is-small');
-      ['오전', '오후'].forEach(function (p) {
-        var pb = el('button', 'seg-btn' + (period === p ? ' is-active' : ''), p);
-        pb.type = 'button';
-        pb.dataset.calPeriod = p;
-        pseg.appendChild(pb);
-      });
-      time.appendChild(pseg);
-
-      var hsel = el('select', 'sel is-time');
-      hsel.dataset.calHour = '1';
-      // 시각을 아직 고르지 않았으면 '1시'로 보이지 않게 빈 칸을 먼저 둔다
-      if (hour == null) {
-        var hph = el('option', null, '시');
-        hph.value = '';
-        hph.selected = true;
-        hsel.appendChild(hph);
-      }
-      for (var hh = 1; hh <= 12; hh++) {
-        var op = el('option', null, hh + '시');
-        op.value = String(hh);
-        var h12 = hour == null ? null : (hour % 12 === 0 ? 12 : hour % 12);
-        if (h12 === hh) op.selected = true;
-        hsel.appendChild(op);
-      }
-      time.appendChild(hsel);
-
-      var msel = el('select', 'sel is-time');
-      msel.dataset.calMin = '1';
-      // 분은 앱 어디서나 5분 단위 — 00분, 05분, …, 55분
-      minOptions().forEach(function (o) {
-        var op2 = el('option', null, o.l);
-        op2.value = o.v;
-        if (String(cur.min || 0) === o.v) op2.selected = true;
-        msel.appendChild(op2);
-      });
-      time.appendChild(msel);
+      var p = hour == null ? (new Date().getHours() < 12 ? 'am' : 'pm') : (hour < 12 ? 'am' : 'pm');
+      var h12 = hour == null ? '' : String(hour % 12 === 0 ? 12 : hour % 12);
+      var time = el('div', 'cal-time');
+      time.appendChild(wheelPicker({
+        key: 'cal',
+        value: { p: p, h: h12, m: String(Number(cur.min || 0)) },
+        onPick: function (v) {
+          var h = v.h === '' ? null : (Number(v.h) % 12) + (v.p === 'pm' ? 12 : 0);
+          setCalDateTime(cal.fieldId, { hour: h, min: Number(v.m) || 0 });
+          refreshDateTrigger(cal.fieldId);
+          renderPreview();
+        }
+      }));
       pop.appendChild(time);
     } else if (cal.rangeMode) {
       pop.appendChild(el('div', 'cal-tip', '날짜를 고르면 아래 시간 선택과 함께 문구가 만들어집니다'));
@@ -2340,9 +2534,6 @@
         syncCalc();
         validateInline();
         save();
-      } else if (t.dataset.rangePart) {
-        var rs = rangeState[store.current] = rangeState[store.current] || {};
-        rs[t.dataset.rangeTime + t.dataset.rangePart] = t.value;
       }
     });
 
@@ -2469,6 +2660,9 @@
       }
       var dateBtn = e.target.closest('[data-date]');
       if (dateBtn) { openCal(dateBtn, dateBtn.dataset.date); return; }
+      // 방문 희망 시간 — 시작·종료 칸을 누르면 휠 피커가 열린다
+      var chip = e.target.closest('[data-time-chip]');
+      if (chip) { openTimeWheel(chip, chip.dataset.timeChip); return; }
       // 날짜 칸의 협의 | 고정 | 기간
       var modeBtn = e.target.closest('[data-date-mode]');
       if (modeBtn) {
@@ -2550,28 +2744,6 @@
         }
         return;
       }
-      var per = e.target.closest('[data-cal-period]');
-      if (per) {
-        var cur2 = currentCalValue() || {};
-        var h = cur2.hour == null ? 9 : Number(cur2.hour);
-        var p = per.dataset.calPeriod;
-        var isPM = h >= 12;
-        if (p === '오후' && !isPM) h = h + 12;
-        if (p === '오전' && isPM) h = h - 12;
-        setCalDateTime(cal.fieldId, { hour: h });
-        renderCal();
-        renderForm();
-        renderPreview();
-        return;
-      }
-      var clrT = e.target.closest('[data-cal-clear-time]');
-      if (clrT) {
-        setCalDateTime(cal.fieldId, { hour: null, min: 0 });
-        renderCal();
-        renderForm();
-        renderPreview();
-        return;
-      }
       if (e.target.closest('[data-cal-reset]')) {
         // 날짜·시간을 함께 지운다 (기간 칸은 그 날짜만)
         if (cal.rangeMode) {
@@ -2589,31 +2761,30 @@
       if (e.target.closest('[data-cal-close]')) closeCal();
     });
 
-    $('#calpop').addEventListener('change', function (e) {
-      var hourSel = e.target.closest('[data-cal-hour]');
-      var minSel = e.target.closest('[data-cal-min]');
-      if (!hourSel && !minSel) return;
-      var cur = currentCalValue() || {};
-      var h = cur.hour == null ? 9 : Number(cur.hour);
-      var period = h < 12 ? '오전' : '오후';
-      var h12 = h % 12 === 0 ? 12 : h % 12;
-      if (hourSel) h12 = Number(hourSel.value);
-      else h12 = Number($('[data-cal-hour]').value);
-      if (!h12) return;  // '시' 빈 칸을 다시 골랐을 때는 시간을 바꾸지 않는다
-      var min = minSel ? Number(minSel.value) : Number(cur.min || 0);
-      var h24 = h12 % 12 + (period === '오후' ? 12 : 0);
-      setCalDateTime(cal.fieldId, { hour: h24, min: min });
-      renderCal();
-      renderForm();
-      renderPreview();
-    });
 
-    // 바깥을 누르면 달력을 닫는다. (달력 내부를 다시 그려도 클릭이 새지 않도록 pointerdown에서 판단)
+    // 바깥을 누르면 달력·휠 피커를 닫는다. (내부를 다시 그려도 클릭이 새지 않도록 pointerdown에서 판단)
     document.addEventListener('pointerdown', function (e) {
+      if (!e.target.closest) return;
+      if (timePop.open && !e.target.closest('#wheelpop') && !e.target.closest('[data-time-chip]')) closeTimeWheel();
       if (!cal.open) return;
-      if (e.target.closest && (e.target.closest('#calpop') || e.target.closest('[data-date]'))) return;
+      if (e.target.closest('#calpop') || e.target.closest('[data-date]')) return;
       closeCal();
     }, true);
+
+    // 휠 피커 팝업 — 초기화 · 닫기
+    $('#wheelpop').addEventListener('click', function (e) {
+      if (e.target.closest('[data-wheel-close]')) { closeTimeWheel(); return; }
+      var rb = e.target.closest('[data-wheel-reset]');
+      if (!rb) return;
+      var t = tplById(store.current);
+      var rs = rangeDefaults(rangeState[t.id] = rangeState[t.id] || {});
+      var which = rb.dataset.wheelReset;
+      rs[which + 'P'] = 'am';
+      rs[which + 'H'] = '';
+      rs[which + 'M'] = '0';
+      refreshTimeChip(which);
+      openTimeWheel(timePop.anchor, which);
+    });
 
     // 상단/하단 버튼
     $('#btn-copy').addEventListener('click', function () { copyText($('#preview').value, this); });
@@ -2718,7 +2889,7 @@
     window.addEventListener('offline', function () { if (ghConnected()) syncBadge('off', '오프라인'); });
 
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') { closeCal(); closeSettings(); closeSheet(); closeTemplateEditor(); }
+      if (e.key === 'Escape') { closeTimeWheel(); closeCal(); closeSettings(); closeSheet(); closeTemplateEditor(); }
     });
 
     bindKeyboardGuard();

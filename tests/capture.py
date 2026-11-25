@@ -40,6 +40,19 @@ def pick(pg, tid):
     pg.wait_for_timeout(180)
 
 
+def wheel(pg, scope, col, val):
+    """3열 휠 피커에서 한 칸을 누른다"""
+    pg.click(f'{scope} .wheel [data-wheel-col="{col}"] .wheel-item[data-wheel-val="{val}"]')
+    pg.wait_for_timeout(130)
+
+
+def pick_time(pg, scope, period, hour, minute):
+    wheel(pg, scope, 'p', period)
+    wheel(pg, scope, 'h', hour)
+    wheel(pg, scope, 'm', minute)
+    pg.wait_for_timeout(120)
+
+
 def pay_date(pg, field, year, month, day):
     """지급 일정 표의 날짜 칸을 달력으로 채운다 (다른 달이면 › 로 넘긴다)"""
     pg.click(f'#fields [data-date="{field}"]')
@@ -86,9 +99,7 @@ def main():
         pg.wait_for_timeout(120)
         pg.click('#calpop [data-cal-day="5"]')
         pg.wait_for_timeout(150)
-        pg.select_option('#calpop [data-cal-hour]', '11')
-        pg.wait_for_timeout(100)
-        pg.select_option('#calpop [data-cal-min]', '30')
+        pick_time(pg, '#calpop', 'am', '11', '30')
         pg.wait_for_timeout(150)
         pg.click('#calpop [data-cal-close]')
         pg.fill('#fields [data-prop="items"][data-idx="0"][data-key="dong"]', '208')
@@ -338,8 +349,8 @@ def main():
         mp.wait_for_timeout(250)
         mp.click('#calpop [data-cal-day="26"]')
         mp.wait_for_timeout(180)
-        mp.select_option('#calpop [data-cal-hour]', '10')
-        mp.wait_for_timeout(200)
+        pick_time(mp, '#calpop', 'am', '10', '30')
+        mp.wait_for_timeout(250)
         mp.screenshot(path=sh(DOWNLOADS, 'sms-app-cal-popup.png'))
         mp.click('#calpop [data-cal-close]')
 
@@ -369,16 +380,19 @@ def main():
         mp.wait_for_timeout(250)
         mp.click('#calpop [data-cal-day="26"]')
         mp.wait_for_timeout(250)
-        mp.select_option('#fields [data-range-part="P"][data-range-time="start"]', 'pm')
-        mp.select_option('#fields [data-range-part="H"][data-range-time="start"]', '2')
-        mp.select_option('#fields [data-range-part="M"][data-range-time="start"]', '15')
-        mp.wait_for_timeout(150)
+        mp.click('#fields [data-time-chip="start"]')
+        mp.wait_for_timeout(300)
+        mp.screenshot(path=sh(DOWNLOADS, 'sms-app-time-wheel.png'))
+        pick_time(mp, '#wheelpop', 'pm', '2', '15')
+        mp.click('#wheelpop [data-wheel-close]')
+        mp.wait_for_timeout(200)
         mp.click('#fields [data-range-add="times"]')
         mp.wait_for_timeout(250)
-        mp.select_option('#fields [data-range-part="P"][data-range-time="end"]', 'pm')
-        mp.select_option('#fields [data-range-part="H"][data-range-time="end"]', '3')
-        mp.select_option('#fields [data-range-part="M"][data-range-time="end"]', '30')
-        mp.wait_for_timeout(150)
+        mp.click('#fields [data-time-chip="end"]')
+        mp.wait_for_timeout(250)
+        pick_time(mp, '#wheelpop', 'pm', '3', '30')
+        mp.click('#wheelpop [data-wheel-close]')
+        mp.wait_for_timeout(200)
         mp.click('#fields [data-range-add="times"]')
         mp.wait_for_timeout(300)
         mp.evaluate("document.querySelector('#fields .range-add').scrollIntoView({block:'center'})")
@@ -394,7 +408,8 @@ def main():
               'sms-app-myungdan.png', 'sms-app-calc.png', 'sms-app-pay.png',
               'sms-app-vendor-scroll.png', 'sms-app-vendor-scroll-end.png', 'sms-app-1000x720.png',
               'sms-app-paytable-t8-390x844.png', 'sms-app-date-modes.png', 'sms-app-cal-popup.png',
-              'sms-app-custom-editor.png', 'sms-app-times-modes.png', 'sms-app-custom-tpl.png',
+              'sms-app-custom-editor.png', 'sms-app-times-modes.png', 'sms-app-time-wheel.png',
+              'sms-app-custom-tpl.png',
               'sms-app-tpl-edit.png', 'sms-app-sync.png'):
         path = sh(DOWNLOADS, f)
         print(' ', path, os.path.getsize(path), 'bytes')
