@@ -1562,8 +1562,9 @@ class AppTest(unittest.TestCase):
         ctx.close()
 
     def test_mobile_pay_table_compact_layout(self):
-        # 390×844 — 지급 일정 표는 위줄 구분+일정, 아래줄 퍼센트+금액으로 컴팩트하게 놓인다.
-        # 금액·일정 칸이 가로 전체를 채우지 않고, 두 줄의 오른쪽 끝이 같으며, 가로 넘침이 없다.
+        # 390×844 — 지급 일정 표는 위줄 라벨+일정, 아래줄 퍼센트+금액으로 놓인다.
+        # 왼쪽 열은 라벨·퍼센트 폭(76px)만, 오른쪽 열은 카드 오른쪽 끝까지 채워 좌우가 균형을 이룬다
+        # (오른쪽을 200px로 묶어 두면 카드 오른쪽에 빈 여백이 남아 왼쪽으로 쏠려 보인다).
         ctx = self.browser.new_context(viewport={'width': 390, 'height': 844}, is_mobile=True, has_touch=True)
         page = ctx.new_page()
         errors = []
@@ -1587,15 +1588,23 @@ class AppTest(unittest.TestCase):
             const g = s => r.querySelector(s);
             const box = e => { const b = e.getBoundingClientRect();
               return {l:+b.left.toFixed(1), r:+b.right.toFixed(1), t:+b.top.toFixed(1), w:+b.width.toFixed(1)}; };
-            const rate = g('.pay-rate-inp'), date = g('.date-btn'), amount = g('.pay-amount input');
-            return { label: g('.pay-name-text').textContent.trim(),
-                     rate: rate ? box(rate) : null, date: box(date), amount: box(amount),
+            const rate = g('.pay-rate-inp'), rateWrap = g('.pay-rate'), date = g('.date-btn'), amount = g('.pay-amount input');
+            const nm = g('.pay-name-text');
+            return { label: nm.textContent.trim(),
+                     rate: rate ? box(rate) : null, rateWrap: rateWrap ? box(rateWrap) : null,
+                     date: box(date), amount: box(amount), name: box(nm),
+                     nameLines: Math.round(nm.getBoundingClientRect().height /
+                       parseFloat(getComputedStyle(nm).lineHeight || '16')),
                      amountFont: parseFloat(getComputedStyle(amount).fontSize),
                      rateFont: rate ? parseFloat(getComputedStyle(rate).fontSize) : null,
                      rateSameRowAsAmount: rate ? (Math.abs(rate.getBoundingClientRect().top - amount.getBoundingClientRect().top) < 20) : null,
                      rateLeftOfAmount: rate ? (rate.getBoundingClientRect().right <= amount.getBoundingClientRect().left + 0.5) : null };
           });
-          return { table: {l:+tb.left.toFixed(1), r:+tb.right.toFixed(1), w:+tb.width.toFixed(1)}, rows,
+          const cs = getComputedStyle(table);
+          const innerRight = tb.right - parseFloat(cs.borderRightWidth) - parseFloat(cs.paddingRight);
+          const innerLeft = tb.left + parseFloat(cs.borderLeftWidth) + parseFloat(cs.paddingLeft);
+          return { table: {l:+tb.left.toFixed(1), r:+tb.right.toFixed(1), w:+tb.width.toFixed(1)},
+                   innerLeft: +innerLeft.toFixed(1), innerRight: +innerRight.toFixed(1), rows,
                    scrollW: document.documentElement.scrollWidth, winW: window.innerWidth,
                    panelRight: +document.querySelector('.form-panel').getBoundingClientRect().right.toFixed(1)};
         }""")
@@ -1605,16 +1614,23 @@ class AppTest(unittest.TestCase):
             with self.subTest(row=r['label']):
                 self.assertGreaterEqual(r['amountFont'], 16, '금액 칸 글씨가 16px 미만')
                 self.assertLessEqual(r['amount']['r'], info['panelRight'] + 0.5, '금액 칸이 패널 밖으로')
-                # 일정·금액 칸은 표 폭의 3분의 2를 넘지 않는다 (가로 전체를 채우지 않음)
-                self.assertLess(r['date']['w'], info['table']['w'] * 0.68, '일정 칸이 너무 넓다')
-                self.assertLess(r['amount']['w'], info['table']['w'] * 0.68, '금액 칸이 너무 넓다')
-                # 두 줄의 오른쪽 끝을 맞춘다
-                self.assertAlmostEqual(r['date']['r'], r['amount']['r'], delta=1.0, msg='일정·금액 칸 오른쪽 끝이 어긋난다')
+                # 오른쪽 칸(1fr)은 카드 안쪽 오른쪽 끝까지 꽉 찬다 — 오른쪽 빈 여백·왼쪽 쏠림 없음
+                self.assertAlmostEqual(r['date']['r'], info['innerRight'], delta=1.0, msg='일정 칸이 카드 오른쪽 끝에 닿지 않는다')
+                self.assertAlmostEqual(r['amount']['r'], info['innerRight'], delta=1.0, msg='금액 칸이 카드 오른쪽 끝에 닿지 않는다')
+                # 두 줄의 왼쪽 끝을 맞춘다 (같은 76px 열 다음 10px 간격)
                 self.assertAlmostEqual(r['date']['l'], r['amount']['l'], delta=1.0, msg='일정·금액 칸 왼쪽 끝이 어긋난다')
+                self.assertAlmostEqual(r['date']['l'], info['innerLeft'] + 76 + 10, delta=1.0,
+                                       msg='왼쪽 라벨 열이 76px + 10px 간격이 아니다')
+                self.assertEqual(r['nameLines'], 1, f"{r['label']} 라벨이 줄바꿈됐다")
                 if r['rate']:
                     self.assertGreaterEqual(r['rateFont'], 16, '퍼센트 칸 글씨가 16px 미만')
                     self.assertTrue(r['rateLeftOfAmount'], '퍼센트 칸이 금액 칸 왼쪽에 있지 않다')
                     self.assertTrue(r['rateSameRowAsAmount'], '퍼센트 칸이 금액 칸과 같은 줄이 아니다')
+                    # 퍼센트 칸은 왼쪽 열 오른쪽 끝에 맞춰 금액 칸과 10px 간격으로 붙는다
+                    self.assertAlmostEqual(r['rateWrap']['r'], info['innerLeft'] + 76, delta=1.0,
+                                           msg='퍼센트 칸이 왼쪽 열 끝에 맞지 않는다')
+                    self.assertAlmostEqual(r['amount']['l'] - r['rateWrap']['r'], 10, delta=1.0,
+                                           msg='퍼센트와 금액 사이 간격이 10px가 아니다')
                 else:
                     self.assertIn(r['label'], ('약정금', '잔금'), '퍼센트가 필요한 항목에 퍼센트 칸이 없다')
         # t13도 같은 규칙

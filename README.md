@@ -38,8 +38,8 @@ python3 -m http.server 8000
 | **안드로이드** | 아래 `.apk`를 내려받아 설치 (오프라인 내장) |
 
 - 웹: https://hs0522.github.io/sms-helper/ (GitHub Pages · `gh-pages` 브랜치 루트)
-- 안드로이드 설치 파일: https://github.com/hs0522/sms-helper/releases/download/v1.0.2/Maraepu-SMS-Helper-v1.0.2.apk
-- 릴리즈 페이지: https://github.com/hs0522/sms-helper/releases/tag/v1.0.2
+- 안드로이드 설치 파일: https://github.com/hs0522/sms-helper/releases/download/v1.0.3/Maraepu-SMS-Helper-v1.0.3.apk
+- 릴리즈 페이지: https://github.com/hs0522/sms-helper/releases/tag/v1.0.3
 
 ### 안드로이드 앱(.apk)
 
@@ -289,3 +289,8 @@ projects/sms-helper/
 > `input`·`textarea`·`select`를 `16px` 이상으로 고정. 모바일 지급 일정 표를 컴팩트하게(위줄 구분+일정, 아래줄 `%`+금액,
 > 두 줄의 오른쪽 끝을 맞춰 폭을 줄임). 문자 본문의 대괄호 `[ ]` 를 모두 없앰 — 섹션 머리말은 `■ 계약 구성`·`■ 특약`,
 > 아직 넣지 않은 자리는 `(계좌번호)`·`(금액)` 같은 소괄호. 서비스 워커 캐시 `v1.0.2`, 안드로이드 `versionCode 3`.
+>
+> 2026-11-25 다섯 번째 수정(v1.0.3): 모바일 지급 일정 표의 좌우 균형 — 오른쪽 일정·금액 칸을 `200px`로 묶어 두어
+> 카드 오른쪽에 빈 여백이 남고 왼쪽으로 쏠려 보이던 것을, 왼쪽 라벨·퍼센트 열 `76px` + 오른쪽 칸 `1fr`로 바꿔 일정·금액 칸이
+> 카드 오른쪽 끝까지 꽉 차고(간격 10px) 라벨은 한 줄로 유지되게 했습니다. 모바일 달력 시간 고르기도 `16px`에서 잘리지 않게
+> 오전·오후는 윗줄, 시·분은 아랫줄로 나눴습니다. 서비스 워커 캐시 `v1.0.3`, 안드로이드 `versionCode 4`.

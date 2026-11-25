@@ -837,10 +837,6 @@ input, textarea, select { font-family: inherit; letter-spacing: inherit; }
 
 @media (max-width: 380px) {
   .seg-btn { font-size: 12px; padding: 8px 4px; }
-  /* 아주 좁은 폰 — 지급 일정 칸을 한 단계 더 쬐끔 줄인다 */
-  .pay-row { grid-template-columns: 50px minmax(0, 1fr); }
-  .pay-row .date-btn.is-compact,
-  .pay-amount { max-width: 190px; }
 }
 
 .date-ico { display: inline-flex; align-items: center; color: var(--muted); }
@@ -1164,32 +1160,34 @@ input, textarea, select { font-family: inherit; letter-spacing: inherit; }
 .pay-total.is-bad .pay-total-note { color: var(--danger); }
 
 @media (max-width: 900px) {
-  /* 지급 일정 — 위줄은 구분+일정, 아래줄은 퍼센트+금액으로 컴팩트하게
-     두 줄의 오른쪽 끝을 같게(200px) 두고, 가로 전체를 채우지 않는다. */
+  /* 지급 일정 — 위줄은 라벨+일정, 아래줄은 퍼센트+금액.
+     왼쪽 열은 라벨·퍼센트 폭(76px)만 두고, 오른쪽 열(1fr)은 카드 오른쪽 끝까지 채운다.
+     (오른쪽을 200px로 묶어 두면 카드 오른쪽에 빈 여백이 남아 왼쪽으로 쏠려 보인다) */
   .paytable-head { display: none; }
   .pay-row {
-    grid-template-columns: 54px minmax(0, 1fr);
+    grid-template-columns: 76px minmax(0, 1fr);
     grid-template-areas:
       "name date"
       "rate amount";
-    column-gap: 8px;
+    column-gap: 10px;
     row-gap: 6px;
     align-items: center;
     padding: 10px 0;
   }
   .pay-name { display: contents; }
-  .pay-name-text { grid-area: name; font-size: 12.5px; }
-  .pay-rate { grid-area: rate; align-self: start; margin-top: 8px; }
+  .pay-name-text { grid-area: name; font-size: 12.5px; white-space: nowrap; }
+  /* 퍼센트 칸은 왼쪽 열 오른쪽 끝에 맞춰 금액 칸과 10px 간격으로 붙인다 */
+  .pay-rate { grid-area: rate; align-self: start; justify-self: end; margin-top: 8px; }
   .pay-rate-inp { width: 44px; padding: 1px 2px; }
   .pay-row .date-btn.is-compact {
     grid-area: date;
     width: 100%;
-    max-width: 200px;
-    justify-self: start;
+    max-width: none;
+    justify-self: stretch;
     padding: 10px 9px;
     font-size: 12.5px;
   }
-  .pay-amount { grid-area: amount; width: 100%; max-width: 200px; min-width: 0; }
+  .pay-amount { grid-area: amount; width: 100%; max-width: none; min-width: 0; }
 }
 
 /* 지급 일정 표 — 좁은 칸에서도 환산 줄이 잘리지 않게 두 줄까지 */

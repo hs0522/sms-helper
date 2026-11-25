@@ -276,6 +276,15 @@ def main():
         mp.evaluate("document.querySelector('#fields .paytable').scrollIntoView({block:'center'})")
         mp.wait_for_timeout(250)
         mp.screenshot(path=sh(DOCS, 'shot-mobile-pay.png'))
+        # 지급 일정 표 좌우 균형 확인용 — 실제 날짜를 채운 390×844 화면
+        pay_date(mp, 'jeongDate', 2026, 11, 28)
+        pay_date(mp, 'gyeyakDate', 2026, 12, 5)
+        pay_date(mp, 'jungDate', 2027, 1, 15)
+        pay_date(mp, 'janDate', 2027, 2, 26)
+        mp.evaluate('document.activeElement && document.activeElement.blur()')
+        mp.evaluate("document.querySelector('#fields .paytable').scrollIntoView({block:'center'})")
+        mp.wait_for_timeout(2100)   # 토스트가 사라진 뒤
+        mp.screenshot(path=sh(DOWNLOADS, 'sms-app-paytable-t8-390x844.png'))
         m.close()
         browser.close()
 
@@ -283,7 +292,8 @@ def main():
     print('저장 완료:')
     for f in ('sms-app-pc.png', 'sms-app-mobile.png', 'sms-app-vendor.png', 'sms-app-thanks.png',
               'sms-app-myungdan.png', 'sms-app-calc.png', 'sms-app-pay.png',
-              'sms-app-vendor-scroll.png', 'sms-app-vendor-scroll-end.png', 'sms-app-1000x720.png'):
+              'sms-app-vendor-scroll.png', 'sms-app-vendor-scroll-end.png', 'sms-app-1000x720.png',
+              'sms-app-paytable-t8-390x844.png'):
         path = sh(DOWNLOADS, f)
         print(' ', path, os.path.getsize(path), 'bytes')
     print('콘솔 오류:', errors if errors else '없음')
