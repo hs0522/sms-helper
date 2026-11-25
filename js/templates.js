@@ -1011,7 +1011,7 @@
     if (t.id === 't4' || t.id === 't2' || t.id === 't9' || t.id === 't10' || t.id === 't13' || t.id === 't8') d.prop = defaultProp();
     if (t.id === 't5' || t.id === 't7' || t.id === 't19') d.items = [defaultProp()];
     if (t.id === 't5') { d.status = 'confirmed'; d.detail = true; d.parking = true; }
-    if (t.id === 't2') { d.moveinMode = '고정'; d.movein = { date: '', hour: null, min: 0 }; d.moveinText = ''; d.moveinStart = { date: '', hour: null, min: 0 }; d.moveinEnd = { date: '', hour: null, min: 0 }; }
+    if (t.id === 't2') { d.movein = { date: '', hour: null, min: 0 }; d.moveinText = ''; d.moveinStart = { date: '', hour: null, min: 0 }; d.moveinEnd = { date: '', hour: null, min: 0 }; }
     if (t.id === 't3') { d.ver = 'simple'; d.guest = '매수'; d.times = ''; }
     if (t.id === 't10' || t.id === 't13') d.trade = '매매';
     if (t.id === 't13') d.kind = '중도금';
@@ -1022,7 +1022,7 @@
     if (t.id === 't14') { d.calcKind = 'house'; d.calcTrade = '매매'; d.calcVat = '4'; }
     if (t.id === 't16') { d.danji = '1단지'; d.trade = '매매'; }
     if (t.id === 't17') { d.target = 'owner'; d.vpick = { owner: 0, coagent: 0, guest: 0 }; d.greet = 'none'; }
-    if (t.id === 't18') { d.trade = '매매'; d.moveinMode = '고정'; d.movein = { date: '', hour: null, min: 0 }; d.moveinText = ''; d.moveinStart = { date: '', hour: null, min: 0 }; d.moveinEnd = { date: '', hour: null, min: 0 }; d.guestNote = '염리초 보내고 싶은 학부모입니다'; }
+    if (t.id === 't18') { d.trade = '매매'; d.movein = { date: '', hour: null, min: 0 }; d.moveinText = ''; d.moveinStart = { date: '', hour: null, min: 0 }; d.moveinEnd = { date: '', hour: null, min: 0 }; d.guestNote = '염리초 보내고 싶은 학부모입니다'; }
     if (t.id === 't19') { d.emphasis = '최저가 조율 가능합니다'; }
     if (t.id === 't20') { d.vendorCat = '대출'; d.vendorSel = defaultVendorSel(); }
     return d;

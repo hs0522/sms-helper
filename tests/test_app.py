@@ -3918,6 +3918,31 @@ class AppTest(unittest.TestCase):
         self.assertEqual(self.page.get_attribute('#fields [data-field="option"]', 'placeholder'),
                          '예: 시스템에어컨, 올수리 등')
 
+    def test_legacy_movein_values_open_in_right_mode(self):
+        # 예전 저장값(글자만 · 날짜만)도 그대로 살아난다 (mode 키가 없어도)
+        cases = [
+            ({'movein': {'date': '2026-12-03', 'hour': None, 'min': 0}, 'moveinText': ''}, '고정'),
+            ({'movein': {'date': '', 'hour': None, 'min': 0}, 'moveinText': '즉시'}, '협의'),
+        ]
+        for saved, want_mode in cases:
+            with self.subTest(want_mode=want_mode):
+                ctx, page = self.page_with_state({
+                    'stars': [], 'texts': {}, 'current': 't2', 'stage': 'all',
+                    'data': {'t2': dict(saved)}
+                })
+                try:
+                    active = page.evaluate("""() => { const b = document.querySelector('#fields .date-mode .seg-btn.is-active');
+                        return b ? b.textContent.trim() : null; }""")
+                    self.assertEqual(active, want_mode)
+                    if want_mode == '고정':
+                        self.assertIn('2026.12.03 (목)', page.inner_text('#fields [data-date="movein"]'))
+                        self.assertIn('2026년 12월 3일 목요일', page.input_value('#preview'))
+                    else:
+                        self.assertEqual(page.input_value('#fields [data-field="moveinText"]'), '즉시')
+                        self.assertRegex(page.input_value('#preview'), r'입주\s*:?\s*즉시')
+                finally:
+                    ctx.close()
+
     # ============================================================== 버전 · 배포 파일
     def test_24_version_bumped_to_1_1_3(self):
         with open(os.path.join(ROOT, 'sw.js'), encoding='utf-8') as f:
