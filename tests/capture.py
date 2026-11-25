@@ -399,6 +399,24 @@ def main():
         mp.wait_for_timeout(250)
         mp.screenshot(path=sh(DOWNLOADS, 'sms-app-times-modes.png'))
         mp.screenshot(path=sh(DOCS, 'shot-times-modes.png'))
+        # ---------------- v1.1.7 — 거래유형 · 금액 한 줄 (월세는 보증금·월세 반반) ----------------
+        mp.click('#btn-sheet')
+        mp.wait_for_timeout(200)
+        mp.click('#sheet-list [data-id="t19"]')
+        mp.wait_for_timeout(280)
+        mp.fill('#fields [data-prop="items"][data-idx="0"][data-key="dong"]', '208')
+        mp.fill('#fields [data-prop="items"][data-idx="0"][data-key="ho"]', '1103')
+        mp.click('#fields [data-prop-trade="items"][data-idx="0"][data-value="월세"]')
+        mp.wait_for_timeout(250)
+        mp.fill('#fields [data-money="deposit"]', '20000')
+        mp.fill('#fields [data-money="rent"]', '30')
+        mp.evaluate('document.activeElement && document.activeElement.blur()')
+        mp.wait_for_timeout(250)
+        mp.evaluate("document.querySelector('#fields .prop-money').scrollIntoView({block:'center'})")
+        mp.wait_for_timeout(250)
+        mp.screenshot(path=sh(DOWNLOADS, 'sms-app-promo.png'))
+        mp.screenshot(path=sh(DOCS, 'shot-promo.png'))
+
         m.close()
         browser.close()
 
@@ -409,6 +427,7 @@ def main():
               'sms-app-vendor-scroll.png', 'sms-app-vendor-scroll-end.png', 'sms-app-1000x720.png',
               'sms-app-paytable-t8-390x844.png', 'sms-app-date-modes.png', 'sms-app-cal-popup.png',
               'sms-app-custom-editor.png', 'sms-app-times-modes.png', 'sms-app-time-wheel.png',
+              'sms-app-promo.png',
               'sms-app-custom-tpl.png',
               'sms-app-tpl-edit.png', 'sms-app-sync.png'):
         path = sh(DOWNLOADS, f)

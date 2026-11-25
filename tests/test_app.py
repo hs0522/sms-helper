@@ -1375,6 +1375,188 @@ class AppTest(unittest.TestCase):
                 self.assertEqual(errors, [])
                 ctx.close()
 
+    # ------------------------------------------- 거래유형 · 금액 한 줄 (v1.1.7)
+    # 매물 블록 하나를 통째로 잰다 — 버튼 · 금액칸 · 보증금/월세 이름 · 환산 줄
+    PROP_ROW_JS = """() => {
+      const pm = document.querySelector('#fields .prop-money');
+      if (!pm) return null;
+      const panel = document.querySelector('.form-panel').getBoundingClientRect();
+      const pmr = pm.getBoundingClientRect();
+      const seg = pm.querySelector('.seg.is-trade');
+      const sr = seg.getBoundingClientRect();
+      const pair = pm.querySelector('.money-pair');
+      const one = b => {
+        const i = b.querySelector('input'), u = b.querySelector('.money-unit');
+        const f = b.closest('.money-field'), hint = f.querySelector('.money-hint');
+        const ir = i.getBoundingClientRect(), ur = u.getBoundingClientRect(), hr = hint.getBoundingClientRect();
+        const cs = getComputedStyle(i);
+        return {key: i.dataset.money, value: i.value, font: parseFloat(cs.fontSize),
+                l: ir.left, r: ir.right, w: ir.width, t: ir.top, b: ir.bottom,
+                cy: (ir.top + ir.bottom) / 2,
+                textFits: i.scrollWidth <= i.clientWidth + 1 && i.scrollLeft === 0,
+                unitInside: ur.left >= ir.left + 1 && ur.right <= ir.right - 1,
+                unitClear: ur.left >= ir.left + parseFloat(cs.paddingLeft) + 2,
+                hint: hint.textContent, hintClipped: hint.scrollWidth > hint.clientWidth + 1,
+                hintBelow: hr.top >= ir.bottom - 0.5, hintLeft: +(hr.left - ir.left).toFixed(1),
+                inPanel: ir.right <= panel.right + 0.5 && ir.left >= panel.left - 0.5 &&
+                         hr.right <= panel.right + 0.5};
+      };
+      return {segL: sr.left, segR: sr.right, segT: sr.top, segB: sr.bottom,
+              segCy: (sr.top + sr.bottom) / 2,
+              boxes: [...pm.querySelectorAll('.money-box')].map(one),
+              labels: [...pm.querySelectorAll('.money-label')].map(e => e.textContent.trim()),
+              pairCols: pair ? getComputedStyle(pair).gridTemplateColumns.split(' ').map(parseFloat) : null,
+              pmL: pmr.left, pmR: pmr.right,
+              scrollW: document.documentElement.scrollWidth, win: window.innerWidth};
+    }"""
+
+    def prop_row(self):
+        return self.js(self.PROP_ROW_JS)
+
+    def assert_prop_money_one_row(self, info, tag=''):
+        # 거래유형 버튼과 금액칸이 같은 가로 줄에, 금액칸은 남는 폭을 다 쓴다
+        self.assertTrue(info['boxes'], f'{tag}: 금액칸이 없다')
+        self.assertAlmostEqual(info['segL'], info['pmL'], delta=1.0, msg=f'{tag}: 버튼은 왼쪽 끝')
+        for b in info['boxes']:
+            self.assertGreaterEqual(b['l'], info['segR'] - 0.5, f'{tag}: 금액칸은 버튼 오른쪽')
+            overlap = min(b['b'], info['segB']) - max(b['t'], info['segT'])
+            self.assertGreater(overlap, 8, f'{tag}: 버튼과 금액칸이 같은 줄이 아니다')
+            self.assertLessEqual(abs(b['cy'] - info['segCy']), 8, f'{tag}: 버튼·금액칸 세로 중심이 어긋났다')
+            if b is info['boxes'][-1]:
+                self.assertAlmostEqual(b['r'], info['pmR'], delta=1.0,
+                                       msg=f'{tag}: 마지막 금액칸이 오른쪽 끝까지 차야 한다')
+            self.assertTrue(b['textFits'], f'{tag}: 숫자가 칸 안에서 잘린다 ({b["value"]})')
+            self.assertTrue(b['unitInside'], f'{tag}: 만원이 칸 안에 있어야 한다')
+            self.assertTrue(b['unitClear'], f'{tag}: 숫자와 만원이 붙었다')
+            self.assertTrue(b['hintBelow'], f'{tag}: 환산 줄은 칸 아래')
+            self.assertEqual(b['hintLeft'], 0, f'{tag}: 환산 줄은 칸 왼쪽에 맞춘다')
+            self.assertFalse(b['hintClipped'], f'{tag}: 환산 줄이 잘린다 ({b["hint"]})')
+            self.assertTrue(b['inPanel'], f'{tag}: 금액칸·환산 줄이 패널 밖으로 나갔다')
+        self.assertEqual(info['scrollW'], info['win'], f'{tag}: 가로 스크롤이 생겼다')
+
+    def run_prop_row_checks(self, page, key, tag):
+        # 한 매물 블록에서 매매(한 칸) → 월세(반반 두 칸) → 전세(한 칸)를 차례로 재 본다
+        base = '#fields [data-prop="%s"]' % key + ('[data-idx="0"]' if key == 'items' else '')
+        trade = '#fields [data-prop-trade="%s"]' % key + ('[data-idx="0"]' if key == 'items' else '')
+        page.fill(base + '[data-key="dong"]', '208')
+        page.fill(base + '[data-key="ho"]', '1103')
+        # 매매 — 버튼 옆 한 칸
+        page.click(trade + '[data-value="매매"]')
+        page.wait_for_timeout(150)
+        page.fill('#fields [data-money="amount"]', '230000')
+        page.wait_for_timeout(160)
+        info = page.evaluate(self.PROP_ROW_JS)
+        self.assertEqual([b['key'] for b in info['boxes']], ['amount'], f'{tag} 매매는 한 칸')
+        self.assert_prop_money_one_row(info, f'{tag} 매매')
+        self.assertEqual(info['boxes'][0]['hint'], '2,300,000,000원 (23억)')
+        # 월세 — 오른쪽 영역을 정확히 반으로
+        page.click(trade + '[data-value="월세"]')
+        page.wait_for_timeout(150)
+        page.fill('#fields [data-money="deposit"]', '20000')
+        page.fill('#fields [data-money="rent"]', '30')
+        page.wait_for_timeout(160)
+        info = page.evaluate(self.PROP_ROW_JS)
+        self.assertEqual([b['key'] for b in info['boxes']], ['deposit', 'rent'], f'{tag} 월세는 두 칸')
+        self.assertEqual(info['labels'], ['보증금', '월세'])
+        self.assert_prop_money_one_row(info, f'{tag} 월세')
+        dep, rent = info['boxes']
+        self.assertEqual(dep['hint'], '200,000,000원 (2억)')
+        self.assertEqual(rent['hint'], '300,000원 (30만)')
+        self.assertGreaterEqual(rent['l'], dep['r'] - 0.5, f'{tag} 두 칸은 나란히')
+        self.assertAlmostEqual(dep['w'], rent['w'], delta=1.0, msg=f'{tag} 보증금·월세는 반반')
+        self.assertIsNotNone(info['pairCols'], f'{tag} 두 칸 묶음이 없다')
+        self.assertEqual(len(info['pairCols']), 2)
+        self.assertAlmostEqual(info['pairCols'][0], info['pairCols'][1], delta=1.0,
+                               msg=f'{tag} 1fr 1fr 로 반반')
+        # 전세 — 다시 한 칸
+        page.click(trade + '[data-value="전세"]')
+        page.wait_for_timeout(150)
+        info = page.evaluate(self.PROP_ROW_JS)
+        self.assertEqual([b['key'] for b in info['boxes']], ['amount'], f'{tag} 전세는 한 칸')
+        self.assert_prop_money_one_row(info, f'{tag} 전세')
+
+    def test_prop_trade_money_one_row_all_blocks(self):
+        # 매물 블록을 쓰는 여섯 문자 모두 — [매매][전세][월세] 옆에 금액칸이 한 줄
+        for tid, key in (('t2', 'prop'), ('t4', 'prop'), ('t5', 'items'),
+                         ('t7', 'items'), ('t19', 'items')):
+            with self.subTest(tid=tid):
+                self.pick(tid)
+                self.run_prop_row_checks(self.page, key, tid)
+        # t3(소유자 집보기 문의)은 저장된 매물이 있을 때 상세형에서만 블록이 나온다
+        with self.subTest(tid='t3'):
+            ctx, page = self.page_with_state({
+                'stars': [], 'texts': {}, 'current': 't3', 'stage': 'all',
+                'data': {'t3': {'ver': 'detail', 'guest': '매수', 'items': [
+                    {'complex': '마포래미안푸르지오', 'dong': '', 'ho': '', 'trade': '매매',
+                     'amount': '', 'deposit': '', 'rent': '', 'price': ''}]}}
+            })
+            try:
+                self.assertIsNotNone(page.query_selector('#fields .prop-money'),
+                                     't3 상세형에 매물 블록이 나와야 한다')
+                self.run_prop_row_checks(page, 'items', 't3')
+            finally:
+                ctx.close()
+
+    def test_prop_trade_money_one_row_mobile(self):
+        # 폰(390×844) — 버튼과 보증금·월세 두 칸이 한 줄, 16px 글씨 유지, 숫자·만원 겹침 없음
+        for tid, key in (('t19', 'items'), ('t2', 'prop')):
+            with self.subTest(tid=tid):
+                ctx = self.browser.new_context(viewport={'width': 390, 'height': 844},
+                                               is_mobile=True, has_touch=True)
+                page = ctx.new_page()
+                errors = []
+                page.on('pageerror', lambda e: errors.append(str(e)))
+                page.goto(BASE, wait_until='networkidle')
+                page.evaluate('localStorage.clear()')
+                page.reload(wait_until='networkidle')
+                page.wait_for_timeout(200)
+                page.click('#btn-sheet')
+                page.wait_for_timeout(150)
+                page.click(f'#sheet-list [data-id="{tid}"]')
+                page.wait_for_timeout(220)
+                base = '#fields [data-prop="%s"]' % key + ('[data-idx="0"]' if key == 'items' else '')
+                trade = '#fields [data-prop-trade="%s"]' % key + ('[data-idx="0"]' if key == 'items' else '')
+                page.fill(base + '[data-key="dong"]', '208')
+                page.fill(base + '[data-key="ho"]', '1103')
+                page.click(trade + '[data-value="월세"]')
+                page.wait_for_timeout(180)
+                page.fill('#fields [data-money="deposit"]', '20000')
+                page.fill('#fields [data-money="rent"]', '30')
+                page.evaluate('document.activeElement && document.activeElement.blur()')
+                page.wait_for_timeout(220)
+                info = page.evaluate(self.PROP_ROW_JS)
+                self.assert_prop_money_one_row(info, f'{tid} 폰')
+                dep, rent = info['boxes']
+                self.assertEqual([dep['font'], rent['font']], [16, 16], '폰에서는 16px (아이폰 확대 방지)')
+                self.assertAlmostEqual(dep['w'], rent['w'], delta=1.0, msg='두 칸은 반반')
+                self.assertGreaterEqual(rent['l'], dep['r'] - 0.5, '두 칸은 나란히')
+                self.assertEqual([dep['hint'], rent['hint']], ['200,000,000원 (2억)', '300,000원 (30만)'])
+                self.assertEqual(errors, [])
+                ctx.close()
+
+    def test_prop_trade_money_one_row_small_window(self):
+        # 작은 PC 창(1000×720)에서도 한 줄 · 잘림 없음
+        ctx = self.browser.new_context(viewport={'width': 1000, 'height': 720})
+        page = ctx.new_page()
+        errors = []
+        page.on('pageerror', lambda e: errors.append(str(e)))
+        page.goto(BASE, wait_until='networkidle')
+        page.evaluate('localStorage.clear()')
+        page.reload(wait_until='networkidle')
+        page.wait_for_timeout(200)
+        page.click('#tpl-list [data-id="t19"]')
+        page.wait_for_timeout(220)
+        page.click('#fields [data-prop-trade="items"][data-idx="0"][data-value="월세"]')
+        page.wait_for_timeout(180)
+        page.fill('#fields [data-money="deposit"]', '20000')
+        page.fill('#fields [data-money="rent"]', '30')
+        page.evaluate('document.activeElement && document.activeElement.blur()')
+        page.wait_for_timeout(200)
+        info = page.evaluate(self.PROP_ROW_JS)
+        self.assert_prop_money_one_row(info, '1000×720')
+        self.assertEqual(errors, [])
+        ctx.close()
+
     def test_fee_calculator_ui(self):
         self.pick('t14')
         # 부가세 기본값은 간이 4%
@@ -4360,25 +4542,25 @@ class AppTest(unittest.TestCase):
                     ctx.close()
 
     # ============================================================== 버전 · 배포 파일
-    def test_24_version_bumped_to_1_1_6(self):
+    def test_24_version_bumped_to_1_1_7(self):
         # 서비스 워커 · 화면 캐시 주소 · 안드로이드 빌드 번호가 모두 같은 버전을 가리킨다
         with open(os.path.join(ROOT, 'sw.js'), encoding='utf-8') as f:
             sw = f.read()
         m = re.search(r"var VERSION = '(v\d+\.\d+\.\d+)';", sw)
         self.assertIsNotNone(m, 'sw.js에 VERSION이 있다')
         ver = m.group(1)
-        self.assertEqual(ver, 'v1.1.6')
+        self.assertEqual(ver, 'v1.1.7')
         self.assertIn("'js/sync.js'", sw)
         # 새 파일(동호수 타입표)도 오프라인 캐시에 들어간다
         self.assertIn("'js/maraepu-types.js'", sw)
         with open(os.path.join(ROOT, 'index.html'), encoding='utf-8') as f:
             html = f.read()
         for f_ in ('icons', 'maraepu-types', 'core', 'templates', 'sync', 'app'):
-            self.assertIn(f'js/{f_}.js?v=1.1.6', html)
-        self.assertIn('styles.css?v=1.1.6', html)
+            self.assertIn(f'js/{f_}.js?v=1.1.7', html)
+        self.assertIn('styles.css?v=1.1.7', html)
         gradle = open(os.path.join(ROOT, 'android/app/build.gradle'), encoding='utf-8').read()
-        self.assertIn('versionCode 11', gradle)
-        self.assertIn("versionName '1.1.6'", gradle)
+        self.assertIn('versionCode 12', gradle)
+        self.assertIn("versionName '1.1.7'", gradle)
 
 
 if __name__ == '__main__':
