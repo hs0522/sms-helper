@@ -484,6 +484,7 @@ input, textarea, select { font-family: inherit; letter-spacing: inherit; }
   align-items: center;
   gap: 8px;
   width: 100%;
+  min-height: 38px;
   border: 1px solid var(--line);
   background: #FCFCFE;
   border-radius: 10px;
@@ -495,11 +496,30 @@ input, textarea, select { font-family: inherit; letter-spacing: inherit; }
   transition: border-color .14s, background .14s;
 }
 .date-btn:hover { border-color: var(--accent); background: #fff; }
-.date-btn.is-compact { width: auto; padding: 10px 11px; font-size: 12.5px; }
-/* 달력 + 직접 글자(협의·즉시)를 함께 받는 입주 칸 */
-.date-with-text { display: flex; gap: 6px; align-items: center; }
-.date-with-text .date-btn { flex: 0 0 auto; }
-.date-with-text .inp-date-free { flex: 1 1 auto; min-width: 0; padding: 9px 10px; font-size: 12.6px; }
+/* 값이 생기거나 지워져도 칸 폭이 흐르지 않게 — 늘 칸 폭(100%) 그대로, 긴 날짜는 말줄임 */
+.date-btn.is-compact { width: 100%; padding: 10px 11px; font-size: 12.5px; }
+.date-btn .date-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 달력 + 직접 글자(협의·즉시) 입주 칸 — 협의 | 고정 | 기간 세 갈래 */
+.date-mode { margin-bottom: 7px; }
+.date-mode-body { display: block; }
+.date-mode-body .inp-date-free { width: 100%; padding: 10px 11px; font-size: 12.8px; }
+.date-range {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  align-items: center;
+}
+.date-range .range-tilde {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 11px;
+  color: var(--muted2);
+  pointer-events: none;
+}
 .date-ico { font-size: 12px; }
 .date-text.is-empty { color: #B4B7C2; }
 
@@ -514,7 +534,7 @@ input, textarea, select { font-family: inherit; letter-spacing: inherit; }
 }
 .pay-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .pay-label { font-size: 12.5px; font-weight: 700; color: var(--ink); }
-.pay-main { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: start; }
+.pay-main { display: grid; grid-template-columns: minmax(0, 1fr) 132px; gap: 6px; align-items: start; }
 .pay-main .money-box .inp { padding: 9px 42px 9px 10px; font-size: 13px; }
 .pay-main .date-btn { align-self: start; }
 .pay-extra { display: flex; flex-direction: column; gap: 5px; padding-top: 2px; }
@@ -534,13 +554,16 @@ input, textarea, select { font-family: inherit; letter-spacing: inherit; }
 .form-hint b { color: var(--label); }
 
 .range-add {
-  display: flex;
+  /* 날짜는 윗줄에 폭 그대로, 아래줄에 시각 두 칸과 '추가' */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 6px;
   margin-top: 8px;
-  flex-wrap: wrap;
 }
-.range-tilde { font-size: 12px; color: var(--muted2); }
+.range-add .date-btn { grid-column: 1 / -1; }
+.range-add .sel { min-width: 0; }
+.range-tilde { font-size: 12px; color: var(--muted2); text-align: center; }
 .sel {
   border: 1px solid var(--line);
   background: #fff;
@@ -740,10 +763,19 @@ input, textarea, select { font-family: inherit; letter-spacing: inherit; }
 .cal-cell.is-sat { color: #4C6BD6; }
 .cal-cell.is-today { box-shadow: inset 0 0 0 1px #C9CBF0; }
 .cal-cell.is-sel { background: var(--accent); color: #fff; font-weight: 700; }
-.cal-time { display: flex; align-items: center; gap: 5px; margin-top: 10px; flex-wrap: wrap; }
+.cal-time {
+  display: grid;
+  /* 시 · 분 두 칸은 늘 1fr 1fr — 시간을 골라도 초기화 버튼이 생겨도 폭이 움직이지 않는다 */
+  grid-template-columns: auto 1fr 1fr;
+  align-items: center;
+  gap: 5px;
+  margin-top: 10px;
+}
+.cal-time .sel.is-time { width: 100%; min-width: 0; }
 .cal-tip { font-size: 10.5px; color: var(--muted2); margin-top: 8px; line-height: 1.5; }
-.cal-foot { display: flex; justify-content: flex-end; margin-top: 8px; }
+.cal-foot { display: flex; justify-content: flex-end; gap: 6px; margin-top: 8px; }
 .cal-foot .ghost { padding: 6px 12px; font-size: 11.5px; }
+.cal-foot .cal-reset { color: var(--muted); }
 
 /* ---------------- 토스트 ---------------- */
 .toast {
@@ -1021,10 +1053,9 @@ input, textarea, select { font-family: inherit; letter-spacing: inherit; }
   .contact-add { grid-template-columns: minmax(0, 1fr) 140px; }
 
   /* 달력의 시간 고르기 — 오전·오후는 윗줄, 시·분은 아랫줄로 나눠 잘리지 않게 */
-  .cal-time { row-gap: 6px; }
-  .cal-time .seg.is-small { flex: 1 0 100%; }
+  .cal-time { grid-template-columns: 1fr 1fr; row-gap: 6px; }
+  .cal-time .seg.is-small { grid-column: 1 / -1; }
   .cal-time .seg.is-small .seg-btn { flex: 1 1 0; }
-  .cal-time .sel.is-time { flex: 1 1 0; min-width: 0; }
 }
 
 /* ==================================================================

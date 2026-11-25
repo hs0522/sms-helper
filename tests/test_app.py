@@ -1219,14 +1219,20 @@ class AppTest(unittest.TestCase):
         self.assertIn('* 거래조건 : 보증금 1억 / 월세 350만 원', self.text())
 
     def test_movein_date_and_free_text(self):
-        # 입주 — 달력으로 고르거나 '협의/즉시'처럼 글자로 적을 수 있다 (t2 · t18)
-        for tid, sel in (('t2', '#fields [data-date="movein"]'), ('t18', '#fields [data-date="movein"]')):
+        # 입주 — 협의(글자) · 고정(하루) · 기간(시작~종료) 세 갈래 (t2 · t18)
+        for tid in ('t2', 't18'):
             with self.subTest(tid=tid):
                 self.pick(tid)
+                # 협의 — 글자로 적는다
+                self.page.click('#fields [data-date-mode="movein"][data-value="협의"]')
+                self.wait(150)
                 self.page.fill('#fields [data-field="moveinText"]', '즉시')
                 self.wait(150)
                 self.assertRegex(self.text(), r'입주\s*:?\s*즉시')
-                self.page.click(sel)
+                # 고정 — 달력으로 하루
+                self.page.click('#fields [data-date-mode="movein"][data-value="고정"]')
+                self.wait(150)
+                self.page.click('#fields [data-date="movein"]')
                 self.wait(160)
                 self.page.click('#calpop [data-cal-day="26"]')
                 self.wait(160)
@@ -1235,12 +1241,36 @@ class AppTest(unittest.TestCase):
                 body = self.text()
                 self.assertRegex(body, r'입주\s*:?\s*2026년 11월 26일 목요일')
                 self.assertNotIn('즉시', body)
-                # 글자를 다시 적으면 달력 값은 지워진다
+                # 기간 — 시작일 ~ 종료일
+                self.page.click('#fields [data-date-mode="movein"][data-value="기간"]')
+                self.wait(150)
+                self.page.click('#fields [data-date="moveinStart"]')
+                self.wait(160)
+                self.page.click('#calpop [data-cal-nav="1"]')
+                self.wait(120)
+                self.page.click('#calpop [data-cal-day="1"]')
+                self.wait(160)
+                self.page.click('#calpop [data-cal-close]')
+                self.wait(150)
+                self.page.click('#fields [data-date="moveinEnd"]')
+                self.wait(160)
+                self.page.click('#calpop [data-cal-nav="1"]')
+                self.wait(120)
+                self.page.click('#calpop [data-cal-day="31"]')
+                self.wait(160)
+                self.page.click('#calpop [data-cal-close]')
+                self.wait(150)
+                body = self.text()
+                self.assertRegex(body, r'입주\s*:?\s*2026\.12\.01 ~ 2026\.12\.31')
+                self.assertNotIn('2026년 11월 26일', body)
+                # 글자를 다시 적으면 기간 값은 지워진다
+                self.page.click('#fields [data-date-mode="movein"][data-value="협의"]')
+                self.wait(150)
                 self.page.fill('#fields [data-field="moveinText"]', '협의')
                 self.wait(150)
                 body = self.text()
                 self.assertRegex(body, r'입주\s*:?\s*협의')
-                self.assertNotIn('2026년 11월 26일', body)
+                self.assertNotIn('2026.12.01', body)
 
     def test_all_money_fields_spider_style(self):
         # 만원 단위 금액칸이 있는 문자 전부 — 왼쪽 정렬 · 안쪽 '만원' · 아래 환산 줄
@@ -2289,7 +2319,9 @@ class AppTest(unittest.TestCase):
         self.page.fill('#fields [data-field="area"]', '34')
         self.wait(150)
         self.assertIn('매매 9억까지 (34평)', self.text())
-        # 입주 — 달력 대신 글자로도 적는다
+        # 입주 — 협의로 적는다
+        self.page.click('#fields [data-date-mode="movein"][data-value="협의"]')
+        self.wait(150)
         self.page.fill('#fields [data-field="moveinText"]', '27년 8월')
         self.wait(150)
         self.assertIn('입주 27년 8월', self.text())
@@ -3230,7 +3262,7 @@ class AppTest(unittest.TestCase):
     # ============================================================== 스크린샷 산출물
     def test_screenshots_exist_after_capture(self):
         # capture.py가 만든 결과물이 실제로 있는지 (없으면 capture를 먼저 돌린다)
-        for name in ('sms-app-pc.png', 'sms-app-mobile.png'):
+        for name in ('sms-app-pc.png', 'sms-app-mobile.png', 'sms-app-date-modes.png', 'sms-app-cal-popup.png'):
             path = os.path.join(DOWNLOADS, name)
             self.assertTrue(os.path.exists(path), f'{path} 가 없다 — tests/capture.py를 실행하세요')
             self.assertGreater(os.path.getsize(path), 20000, f'{path} 가 너무 작다')
@@ -3723,22 +3755,185 @@ class AppTest(unittest.TestCase):
         # 끊긴 네트워크에서 생기는 브라우저 리소스 오류만 걸러 낸다
         self.errors = [e for e in self.errors if 'ERR_' not in e and 'Failed to load resource' not in e]
 
+    # ============================================================== 날짜 칸 (v1.1.3)
+    def date_widths(self, sel='#fields .date-btn'):
+        return self.js("(s) => [...document.querySelectorAll(s)].map(b => +b.getBoundingClientRect().width.toFixed(1))", sel)
+
+    def date_heights(self, sel='#fields .date-btn'):
+        return self.js("(s) => [...document.querySelectorAll(s)].map(b => +b.getBoundingClientRect().height.toFixed(1))", sel)
+
+    def cal_time_widths(self):
+        return self.js("""() => {
+          const h = document.querySelector('#calpop [data-cal-hour]');
+          const m = document.querySelector('#calpop [data-cal-min]');
+          if (!h || !m) return null;
+          return [+h.getBoundingClientRect().width.toFixed(1), +m.getBoundingClientRect().width.toFixed(1)];
+        }""")
+
+    def cal_foot(self):
+        return self.js("""() => {
+          const f = document.querySelector('#calpop .cal-foot');
+          if (!f) return null;
+          const b = [...f.children];
+          const r = b.map(x => x.getBoundingClientRect());
+          return { names: b.map(x => x.textContent.trim()),
+                   left: r.map(x => +x.left.toFixed(1)), top: r.map(x => +x.top.toFixed(1)) };
+        }""")
+
+    def test_date_mode_segment_layout_stable(self):
+        # 입주 — 협의 | 고정 | 기간 3단 세그먼트, 모드를 바꿔도 글자칸 폭이 그대로
+        for tid in ('t2', 't18'):
+            with self.subTest(tid=tid):
+                self.pick(tid)
+                modes = self.js("""() => [...document.querySelectorAll('#fields .date-mode .seg-btn')]
+                    .map(b => b.textContent.trim())""")
+                self.assertEqual(modes, ['협의', '고정', '기간'])
+
+                def active():
+                    return self.js("""() => { const b = document.querySelector('#fields .date-mode .seg-btn.is-active');
+                        return b ? b.textContent.trim() : null; }""")
+
+                self.assertEqual(active(), '고정', '처음에는 달력(고정)이 골라져 있다')
+                full = self.date_widths()[0]
+                self.assertEqual(self.date_heights()[0], 38, '값이 없어도 칸 높이가 같다')
+
+                # 협의 — 글자칸도 같은 폭
+                self.page.click('#fields [data-date-mode="movein"][data-value="협의"]')
+                self.wait(150)
+                self.assertEqual(active(), '협의')
+                self.assertEqual(self.date_widths('#fields .inp-date-free'), [full])
+                self.assertEqual(self.page.get_attribute('#fields [data-field="moveinText"]', 'placeholder'),
+                                 '예: 협의 / 즉시 / 26.12 말')
+                self.page.fill('#fields [data-field="moveinText"]', '협의')
+                self.wait(150)
+                self.assertRegex(self.text(), r'입주\s*:?\s*협의')
+
+                # 고정 — 날짜를 골라도 단추 폭·높이가 같다
+                self.page.click('#fields [data-date-mode="movein"][data-value="고정"]')
+                self.wait(150)
+                self.assertEqual(active(), '고정')
+                self.assertEqual(self.date_widths(), [full])
+                self.page.click('#fields [data-date="movein"]')
+                self.wait(160)
+                self.page.click('#calpop [data-cal-day="26"]')
+                self.wait(160)
+                self.page.click('#calpop [data-cal-close]')
+                self.wait(150)
+                self.assertEqual(self.date_widths(), [full], '날짜를 골라도 칸 폭이 그대로')
+                self.assertEqual(self.date_heights(), [38], '날짜를 골라도 칸 높이가 그대로')
+                self.assertIn('2026.11.26 (목)', self.page.inner_text('#fields [data-date="movein"]'))
+
+                # 기간 — 시작일 · 종료일 두 칸이 반씩, 값이 들어도 폭 그대로
+                self.page.click('#fields [data-date-mode="movein"][data-value="기간"]')
+                self.wait(150)
+                self.assertEqual(active(), '기간')
+                pair = self.date_widths('#fields .date-range .date-btn')
+                self.assertEqual(len(pair), 2)
+                self.assertAlmostEqual(pair[0], pair[1], delta=0.6)
+                self.assertAlmostEqual(pair[0] + pair[1] + 18, full, delta=1.5)
+                self.assertEqual([self.page.inner_text(s).strip() for s in
+                                  ('#fields [data-date="moveinStart"]', '#fields [data-date="moveinEnd"]')],
+                                 ['시작일', '종료일'])
+                for field, days, day in (('moveinStart', 1, 1), ('moveinEnd', 1, 31)):
+                    self.page.click(f'#fields [data-date="{field}"]')
+                    self.wait(160)
+                    for _ in range(days):
+                        self.page.click('#calpop [data-cal-nav="1"]')
+                        self.wait(120)
+                    self.page.click(f'#calpop [data-cal-day="{day}"]')
+                    self.wait(160)
+                    self.page.click('#calpop [data-cal-close]')
+                    self.wait(150)
+                self.assertEqual(self.date_widths('#fields .date-range .date-btn'), pair,
+                                 '기간 두 칸도 값이 들어가면 폭이 그대로')
+                self.assertRegex(self.text(), r'입주\s*:?\s*2026\.12\.01 ~ 2026\.12\.31')
+
+    def test_every_date_trigger_width_fixed(self):
+        # 20종 어디서든 — 날짜·일정 단추 폭/높이와 팝업 시·분 칸 폭이 선택 전후로 같다
+        tids = ('t2', 't3', 't4', 't5', 't7', 't8', 't9', 't10', 't13', 't18')
+        checked = 0
+        for tid in tids:
+            with self.subTest(tid=tid):
+                self.pick(tid)
+                if tid in ('t2', 't18'):
+                    self.page.click('#fields [data-date-mode="movein"][data-value="고정"]')
+                    self.wait(140)
+                if not self.page.query_selector('#fields .date-btn'):
+                    continue
+                checked += 1
+                before, hbefore = self.date_widths(), self.date_heights()
+                self.page.click('#fields .date-btn')
+                self.wait(160)
+                pop_empty = self.cal_time_widths()
+                self.page.click('#calpop [data-cal-day="26"]')
+                self.wait(160)
+                pop_day = self.cal_time_widths()
+                if pop_day:
+                    self.page.select_option('#calpop [data-cal-hour]', '10')
+                    self.wait(160)
+                    self.page.select_option('#calpop [data-cal-min]', '30')
+                    self.wait(160)
+                pop_time = self.cal_time_widths()
+                if pop_day:
+                    self.assertEqual(pop_day, pop_empty, f'{tid} 날짜를 골라 팝업 시·분 칸 폭이 밀렸다')
+                    self.assertEqual(pop_time, pop_empty, f'{tid} 시간을 골라 팝업 시·분 칸 폭이 밀렸다')
+                self.page.click('#calpop [data-cal-close]')
+                self.wait(150)
+                self.assertEqual(self.date_widths(), before, f'{tid} 값이 들어가면 날짜 칸 폭이 흔들린다')
+                self.assertEqual(self.date_heights(), hbefore, f'{tid} 값이 들어가면 날짜 칸 높이가 흔들린다')
+        self.assertGreaterEqual(checked, 8, '날짜 칸이 있는 문자를 충분히 훑었다')
+
+    def test_calendar_popup_reset_beside_close(self):
+        # 팝업 하단 — 초기화가 닫기 왼쪽 옆에 나란히 있고, 누르면 날짜·시간이 모두 지워진다
+        self.pick('t5')
+        self.page.click('#fields .date-btn')
+        self.wait(160)
+        foot = self.cal_foot()
+        self.assertEqual(foot['names'], ['초기화', '닫기'])
+        self.assertLess(foot['left'][0], foot['left'][1])
+        self.assertAlmostEqual(foot['top'][0], foot['top'][1], delta=1.0, msg='같은 줄에 있어야 한다')
+        self.page.click('#calpop [data-cal-day="26"]')
+        self.wait(160)
+        self.page.select_option('#calpop [data-cal-hour]', '10')
+        self.wait(160)
+        self.page.select_option('#calpop [data-cal-min]', '30')
+        self.wait(160)
+        # 시간을 골라도 버튼 자리·시분 칸 폭이 그대로 (예전의 '시간 지우기'는 없다)
+        self.assertEqual(self.cal_foot(), foot)
+        self.assertEqual(len(self.page.query_selector_all('#calpop .link')), 0)
+        self.assertIn('2026.11.26 (목) 오전 10:30', self.page.inner_text('#fields .date-btn'))
+        # 초기화 — 날짜·시간이 함께 지워지고 팝업은 열린 채 남는다
+        self.page.click('#calpop [data-cal-reset]')
+        self.wait(200)
+        self.assertIn('(방문 일시)', self.text())
+        self.assertEqual(self.page.inner_text('#fields .date-btn').strip(), '날짜 · 시간 선택')
+        self.assertTrue(self.page.is_visible('#calpop'))
+        self.page.reload(wait_until='networkidle')
+        self.pick('t5')
+        self.assertEqual(self.page.inner_text('#fields .date-btn').strip(), '날짜 · 시간 선택', '지운 값이 저장되어야 한다')
+        self.assertIn('(방문 일시)', self.text())
+
+    def test_option_placeholder_common(self):
+        self.pick('t2')
+        self.assertEqual(self.page.get_attribute('#fields [data-field="option"]', 'placeholder'),
+                         '예: 시스템에어컨, 올수리 등')
+
     # ============================================================== 버전 · 배포 파일
-    def test_24_version_bumped_to_1_1_2(self):
+    def test_24_version_bumped_to_1_1_3(self):
         with open(os.path.join(ROOT, 'sw.js'), encoding='utf-8') as f:
             sw = f.read()
-        self.assertIn("'v1.1.2'", sw)
+        self.assertIn("'v1.1.3'", sw)
         self.assertIn("'js/sync.js'", sw)
         # 새 파일(동호수 타입표)도 오프라인 캐시에 들어간다
         self.assertIn("'js/maraepu-types.js'", sw)
         with open(os.path.join(ROOT, 'index.html'), encoding='utf-8') as f:
             html = f.read()
         for f_ in ('icons', 'maraepu-types', 'core', 'templates', 'sync', 'app'):
-            self.assertIn(f'js/{f_}.js?v=1.1.2', html)
-        self.assertIn('styles.css?v=1.1.2', html)
+            self.assertIn(f'js/{f_}.js?v=1.1.3', html)
+        self.assertIn('styles.css?v=1.1.3', html)
         gradle = open(os.path.join(ROOT, 'android/app/build.gradle'), encoding='utf-8').read()
-        self.assertIn('versionCode 7', gradle)
-        self.assertIn("versionName '1.1.2'", gradle)
+        self.assertIn('versionCode 8', gradle)
+        self.assertIn("versionName '1.1.3'", gradle)
 
 
 if __name__ == '__main__':

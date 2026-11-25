@@ -318,6 +318,30 @@ def main():
         mp.evaluate("document.querySelector('#fields .paytable').scrollIntoView({block:'center'})")
         mp.wait_for_timeout(2100)   # 토스트가 사라진 뒤
         mp.screenshot(path=sh(DOWNLOADS, 'sms-app-paytable-t8-390x844.png'))
+
+        # ---------------- v1.1.3 — 입주 3갈래 · 달력+시간 팝업 ----------------
+        mp.click('#btn-sheet')
+        mp.wait_for_timeout(200)
+        mp.click('#sheet-list [data-id="t2"]')
+        mp.wait_for_timeout(250)
+        mp.click('#fields [data-date-mode="movein"][data-value="기간"]')
+        mp.wait_for_timeout(200)
+        pay_date(mp, 'moveinStart', 2026, 12, 1)
+        pay_date(mp, 'moveinEnd', 2026, 12, 31)
+        mp.evaluate('document.activeElement && document.activeElement.blur()')
+        mp.evaluate("document.querySelector('#fields .date-mode').scrollIntoView({block:'center'})")
+        mp.wait_for_timeout(1600)   # 토스트가 사라진 뒤
+        mp.screenshot(path=sh(DOWNLOADS, 'sms-app-date-modes.png'))
+        mp.click('#fields [data-date-mode="movein"][data-value="고정"]')
+        mp.wait_for_timeout(200)
+        mp.click('#fields [data-date="movein"]')
+        mp.wait_for_timeout(250)
+        mp.click('#calpop [data-cal-day="26"]')
+        mp.wait_for_timeout(180)
+        mp.select_option('#calpop [data-cal-hour]', '10')
+        mp.wait_for_timeout(200)
+        mp.screenshot(path=sh(DOWNLOADS, 'sms-app-cal-popup.png'))
+        mp.click('#calpop [data-cal-close]')
         m.close()
         browser.close()
 
@@ -326,7 +350,8 @@ def main():
     for f in ('sms-app-pc.png', 'sms-app-mobile.png', 'sms-app-vendor.png', 'sms-app-thanks.png',
               'sms-app-myungdan.png', 'sms-app-calc.png', 'sms-app-pay.png',
               'sms-app-vendor-scroll.png', 'sms-app-vendor-scroll-end.png', 'sms-app-1000x720.png',
-              'sms-app-paytable-t8-390x844.png', 'sms-app-custom-editor.png', 'sms-app-custom-tpl.png',
+              'sms-app-paytable-t8-390x844.png', 'sms-app-date-modes.png', 'sms-app-cal-popup.png',
+              'sms-app-custom-editor.png', 'sms-app-custom-tpl.png',
               'sms-app-tpl-edit.png', 'sms-app-sync.png'):
         path = sh(DOWNLOADS, f)
         print(' ', path, os.path.getsize(path), 'bytes')

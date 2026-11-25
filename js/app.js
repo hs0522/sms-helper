@@ -646,19 +646,68 @@
     return row.id === 'jung' ? '25' : '10';
   }
 
-  function dateButton(fieldId, value, emptyLabel) {
-    var db = el('button', 'date-btn is-compact');
+  // 달력 입력칸 — 값이 있든 없든 폭이 변하지 않게 늘 칸 폭 그대로(100%)로 그린다
+  function dateTrigger(fieldId, value, emptyLabel, cls, opts) {
+    opts = opts || {};
+    var db = el('button', 'date-btn' + (cls ? ' ' + cls : ''));
     db.type = 'button';
     db.dataset.date = fieldId;
+    if (opts.dateOnly) db.dataset.dateOnly = '1';
+    var label = opts.dateOnly ? C.compactDate(value) : C.compactDateTime(value);
     db.appendChild(dateIcon());
-    db.appendChild(el('span', 'date-text' + (C.formatDateTime(value) ? '' : ' is-empty'), C.compactDateTime(value) || emptyLabel));
-    if (C.formatDateTime(value)) {
+    db.appendChild(el('span', 'date-text' + (label ? '' : ' is-empty'), label || emptyLabel));
+    if (label) {
       var clr = el('span', 'date-clear', '×');
       clr.dataset.clearDate = fieldId;
-      clr.title = '일시 지우기';
+      clr.title = opts.clearTitle || '일시 지우기';
       db.appendChild(clr);
     }
     return db;
+  }
+
+  function dateButton(fieldId, value, emptyLabel) {
+    return dateTrigger(fieldId, value, emptyLabel, 'is-compact');
+  }
+
+  /* 날짜 칸 — 협의 | 고정 | 기간 (매물 스파이더 방식)
+     모드를 바꿔도 칸 폭이 흘러가지 않게 본문은 늘 같은 자리·같은 폭으로 그린다. */
+  function dateModeField(f, data) {
+    var row = fieldRow(f.label);
+    var mode = C.dateModeOf(data, f.id);
+    var seg = el('div', 'seg is-grid3 date-mode');
+    ['협의', '고정', '기간'].forEach(function (m) {
+      var b = el('button', 'seg-btn' + (mode === m ? ' is-active' : ''), m);
+      b.type = 'button';
+      b.dataset.dateMode = f.id;
+      b.dataset.value = m;
+      b.setAttribute('aria-pressed', mode === m ? 'true' : 'false');
+      seg.appendChild(b);
+    });
+    row.appendChild(seg);
+    var body = el('div', 'date-mode-body');
+    if (mode === '협의') {
+      // 달력 대신 "협의" / "즉시" / "26.12 말"처럼 글자로 적는 칸
+      var ft = el('input', 'inp inp-date-free');
+      ft.type = 'text';
+      ft.autocomplete = 'off';
+      ft.placeholder = f.ph || '예: 협의 / 즉시 / 26.12 말';
+      ft.dataset.field = f.id + 'Text';
+      ft.dataset.dateField = f.id;
+      ft.value = data[f.id + 'Text'] == null ? '' : data[f.id + 'Text'];
+      body.appendChild(ft);
+    } else if (mode === '기간') {
+      var rg = el('div', 'date-range');
+      rg.appendChild(dateTrigger(f.id + 'Start', data[f.id + 'Start'], '시작일', null,
+        { dateOnly: true, clearTitle: '시작일 지우기' }));
+      rg.appendChild(el('span', 'range-tilde', '~'));
+      rg.appendChild(dateTrigger(f.id + 'End', data[f.id + 'End'], '종료일', null,
+        { dateOnly: true, clearTitle: '종료일 지우기' }));
+      body.appendChild(rg);
+    } else {
+      body.appendChild(dateTrigger(f.id, data[f.id], '날짜'));
+    }
+    row.appendChild(body);
+    return row;
   }
 
   function rateBadge(t, data, r) {
@@ -951,33 +1000,9 @@
       }
 
       case 'date': {
-        row = fieldRow(f.label, f.freeText ? { hintText: f.hintText || '달력에서 고르거나 협의·즉시처럼 적어도 됩니다' } : undefined);
-        var dbox = el('div', 'date-with-text');
-        var db = el('button', 'date-btn' + (f.freeText ? ' is-compact' : ''));
-        db.type = 'button';
-        db.dataset.date = f.id;
-        var v = data[f.id];
-        db.appendChild(dateIcon());
-        db.appendChild(el('span', 'date-text' + (C.formatDateTime(v) ? '' : ' is-empty'), C.compactDateTime(v) || (f.freeText ? '날짜' : '날짜 · 시간 선택')));
-        if (C.formatDateTime(v)) {
-          var clr = el('span', 'date-clear', '×');
-          clr.dataset.clearDate = f.id;
-          clr.title = '일시 지우기';
-          db.appendChild(clr);
-        }
-        dbox.appendChild(db);
-        if (f.freeText) {
-          // 달력 대신 "협의" / "즉시" / "26.12 말"처럼 글자로 적는 칸
-          var ft = el('input', 'inp inp-date-free');
-          ft.type = 'text';
-          ft.autocomplete = 'off';
-          ft.placeholder = f.ph || '또는 협의 / 즉시';
-          ft.dataset.field = f.id + 'Text';
-          ft.dataset.dateField = f.id;
-          ft.value = data[f.id + 'Text'] == null ? '' : data[f.id + 'Text'];
-          dbox.appendChild(ft);
-        }
-        row.appendChild(dbox);
+        if (f.mode3 || f.freeText) return dateModeField(f, data);
+        row = fieldRow(f.label);
+        row.appendChild(dateTrigger(f.id, data[f.id], '날짜 · 시간 선택'));
         return row;
       }
 
@@ -1029,18 +1054,7 @@
             label: f.label + ' (자동 계산)'
           })
           : moneyWrap(t, { id: f.amountId, ph: '' }, data));
-        var db2 = el('button', 'date-btn is-compact');
-        db2.type = 'button';
-        db2.dataset.date = f.dateId;
-        var dv = data[f.dateId];
-        db2.appendChild(dateIcon());
-        db2.appendChild(el('span', 'date-text' + (C.formatDateTime(dv) ? '' : ' is-empty'), C.compactDateTime(dv) || '일정'));
-        if (C.formatDateTime(dv)) {
-          var clr2 = el('span', 'date-clear', '×');
-          clr2.dataset.clearDate = f.dateId;
-          clr2.title = '일정 지우기';
-          db2.appendChild(clr2);
-        }
+        var db2 = dateTrigger(f.dateId, data[f.dateId], '일정', 'is-compact');
         main.appendChild(db2);
         grp.appendChild(main);
         (f.extras || []).forEach(function (x) {
@@ -1228,12 +1242,7 @@
   function renderRangeAdd(t, f) {
     var rs = rangeState[t.id] = rangeState[t.id] || { date: null, start: '10:0', end: '12:0' };
     var box = el('div', 'range-add');
-    var db = el('button', 'date-btn is-compact');
-    db.type = 'button';
-    db.dataset.date = f.id + '__range';
-    db.appendChild(dateIcon());
-    db.appendChild(el('span', 'date-text' + (C.formatDateTime(rs.date) ? '' : ' is-empty'),
-      rs.date ? C.compactDateTime({ date: rs.date }) : '날짜'));
+    var db = dateTrigger(f.id + '__range', rs.date ? { date: rs.date } : null, '날짜', 'is-compact', { dateOnly: true });
     box.appendChild(db);
 
     ['start', 'end'].forEach(function (k, i) {
@@ -1482,7 +1491,7 @@
   }
 
   /* ---------------- 달력 ---------------- */
-  var cal = { open: false, fieldId: null, y: 0, m: 0, anchor: null, rangeMode: false };
+  var cal = { open: false, fieldId: null, y: 0, m: 0, anchor: null, rangeMode: false, dateOnly: false };
 
   function openCal(anchor, fieldId) {
     var t = tplById(store.current);
@@ -1503,6 +1512,7 @@
     cal.y = d ? d.y : now.getFullYear();
     cal.m = d ? d.m : now.getMonth() + 1;
     cal.anchor = anchor;
+    cal.dateOnly = !!(anchor && anchor.dataset && anchor.dataset.dateOnly === '1');
     cal.open = true;
     renderCal();
     var pop = $('#calpop');
@@ -1580,9 +1590,9 @@
     }
     pop.appendChild(grid);
 
-    if (!cal.rangeMode) {
+    if (!cal.rangeMode && !cal.dateOnly) {
       var time = el('div', 'cal-time');
-      var cur = val && val.date ? val : { hour: null, min: 0 };
+      var cur = (val && typeof val === 'object') ? val : { hour: null, min: 0 };
       var hour = cur.hour == null ? null : Number(cur.hour);
       var period = hour == null ? (new Date().getHours() < 12 ? '오전' : '오후') : (hour < 12 ? '오전' : '오후');
       var pseg = el('div', 'seg is-small');
@@ -1596,6 +1606,13 @@
 
       var hsel = el('select', 'sel is-time');
       hsel.dataset.calHour = '1';
+      // 시각을 아직 고르지 않았으면 '1시'로 보이지 않게 빈 칸을 먼저 둔다
+      if (hour == null) {
+        var hph = el('option', null, '시');
+        hph.value = '';
+        hph.selected = true;
+        hsel.appendChild(hph);
+      }
       for (var hh = 1; hh <= 12; hh++) {
         var op = el('option', null, hh + '시');
         op.value = String(hh);
@@ -1614,21 +1631,19 @@
         msel.appendChild(op2);
       });
       time.appendChild(msel);
-      if (hour != null) {
-        var clr = el('button', 'link', '시간 지우기');
-        clr.type = 'button';
-        clr.dataset.calClearTime = '1';
-        time.appendChild(clr);
-      }
       pop.appendChild(time);
-    } else {
+    } else if (cal.rangeMode) {
       pop.appendChild(el('div', 'cal-tip', '날짜를 고르면 아래 시간 선택과 함께 문구가 만들어집니다'));
     }
 
     var foot = el('div', 'cal-foot');
+    var reset = el('button', 'ghost cal-reset', '초기화');
+    reset.type = 'button';
+    reset.dataset.calReset = '1';
     var done = el('button', 'ghost', '닫기');
     done.type = 'button';
     done.dataset.calClose = '1';
+    foot.appendChild(reset);
     foot.appendChild(done);
     pop.appendChild(foot);
   }
@@ -2399,6 +2414,21 @@
       }
       var dateBtn = e.target.closest('[data-date]');
       if (dateBtn) { openCal(dateBtn, dateBtn.dataset.date); return; }
+      // 날짜 칸의 협의 | 고정 | 기간
+      var modeBtn = e.target.closest('[data-date-mode]');
+      if (modeBtn) {
+        var tm = tplById(store.current);
+        var dm = dataOf(tm);
+        dm[modeBtn.dataset.dateMode + 'Mode'] = modeBtn.dataset.value;
+        save();
+        renderForm();
+        renderPreview();
+        if (modeBtn.dataset.value === '협의') {
+          var fin = $('#fields [data-field="' + modeBtn.dataset.dateMode + 'Text"]');
+          if (fin) { try { fin.focus({ preventScroll: true }); } catch (e2) { fin.focus(); } }
+        }
+        return;
+      }
       var act = e.target.closest('[data-action]');
       if (act) {
         if (act.dataset.action === 'vary') { varyPhrase(); return; }
@@ -2486,6 +2516,20 @@
         renderPreview();
         return;
       }
+      if (e.target.closest('[data-cal-reset]')) {
+        // 날짜·시간을 함께 지운다 (기간 칸은 그 날짜만)
+        if (cal.rangeMode) {
+          var tr = tplById(store.current);
+          rangeState[tr.id] = rangeState[tr.id] || {};
+          rangeState[tr.id].date = null;
+        } else {
+          setCalDateTime(cal.fieldId, { date: '', hour: null, min: 0 });
+        }
+        renderCal();
+        renderForm();
+        renderPreview();
+        return;
+      }
       if (e.target.closest('[data-cal-close]')) closeCal();
     });
 
@@ -2499,6 +2543,7 @@
       var h12 = h % 12 === 0 ? 12 : h % 12;
       if (hourSel) h12 = Number(hourSel.value);
       else h12 = Number($('[data-cal-hour]').value);
+      if (!h12) return;  // '시' 빈 칸을 다시 골랐을 때는 시간을 바꾸지 않는다
       var min = minSel ? Number(minSel.value) : Number(cur.min || 0);
       var h24 = h12 % 12 + (period === '오후' ? 12 : 0);
       setCalDateTime(cal.fieldId, { hour: h24, min: min });
@@ -3021,7 +3066,11 @@
     var when = paramDateTime(q.get('visitDate') || q.get('when') || q.get('date'));
     if (when) {
       var dateField = cur.fields.filter(function (f) { return f.t === 'date'; })[0];
-      if (dateField) d[dateField.id] = when;
+      if (dateField) {
+        d[dateField.id] = when;
+        // 협의·기간으로 열려 있었어도 달력 날짜를 받았으면 고정으로 보여 준다
+        if (dateField.mode3 || dateField.freeText) d[dateField.id + 'Mode'] = '고정';
+      }
     }
 
     if (q.get('customerName')) d.customerName = q.get('customerName');

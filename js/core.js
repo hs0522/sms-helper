@@ -536,6 +536,41 @@
     return raw;
   }
 
+  // 날짜만 짧게: "2026.11.28" (기간 칸처럼 좁은 곳)
+  function compactDate(v) {
+    var d = parseDateValue(v);
+    if (!d) return '';
+    return d.y + '.' + pad2(d.m) + '.' + pad2(d.d);
+  }
+
+  // 기간 표기: "2026.12.01 ~ 2026.12.31"
+  function formatDateRange(start, end) {
+    var a = compactDate(start);
+    if (!a) return '';
+    var b = compactDate(end);
+    return a + ' ~ ' + b;
+  }
+
+  /* 날짜 칸의 세 가지 방식 — 협의(글자) · 고정(하루) · 기간(시작~종료)
+     예전 저장값(글자만 있거나 날짜만 있는 경우)도 그대로 읽는다. */
+  function dateModeOf(data, id) {
+    if (!data) return '고정';
+    var m = data[id + 'Mode'];
+    if (m === '협의' || m === '고정' || m === '기간') return m;
+    if (String(data[id + 'Text'] == null ? '' : data[id + 'Text']).trim()) return '협의';
+    if (parseDateValue(data[id + 'Start']) || parseDateValue(data[id + 'End'])) return '기간';
+    return '고정';
+  }
+
+  // 날짜 칸(협의·고정·기간)을 문자에 넣을 한 줄로
+  function dateFieldText(data, id) {
+    if (!data) return '';
+    var mode = dateModeOf(data, id);
+    if (mode === '협의') return String(data[id + 'Text'] == null ? '' : data[id + 'Text']).trim();
+    if (mode === '기간') return formatDateRange(data[id + 'Start'], data[id + 'End']);
+    return formatDateTime(data[id]);
+  }
+
   // 입력칸에 보이는 짧은 표기: "2026.11.28 (토) 오후 2:30"
   function compactDateTime(v) {
     var d = parseDateValue(v);
@@ -574,6 +609,10 @@
     formatDateTime: formatDateTime,
     formatDateTimeRange: formatDateTimeRange,
     compactDateTime: compactDateTime,
+    compactDate: compactDate,
+    formatDateRange: formatDateRange,
+    dateModeOf: dateModeOf,
+    dateFieldText: dateFieldText,
     shortDate: shortDate,
     formatShortDateTime: formatShortDateTime,
     formatPhone: formatPhone,

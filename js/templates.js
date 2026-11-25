@@ -179,13 +179,13 @@
       desc: '거래조건 · 입주 · 옵션',
       fields: [
         { t: 'property', id: 'prop', label: '매물', price: true },
-        { t: 'date', id: 'movein', label: '입주', freeText: true, ph: '또는 협의 / 즉시' },
-        { t: 'text', id: 'option', label: '옵션', ph: '예: 시스템에어컨 2대, 에어컨 3대' }
+        { t: 'date', id: 'movein', label: '입주', mode3: true, ph: '예: 협의 / 즉시 / 26.12 말' },
+        { t: 'text', id: 'option', label: '옵션', ph: '예: 시스템에어컨, 올수리 등' }
       ],
       build: function (d, ctx) {
         var p = d.prop || {};
         var price = C.propPrice(p);
-        var movein = C.formatDateTime(d.movein) || txt(d.moveinText, '입주');
+        var movein = C.dateFieldText(d, 'movein') || txt(null, '입주');
         return join([
           '안녕하세요, ' + ctx.office + '입니다 😊',
           '소중한 매물을 접수해 주셔서 진심으로 감사드립니다.\n저희가 마포래미안푸르지오 단지 내 상가에 자리하고 있는 만큼, 더욱 신경 써서 좋은 인연으로 연결해 드리겠습니다.',
@@ -433,7 +433,7 @@
         { t: 'money', id: 'deposit', label: '보증금', showIf: function (d) { return d.trade === '전세' || d.trade === '월세'; } },
         { t: 'money', id: 'rent', label: '월차임 (월세일 때만)', showIf: function (d) { return d.trade === '월세'; } },
         { t: 'text', id: 'area', label: '평형', ph: '예: 34 (매매일 때만)', showIf: function (d) { return d.trade !== '전세' && d.trade !== '월세'; } },
-        { t: 'date', id: 'movein', label: '입주', freeText: true, ph: '또는 즉시 / 협의' },
+        { t: 'date', id: 'movein', label: '입주', mode3: true, ph: '예: 협의 / 즉시 / 26.12 말' },
         { t: 'text', id: 'guestNote', label: '손님 특징 한 줄', ph: '예: 염리초 보내고 싶은 학부모입니다' }
       ],
       build: function (d, ctx) {
@@ -455,7 +455,7 @@
         } else {
           cond = '매매 ' + amount + '까지' + (area ? ' (' + area + '평)' : '');
         }
-        var movein = C.formatDateTime(d.movein) || txt(d.moveinText, '입주');
+        var movein = C.dateFieldText(d, 'movein') || txt(null, '입주');
         var blocks = [
           first,
           [cond, '입주 ' + movein, txt(d.guestNote, '손님 특징')].join('\n'),
@@ -1011,7 +1011,7 @@
     if (t.id === 't4' || t.id === 't2' || t.id === 't9' || t.id === 't10' || t.id === 't13' || t.id === 't8') d.prop = defaultProp();
     if (t.id === 't5' || t.id === 't7' || t.id === 't19') d.items = [defaultProp()];
     if (t.id === 't5') { d.status = 'confirmed'; d.detail = true; d.parking = true; }
-    if (t.id === 't2') { d.movein = { date: '', hour: null, min: 0 }; d.moveinText = ''; }
+    if (t.id === 't2') { d.moveinMode = '고정'; d.movein = { date: '', hour: null, min: 0 }; d.moveinText = ''; d.moveinStart = { date: '', hour: null, min: 0 }; d.moveinEnd = { date: '', hour: null, min: 0 }; }
     if (t.id === 't3') { d.ver = 'simple'; d.guest = '매수'; d.times = ''; }
     if (t.id === 't10' || t.id === 't13') d.trade = '매매';
     if (t.id === 't13') d.kind = '중도금';
@@ -1022,7 +1022,7 @@
     if (t.id === 't14') { d.calcKind = 'house'; d.calcTrade = '매매'; d.calcVat = '4'; }
     if (t.id === 't16') { d.danji = '1단지'; d.trade = '매매'; }
     if (t.id === 't17') { d.target = 'owner'; d.vpick = { owner: 0, coagent: 0, guest: 0 }; d.greet = 'none'; }
-    if (t.id === 't18') { d.trade = '매매'; d.movein = { date: '', hour: null, min: 0 }; d.moveinText = ''; d.guestNote = '염리초 보내고 싶은 학부모입니다'; }
+    if (t.id === 't18') { d.trade = '매매'; d.moveinMode = '고정'; d.movein = { date: '', hour: null, min: 0 }; d.moveinText = ''; d.moveinStart = { date: '', hour: null, min: 0 }; d.moveinEnd = { date: '', hour: null, min: 0 }; d.guestNote = '염리초 보내고 싶은 학부모입니다'; }
     if (t.id === 't19') { d.emphasis = '최저가 조율 가능합니다'; }
     if (t.id === 't20') { d.vendorCat = '대출'; d.vendorSel = defaultVendorSel(); }
     return d;
