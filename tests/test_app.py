@@ -14,6 +14,7 @@ import functools
 import http.server
 import json
 import os
+import re
 import socketserver
 import threading
 import unittest
@@ -4098,21 +4099,25 @@ class AppTest(unittest.TestCase):
                     ctx.close()
 
     # ============================================================== 버전 · 배포 파일
-    def test_24_version_bumped_to_1_1_3(self):
+    def test_24_version_bumped_to_1_1_4(self):
+        # 서비스 워커 · 화면 캐시 주소 · 안드로이드 빌드 번호가 모두 같은 버전을 가리킨다
         with open(os.path.join(ROOT, 'sw.js'), encoding='utf-8') as f:
             sw = f.read()
-        self.assertIn("'v1.1.3'", sw)
+        m = re.search(r"var VERSION = '(v\d+\.\d+\.\d+)';", sw)
+        self.assertIsNotNone(m, 'sw.js에 VERSION이 있다')
+        ver = m.group(1)
+        self.assertEqual(ver, 'v1.1.4')
         self.assertIn("'js/sync.js'", sw)
         # 새 파일(동호수 타입표)도 오프라인 캐시에 들어간다
         self.assertIn("'js/maraepu-types.js'", sw)
         with open(os.path.join(ROOT, 'index.html'), encoding='utf-8') as f:
             html = f.read()
         for f_ in ('icons', 'maraepu-types', 'core', 'templates', 'sync', 'app'):
-            self.assertIn(f'js/{f_}.js?v=1.1.3', html)
-        self.assertIn('styles.css?v=1.1.3', html)
+            self.assertIn(f'js/{f_}.js?v=1.1.4', html)
+        self.assertIn('styles.css?v=1.1.4', html)
         gradle = open(os.path.join(ROOT, 'android/app/build.gradle'), encoding='utf-8').read()
-        self.assertIn('versionCode 8', gradle)
-        self.assertIn("versionName '1.1.3'", gradle)
+        self.assertIn('versionCode 9', gradle)
+        self.assertIn("versionName '1.1.4'", gradle)
 
 
 if __name__ == '__main__':

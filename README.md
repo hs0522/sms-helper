@@ -273,7 +273,7 @@ LD_LIBRARY_PATH=/workspace/.libs/root/usr/lib/x86_64-linux-gnu python3 tests/tes
 - 영구 수정: 기존 문구 저장/되돌리기, 일회성 수정과의 구분, 대괄호 → 소괄호
 - 백업: 내보내기 JSON(토큰·Gist 미포함) · 새 기기 불러오기 복원 · 깨진 파일 거부
 - PC·폰 동기화: 백업 덩어리 만들기/되살리기/최신 판단, 비공개 Gist 자동 생성(POST `public:false`), 변경 뒤 자동 올리기, 다른 기기 최신 내용 자동 받기, 오프라인 표시·연결 해제, 토큰 로컬 보관
-- 스크린샷 산출물 존재 확인 — **132개 테스트 전체 통과**
+- 스크린샷 산출물 존재 확인 — **147개 테스트 전체 통과**
 
 화면 캡처(테스트와 별개):
 
@@ -281,7 +281,7 @@ LD_LIBRARY_PATH=/workspace/.libs/root/usr/lib/x86_64-linux-gnu python3 tests/tes
 LD_LIBRARY_PATH=/workspace/.libs/root/usr/lib/x86_64-linux-gnu python3 tests/capture.py
 ```
 
-→ `downloads/sms-app-pc.png` · `sms-app-1000x720.png`(12번 지급 일정 표) · `sms-app-pay.png` · `sms-app-mobile.png` · `sms-app-calc.png` · `sms-app-vendor*.png` · `sms-app-thanks.png` · `sms-app-myungdan.png` (문서용 `docs/shot-*.png` · 모바일 지급 일정 표 `docs/shot-mobile-pay.png`)
+→ `downloads/sms-app-pc.png` · `sms-app-1000x720.png`(12번 지급 일정 표) · `sms-app-pay.png` · `sms-app-mobile.png` · `sms-app-calc.png` · `sms-app-vendor*.png` · `sms-app-thanks.png` · `sms-app-myungdan.png` · `sms-app-custom-editor.png`(폰 새 문구 추가) · `sms-app-times-modes.png`(방문 희망 시간 — 한 시각 · 범위) (문서용 `docs/shot-*.png` · 모바일 지급 일정 표 `docs/shot-mobile-pay.png`)
 
 ## 파일 구조
 
@@ -301,7 +301,7 @@ projects/sms-helper/
   sw.js                      오프라인 캐시(Service Worker · 상대경로)
   android/                   안드로이드 WebView 래퍼 (MainActivity · build.gradle · keystore)
   .github/workflows-disabled/ GitHub Actions APK 빌드 워크플로우(권한 때문에 비활성 위치에 둠)
-  tests/test_app.py          자동 테스트 132개
+  tests/test_app.py          자동 테스트 147개
   tests/capture.py           스크린샷 캡처
 ```
 
