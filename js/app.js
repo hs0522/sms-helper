@@ -1495,8 +1495,15 @@
     ta.style.opacity = '0';
     document.body.appendChild(ta);
     ta.select();
-    try { document.execCommand('copy'); done(); } catch (e) { toast('복사에 실패했어요. 본문을 길게 눌러 복사해 주세요.'); }
+    var ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
     document.body.removeChild(ta);
+    // 안드로이드 앱(.apk) 껍데기가 열어 둔 복사 통로
+    if (!ok && window.AndroidCopy && window.AndroidCopy.copy) {
+      try { window.AndroidCopy.copy(text); ok = true; } catch (e) { ok = false; }
+    }
+    if (ok) done();
+    else toast('복사에 실패했어요. 본문을 길게 눌러 복사해 주세요.');
   }
 
   // 아이폰·안드로이드 모두 '문자 앱'에 완성 문자가 채워진 채로 열린다

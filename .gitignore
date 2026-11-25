@@ -4,3 +4,11 @@ __pycache__/
 *.pyc
 .DS_Store
 docs/
+
+# 안드로이드 로컬 빌드 산출물
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/app/src/main/assets/www/
+*.apk
