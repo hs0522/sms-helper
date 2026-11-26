@@ -47,8 +47,13 @@ def wheel(pg, scope, col, val):
 
 
 def pick_time(pg, scope, period, hour, minute):
-    wheel(pg, scope, 'p', period)
-    wheel(pg, scope, 'h', hour)
+    # 시간 휠은 24시간제 두 열(시·분) — am/pm 표시를 24시로 바꿔 고른다
+    h = int(hour)
+    if period == 'pm' and h < 12:
+        h += 12
+    if period == 'am' and h == 12:
+        h = 0
+    wheel(pg, scope, 'h', str(h))
     wheel(pg, scope, 'm', minute)
     pg.wait_for_timeout(120)
 
@@ -99,7 +104,6 @@ def main():
         pg.wait_for_timeout(120)
         pg.click('#calpop [data-cal-day="5"]')
         pg.wait_for_timeout(150)
-        pick_time(pg, '#calpop', 'am', '11', '30')
         pg.wait_for_timeout(150)
         pg.click('#calpop [data-cal-close]')
         pg.fill('#fields [data-prop="items"][data-idx="0"][data-key="dong"]', '208')
@@ -153,7 +157,7 @@ def main():
         pick(pg, 't17')
         pg.click('#fields [data-action="vary"]')
         pg.wait_for_timeout(120)
-        pg.click('#fields [data-seg="greet"][data-value="cold"]')
+        pg.click('#fields [data-greet="weather"]')
         pg.wait_for_timeout(200)
         pg.screenshot(path=sh(DOWNLOADS, 'sms-app-thanks.png'))
         pg.screenshot(path=sh(DOCS, 'shot-thanks.png'))
@@ -175,8 +179,9 @@ def main():
 
         # 6) 매매 약정 (긴 폼) — 스파이더 계약 팝업형 지급 일정 표
         pick(pg, 't8')
-        pg.fill('#fields [data-field="price"]', '237000')
-        pg.click('#fields [data-action="autoFill"]')
+        pg.fill('#fields [data-field="gyeyakAmount"]', '23700')
+        pg.fill('#fields [data-field="jungAmount"]', '59250')
+        pg.fill('#fields [data-field="janAmount"]', '154050')
         pg.fill('#fields [data-field="account"]', '하나 54791017281007 신동범')
         pg.fill('#fields [data-field="jeongAmount"]', '2370')
         pg.wait_for_timeout(250)
@@ -242,9 +247,10 @@ def main():
         cp.wait_for_timeout(300)
         cp.click('#tpl-list [data-id="t8"]')
         cp.wait_for_timeout(300)
-        cp.fill('#fields [data-field="price"]', '247000')
         cp.fill('#fields [data-field="jeongAmount"]', '3000')
-        cp.click('#fields [data-action="autoFill"]')
+        cp.fill('#fields [data-field="gyeyakAmount"]', '24700')
+        cp.fill('#fields [data-field="jungAmount"]', '61750')
+        cp.fill('#fields [data-field="janAmount"]', '160550')
         cp.wait_for_timeout(250)
         # 약정금·계약금·중도금·잔금 일정을 실제 날짜로 채운 상태로 찍는다
         pay_date(cp, 'jeongDate', 2026, 11, 28)
@@ -312,9 +318,10 @@ def main():
         mp.wait_for_timeout(200)
         mp.click('#sheet-list [data-id="t8"]')
         mp.wait_for_timeout(250)
-        mp.fill('#fields [data-field="price"]', '247000')
         mp.fill('#fields [data-field="jeongAmount"]', '3000')
-        mp.click('#fields [data-action="autoFill"]')
+        mp.fill('#fields [data-field="gyeyakAmount"]', '24700')
+        mp.fill('#fields [data-field="jungAmount"]', '61750')
+        mp.fill('#fields [data-field="janAmount"]', '160550')
         mp.wait_for_timeout(250)
         mp.evaluate('document.activeElement && document.activeElement.blur()')
         mp.evaluate("document.querySelector('#fields .paytable').scrollIntoView({block:'center'})")
@@ -345,11 +352,10 @@ def main():
         mp.screenshot(path=sh(DOWNLOADS, 'sms-app-date-modes.png'))
         mp.click('#fields [data-date-mode="movein"][data-value="고정"]')
         mp.wait_for_timeout(200)
-        mp.click('#fields [data-date="movein"]')
+        mp.click('#fields [data-date="moveinStart"]')
         mp.wait_for_timeout(250)
         mp.click('#calpop [data-cal-day="26"]')
         mp.wait_for_timeout(180)
-        pick_time(mp, '#calpop', 'am', '10', '30')
         mp.wait_for_timeout(250)
         mp.screenshot(path=sh(DOWNLOADS, 'sms-app-cal-popup.png'))
         mp.click('#calpop [data-cal-close]')
@@ -374,7 +380,7 @@ def main():
         mp.wait_for_timeout(200)
         mp.click('#sheet-list [data-id="t3"]')
         mp.wait_for_timeout(250)
-        mp.click('#fields [data-seg="ver"][data-value="detail"]')
+        mp.click('#fields [data-seg="view"][data-value="detail"]')
         mp.wait_for_timeout(250)
         mp.click('#fields [data-date="times__range"]')
         mp.wait_for_timeout(250)

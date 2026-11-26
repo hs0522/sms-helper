@@ -1343,17 +1343,21 @@ select.inp,
   padding-bottom: 4px;
 }
 .paytable-head, .pay-row {
-  display: grid;
-  /* 구분은 글자 폭만 · 일정은 날짜(2026.11.28 (토))가 잘리지 않게 · 금액은 남는 폭 */
-  grid-template-columns: 44px minmax(0, 1.28fr) minmax(0, 1fr);
-  gap: 6px;
-  align-items: start;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
 }
 .paytable-head { padding-bottom: 5px; }
 .paytable-head span { font-size: 10px; font-weight: 700; color: var(--muted2); }
+.paytable-head .head-name { flex: 0 0 66px; width: 66px; }
+.paytable-head .head-right { flex: 1 1 auto; }
 .pay-row { padding: 8px 0; border-top: 1px dashed var(--line-soft); }
-/* 구분 칸은 '약정금 / 계약금' 글자 폭만, 비율(%)은 라벨 아래줄로 내려 일정·금액을 넓게 */
-.pay-name { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; padding-top: 4px; min-width: 0; }
+/* 왼쪽 — 라벨과 % 칸을 위아래로 바짝 붙이고, 행끼리 왼쪽을 맞춘다 */
+.pay-name { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; flex: 0 0 66px; width: 66px; min-width: 0; }
+/* 오른쪽 — 윗줄에 [일정][금액] 나란히, 아랫줄에 원단위·억 환산 */
+.pay-right { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.pay-row .pay-main { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 6px; align-items: center; }
+.pay-row .pay-amount { min-width: 0; }
 .pay-name-text { font-size: 12px; font-weight: 700; color: var(--ink); white-space: nowrap; }
 .pay-rate { display: inline-flex; align-items: center; gap: 1px; }
 .pay-rate-inp {
@@ -1367,10 +1371,11 @@ select.inp,
   border-color: var(--line);
 }
 .pay-rate-pct { font-size: 10px; font-weight: 700; color: var(--muted2); }
-.pay-row .date-btn.is-compact { width: 100%; gap: 5px; padding: 9px 5px; font-size: 11.8px; }
+.pay-row .date-btn.is-compact { width: 100%; gap: 4px; padding: 9px 4px; font-size: 11.8px; letter-spacing: -0.02em; }
 .pay-row .date-btn.is-compact .date-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pay-row .money-field { min-width: 0; }
-.pay-row .money-box .inp { padding: 9px 40px 9px 10px; font-size: 12.5px; }
+.pay-row .money-box .inp { padding: 9px 32px 9px 8px; font-size: 12.2px; }
+.pay-row .money-box .money-unit { right: 6px; font-size: 9.5px; }
 .pay-row.is-auto .money-box .inp { border-style: dashed; background: #F4F5FA; }
 .pay-row.is-auto .pay-name-text { color: var(--label); }
 .pay-row.is-auto .money-field.is-auto .money-box .inp { border-style: dashed; }
@@ -1404,29 +1409,21 @@ select.inp,
      (오른쪽을 200px로 묶어 두면 카드 오른쪽에 빈 여백이 남아 왼쪽으로 쏠려 보인다) */
   .paytable-head { display: none; }
   .pay-row {
-    grid-template-columns: 76px minmax(0, 1fr);
-    grid-template-areas:
-      "name date"
-      "rate amount";
-    column-gap: 10px;
-    row-gap: 6px;
-    align-items: center;
+    gap: 10px;
+    align-items: flex-start;
     padding: 10px 0;
   }
-  .pay-name { display: contents; }
-  .pay-name-text { grid-area: name; font-size: 12.5px; white-space: nowrap; }
-  /* 퍼센트 칸은 왼쪽 열 오른쪽 끝에 맞춰 금액 칸과 10px 간격으로 붙인다 */
-  .pay-rate { grid-area: rate; align-self: start; justify-self: end; margin-top: 8px; }
+  .pay-name { flex: 0 0 72px; width: 72px; gap: 1px; }
+  .pay-name-text { font-size: 12.5px; white-space: nowrap; }
   .pay-rate-inp { width: 44px; padding: 1px 2px; }
   .pay-row .date-btn.is-compact {
-    grid-area: date;
     width: 100%;
     max-width: none;
-    justify-self: stretch;
-    padding: 10px 9px;
-    font-size: 12.5px;
+    padding: 10px 5px;
+    font-size: 11.6px;
+    letter-spacing: -0.02em;
   }
-  .pay-amount { grid-area: amount; width: 100%; max-width: none; min-width: 0; }
+  .pay-amount { width: 100%; max-width: none; min-width: 0; }
 }
 
 /* 지급 일정 표 — 좁은 칸에서도 환산 줄이 잘리지 않게 두 줄까지 */
@@ -1640,3 +1637,116 @@ select.inp:disabled { appearance: none; -webkit-appearance: none; background-ima
   .seg.is-row5 { gap: 4px; }
   .seg.is-row5 .seg-btn { font-size: 12px; }
 }
+
+/* ==================================================================
+   2026-11-26 v1.3.0 — 공통 금액박스 고정 · 가계약 · 지급 일정 한 줄
+   ================================================================== */
+
+/* [매매][전세][월세] — 세 모드에서 버튼 크기·자리가 그대로 (월세만 금액칸이 두 칸)
+   보증금·월세 이름은 금액칸 위 빈자리에 띄워 올려 두 모드의 높이를 똑같이 맞춘다 */
+.prop-money { align-items: start; padding-top: 14px; }
+.prop-money .seg.is-trade { flex: 0 0 auto; width: 140px; align-self: start; margin-top: 6px; }
+.prop-money .seg.is-trade .seg-btn { flex: 1 1 0; min-width: 0; padding: 6px 3px; text-align: center; }
+.prop-money.is-monthly { align-items: start; }
+.money-pair .money-line { position: relative; display: block; }
+.money-pair .money-label {
+  position: absolute;
+  top: -14px;
+  left: 2px;
+  flex: none;
+  font-size: 10.5px;
+  line-height: 14px;
+}
+/* 보증금·월세 두 칸은 좁아지므로 숫자는 조금 작게, 만원은 더 바짝, 환산 줄은 두 줄까지 */
+.money-pair .money-field.is-sm .money-box .inp { padding: 9px 23px 9px 7px; font-size: 12px; }
+.money-pair .money-field.is-sm .money-box .money-unit { right: 5px; font-size: 9.5px; }
+.money-pair .money-field.is-sm .money-hint {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  word-break: keep-all;
+  line-height: 1.35;
+}
+
+/* 계약 조건 안내 — [매매][전세][월세] | [가계약][계약] 다섯 버튼 같은 크기 */
+.seg.is-deal {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) 1px repeat(2, minmax(0, 1fr));
+  gap: 5px;
+  align-items: stretch;
+}
+.seg.is-deal .seg-btn { padding: 9px 2px; font-size: 12.2px; }
+.seg.is-deal .seg-divider {
+  width: 1px;
+  margin: 3px 0;
+  background: var(--line);
+  justify-self: center;
+  align-self: stretch;
+}
+
+/* 공동중개 매물 요청 — 공통 금액박스(거래유형·금액) + 입주일을 한 카드로 */
+.field.is-deal-box {
+  border: 1px solid var(--line-soft);
+  background: #FBFBFE;
+  border-radius: 12px;
+  padding: 10px 12px;
+  gap: 10px;
+}
+.field.is-deal-box .field.is-inside { margin: 0; }
+
+/* 중개보수 안내 — 매물 종류 아래에 거래유형·금액 한 줄 */
+.field.is-calc-deal { margin: 2px 0 2px; }
+
+/* 전문가·협력업체 목록 — 즐겨찾기 ★ · 이름 · 연락처 · 삭제 */
+.contact-star {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  background: transparent;
+  color: #D6D9E4;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+.contact-star:hover { color: #E4B33C; }
+.contact-star.is-on { color: #E9A62B; }
+.contact-star.is-static { cursor: default; opacity: .35; }
+.contact.is-fav { border-color: #F0DFB8; background: #FFFCF4; }
+.vendor-list-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding-bottom: 8px; }
+.vendor-list-cat { font-size: 13px; font-weight: 800; color: var(--ink); }
+.vendor-list-count { font-size: 11px; color: var(--muted2); }
+.contact-list.is-tall { max-height: 46vh; }
+.vendor-list-bar { display: flex; justify-content: flex-end; padding-top: 8px; }
+.vendor-list-bar .add-btn { margin-top: 0; }
+
+/* 감사 인사 — 인사말 칩 6개를 3개씩 두 줄로, 교체 버튼은 두 줄 옆에 세로로 가운데 */
+.variant-row {
+  display: grid;
+  grid-template-columns: auto repeat(3, minmax(0, 1fr));
+  gap: 5px 4px;
+  align-items: center;
+}
+.variant-row .action-btn.is-swap { grid-row: 1 / span 2; align-self: center; }
+.variant-row .chip { flex: none; min-width: 0; }
+.variant-row .chip:nth-child(2) { grid-area: 1 / 2; }
+.variant-row .chip:nth-child(3) { grid-area: 1 / 3; }
+.variant-row .chip:nth-child(4) { grid-area: 1 / 4; }
+.variant-row .chip:nth-child(5) { grid-area: 2 / 2; }
+.variant-row .chip:nth-child(6) { grid-area: 2 / 3; }
+.variant-row .chip:nth-child(7) { grid-area: 2 / 4; }
+.modal-foot.is-vendor { display: flex; }
+.modal-foot.is-vendor .ghost { flex: 1 1 auto; width: 100%; }
+/* 중개보수 안내 — 거래유형 옆 금액은 계산기의 주 입력칸이라 기본 크기로, 좁은 두 칸도 숫자가 다 보이게 */
+.money-pair .money-field:not(.is-sm) .money-box .inp { padding: 10px 26px 10px 9px; font-size: 12.8px; }
+.money-pair .money-field:not(.is-sm) .money-box .money-unit { right: 6px; font-size: 9.5px; }
+.money-pair .money-field:not(.is-sm) .money-hint {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  word-break: keep-all;
+  line-height: 1.35;
+}
+/* 물건지 — 주소 칸과 단지·동·호 칸 사이를 한 줄 간격만큼 띄운다 */
+.prop-address + .prop-item { margin-top: 8px; }

@@ -237,16 +237,24 @@
       if (data.vpick.owner != null && data.vpick.resident == null) data.vpick.resident = data.vpick.owner;
       if (!Array.isArray(data.greets)) {
         var legacy = String(data.greet == null ? '' : data.greet);
-        var map = { cold: 'weather', evening: 'evening', weekend: 'holiday', day: 'morning' };
+        var map = { cold: 'weather', evening: 'evening', weekend: 'weekend', holiday: 'holiday', day: 'morning' };
         data.greets = map[legacy] ? [map[legacy]] : [];
         delete data.greet;
       }
+      // 안부 인사는 하나만 고를 수 있다 (예전에 여럿 골라 둔 저장값은 첫 하나만 남긴다)
+      if (data.greets.length > 1) data.greets = data.greets.slice(0, 1);
     }
     if (t.id === 't8') {
       if (data.trade !== '전세' && data.trade !== '월세') data.trade = '매매';
-      if (data.kind !== '계약') data.kind = '약정';
+      // 약정 → 가계약 이름 변경
+      if (data.kind !== '계약') data.kind = '가계약';
     }
     if (t.id === 't10') {
+      // 거래 유형은 매물칸의 [매매][전세][월세]를 따른다
+      var pt = data.prop && typeof data.prop === 'object' ? data.prop.trade : null;
+      data.trade = pt === '전세' || pt === '월세' ? pt : (data.trade === '전세' || data.trade === '월세' ? data.trade : '매매');
+      if (data.prop && typeof data.prop === 'object' && !data.prop.trade) data.prop.trade = data.trade;
+      if (data.kind === '약정') data.kind = '가계약';
       var kinds = T.schedKinds(data).map(function (o) { return o.v; });
       if (kinds.indexOf(data.kind) === -1) data.kind = kinds[0];
     }
@@ -348,15 +356,21 @@
   }
 
   // 금액 칸에 친 글을 만 원 숫자로 바꾸고 자릿수 쉼표·도우미를 다시 그린다
+  function hintNodeFor(inp) {
+    var field = inp && inp.closest ? inp.closest('.money-field') : null;
+    var inside = field && field.querySelector('.money-hint');
+    if (inside) return inside;
+    var row = inp && inp.closest ? inp.closest('.pay-row') : null;
+    return row ? row.querySelector('.pay-hint') : null;
+  }
+
   function formatMoneyInput(inp) {
     var caret = inp.selectionStart;
     var before = String(inp.value).slice(0, caret).replace(/[^0-9]/g, '').length;
     var man = C.parseMan(inp.value);
     inp.value = man == null ? '' : C.group(man);
     if (man != null && document.activeElement === inp) setCaretByDigits(inp, before);
-    var field = inp.closest ? inp.closest('.money-field') : null;
-    var hint = field && field.querySelector('.money-hint');
-    setHint(hint, C.moneyHintLine(man));
+    setHint(hintNodeFor(inp), C.moneyHintLine(man));
     return man;
   }
 
@@ -525,15 +539,9 @@
 
     if (t.fixed || t.fields.length) { /* 인라인 안내는 아래에서 한번에 */ }
 
-    if (t.id === 't8') {
-      // 금액 표시 형식 안내 (설정값)
-      var hint = el('div', 'form-hint');
-      var modeLabel = { won: '만원 단위', eokman: '끊어읽기' }[C.normMode(store.profile.amountMode)] || '전체';
-      hint.innerHTML = '금액 표시 : <b>' + modeLabel + '</b> · <button class="link" id="open-settings-2" type="button">변경</button>';
-      box.appendChild(hint);
-      var b2 = $('#open-settings-2');
-      if (b2) b2.addEventListener('click', openSettings);
-    }
+    // 전문가·협력업체 소개에서만 「목록 보기」를 연다
+    var vlistBtn = $('#btn-vendor-list');
+    if (vlistBtn) vlistBtn.hidden = t.id !== 't20';
     validateInline();
   }
 
@@ -569,6 +577,7 @@
     box.appendChild(inp);
     box.appendChild(el('span', 'money-unit', '만원'));
     field.appendChild(box);
+    if (o.bare) return field;
     var hintEl = el('div', 'money-hint');
     setHint(hintEl, C.moneyHintLine(man));
     field.appendChild(hintEl);
@@ -622,6 +631,7 @@
     box.appendChild(inp);
     box.appendChild(el('span', 'money-unit', '만원'));
     field.appendChild(box);
+    if (o.bare) return field;
     var hintEl2 = el('div', 'money-hint');
     setHint(hintEl2, man == null ? '' : C.moneyHintLine(man));
     field.appendChild(hintEl2);
@@ -635,7 +645,7 @@
     var wrap = el('div', 'pay-check');
     wrap.dataset.autofill = '1';
     if (!s || s.reason === 'no-base') {
-      wrap.appendChild(el('div', 'pay-check-line', base + '을 넣으면 잔금이 자동으로 계산됩니다'));
+      wrap.hidden = true;
       return wrap;
     }
     if (s.negative) {
@@ -665,7 +675,7 @@
     if (!t) return;
     var pf = payTableField(t);
     var isSum = !!(pf && pf.sum);
-    if (t.id !== 't8' && !isSum) return;
+    if (!pf && t.id !== 't8') return;
     var data = dataOf(t);
     if (!isSum) {
       var s = paySplitOf(t, data);
@@ -674,9 +684,7 @@
       if (inp) {
         inp.value = man == null ? '' : C.group(man);
         inp.placeholder = s && s.over ? '확인 필요' : '자동';
-        var field = inp.closest('.money-field');
-        var hint = field && field.querySelector('.money-hint');
-        setHint(hint, man == null ? '' : C.moneyHintLine(man));
+        setHint(hintNodeFor(inp), man == null ? '' : C.moneyHintLine(man));
       }
       // 저장되는 값도 계산 결과로 맞춰 둔다 (음수·초과면 비운다)
       data[t.id === 't8' ? 'janAmount' : 'jan'] = man == null ? '' : man;
@@ -710,6 +718,7 @@
     var total = 0, any = false;
     (f.rows || []).forEach(function (r) {
       if (r.showIf && !r.showIf(data)) return;
+      if (r.excludeSum) return;
       var m = C.parseMan(data[r.amountId]);
       if (m != null) { total += m; any = true; }
     });
@@ -718,10 +727,9 @@
 
   function payBaseMan(t, data) {
     if (!t || !data) return null;
-    if (t.id === 't13') {
-      var rent = data.trade === '전세' || data.trade === '월세';
-      return C.parseMan(rent ? data.deposit : data.price);
-    }
+    var f = payTableField(t);
+    // 지급 일정이 총합계를 내는 문자는 그 총합계가 금액(매매가)이다
+    if (f && f.sum) return paySumMan(t, data);
     return C.parseMan(data.price);
   }
 
@@ -860,7 +868,7 @@
         box.classList.add('is-bad');
       } else if (s) {
         man = s.paidMan || null;
-        note = base + '을 넣으면 잔금이 자동으로 계산됩니다';
+        note = '';
       }
     }
     var line = el('div', 'pay-total-line');
@@ -879,27 +887,40 @@
     // 섹션 라벨은 표 박스 왼쪽 위에, 아래 '특약'과 같은 모양으로
     box.appendChild(el('div', 'paytable-title', '지급 일정'));
     var head = el('div', 'paytable-head');
-    ['구분', '일정', '금액'].forEach(function (h) { head.appendChild(el('span', null, h)); });
+    head.appendChild(el('span', 'head-name', '구분'));
+    head.appendChild(el('span', 'head-right', '일정 · 금액'));
     box.appendChild(head);
     var split = paySplitOf(t, data);
     payRows(t).forEach(function (r) {
       if (r.showIf && !r.showIf(data)) return;
       var line = el('div', 'pay-row' + (r.auto ? ' is-auto' : ''));
+      // 왼쪽 — 라벨과 % 칸을 위아래로 붙여 두고, 행끼리 왼쪽을 맞춘다
       var name = el('div', 'pay-name');
-      name.appendChild(el('span', 'pay-name-text', r.label));
+      name.appendChild(el('span', 'pay-name-text', typeof r.label === 'function' ? r.label(data) : r.label));
       if (r.rate) name.appendChild(rateBadge(t, data, r));
       line.appendChild(name);
-      line.appendChild(dateButton(r.dateId, data[r.dateId], '일정'));
+      // 오른쪽 — 윗줄에 [일정][금액], 아랫줄에 원단위·억 환산
+      var right = el('div', 'pay-right');
+      var main = el('div', 'pay-main');
+      main.appendChild(dateButton(r.dateId, data[r.dateId], '일정'));
       var amount = el('div', 'pay-amount');
+      var autoMan = split && split.ok ? split.janMan : null;
       amount.appendChild(r.auto
         ? autoMoneyField({
           id: r.amountId,
-          value: split && split.ok ? split.janMan : null,
+          value: autoMan,
           placeholder: split && split.over ? '확인 필요' : '자동',
-          label: r.label + ' (자동 계산)'
+          label: (typeof r.label === 'function' ? r.label(data) : r.label) + ' (자동 계산)',
+          bare: true
         })
-        : moneyWrap(t, { id: r.amountId, ph: '' }, data));
-      line.appendChild(amount);
+        : moneyField({ field: r.amountId, value: data[r.amountId], ph: '', bare: true }));
+      main.appendChild(amount);
+      right.appendChild(main);
+      var hint = el('div', 'money-hint pay-hint');
+      hint.dataset.payHint = r.amountId;
+      setHint(hint, C.moneyHintLine(r.auto ? autoMan : data[r.amountId]));
+      right.appendChild(hint);
+      line.appendChild(right);
       box.appendChild(line);
     });
     box.appendChild(payTotal(t, data));
@@ -971,7 +992,7 @@
       }
 
       case 'account': {
-        row = fieldRow(f.label, { hintText: '은행·계좌·예금주 순서 상관없이 붙여넣기' });
+        row = fieldRow(f.label);
         var ai = el('input', 'inp');
         ai.type = 'text';
         ai.autocomplete = 'off';
@@ -1005,8 +1026,27 @@
       }
 
       // 버전처럼 두 쌍을 한 줄에 — [소유자][중개사] [간단][상세]
+      // deal: [매매][전세][월세] | [가계약][계약] 다섯 버튼을 같은 크기로, 가운데에 얇은 세로 구분선
       case 'segs': {
         row = fieldRow(f.label);
+        if (f.deal) {
+          var dline = el('div', 'seg is-deal');
+          var firstGroup = true;
+          f.groups.forEach(function (g) {
+            if (g.showIf && !g.showIf(data)) return;
+            if (!firstGroup) dline.appendChild(el('span', 'seg-divider'));
+            firstGroup = false;
+            g.options.forEach(function (o) {
+              var b = el('button', 'seg-btn' + (data[g.id] === o.v ? ' is-active' : ''), o.l);
+              b.type = 'button';
+              b.dataset.seg = g.id;
+              b.dataset.value = o.v;
+              dline.appendChild(b);
+            });
+          });
+          row.appendChild(dline);
+          return row;
+        }
         var line = el('div', 'segs');
         f.groups.forEach(function (g) {
           if (g.showIf && !g.showIf(data)) return;
@@ -1024,7 +1064,24 @@
         return row;
       }
 
-      // 공통 금액란 — 거래 유형에 따라 매매가 / 보증금 / 보증금·월차임
+      // 공통 금액박스 — [매매][전세][월세] + 금액(월세는 보증금·월세) 한 줄, 아래 입주일
+      case 'dealBox': {
+        var dbx = el('div', 'field is-deal-box');
+        if (f.label) {
+          var dh = el('div', 'field-head');
+          dh.appendChild(el('label', 'field-label', f.label));
+          dbx.appendChild(dh);
+        }
+        dbx.appendChild(dealMoneyBar(data));
+        if (f.movein) {
+          var mi = dateModeField({ id: 'movein', label: '입주일' }, data);
+          mi.classList.add('is-inside');
+          dbx.appendChild(mi);
+        }
+        return dbx;
+      }
+
+      // 공통 금액박스 한 줄 — 매매·전세는 금액 한 칸, 월세는 보증금·월세 두 칸
       case 'price': {
         var ptrade = T.tradeOf(data);
         var stack = el('div', 'field-stack');
@@ -1117,14 +1174,20 @@
         return row;
       }
 
-      // 협력업체·상담사 — 저장된 연락처를 고치고 체크해서 보낸다
+      // 협력업체·상담사 — 즐겨찾기한 업체를 먼저 보여 주고, 체크해서 보낸다
       case 'contacts': {
         var cat = T.VENDOR_CATS.indexOf(data.vendorCat) !== -1 ? data.vendorCat : '대출';
         var all = (store.contacts && store.contacts[cat]) || [];
+        var favs = all.filter(function (c) { return !!c.fav; });
+        // 즐겨찾기가 있으면 그것만, 하나도 없으면 저장한 업체를 모두 보여 준다
+        var shown = favs.length ? favs : all;
         var picked = T.selectedFor(data, cat);
         row = fieldRow(f.label || '연락처');
         var listBox = el('div', 'contact-list');
-        all.forEach(function (c) {
+        if (!shown.length) {
+          listBox.appendChild(el('div', 'contact-empty', '저장한 업체가 없어요 · 위 「목록 보기」에서 추가하세요'));
+        }
+        shown.forEach(function (c) {
           var on = picked.indexOf(c.id) !== -1;
           var item = el('div', 'contact' + (on ? ' is-on' : ''));
           var chk = el('button', 'contact-check' + (on ? ' is-on' : ''), on ? '✓' : '');
@@ -1348,7 +1411,7 @@
     var i = el('input', 'inp inp-type');
     i.type = 'text';
     i.autocomplete = 'off';
-    i.placeholder = '평형·타입·방향 (동·호수를 넣으면 자동)';
+    i.placeholder = '타입·방향 (동·호수를 넣으면 자동)';
     i.title = '마래푸 1~4단지 동·라인 표에서 평형·타입·방향을 채웁니다 · 다르면 직접 고쳐 쓰세요';
     i.dataset.prop = f.id;
     if (idx != null) i.dataset.idx = idx;
@@ -1452,6 +1515,51 @@
 
   function propMoneyWrap(listId, idx, key, value) {
     return moneyField({ prop: listId, idx: idx, money: key, value: value, small: true });
+  }
+
+  /* 공통 금액박스 — [매매][전세][월세] + 금액 한 줄 (월세는 보증금·월세 두 칸)
+     매물칸·공동중개 요청·중개보수 계산기가 같은 모양을 쓴다. */
+  function tradeMoneyBar(o) {
+    var data = o.data || {};
+    var bar = el('div', 'prop-money' + (o.trade === '월세' ? ' is-monthly' : ''));
+    var seg = el('div', 'seg is-small is-trade');
+    (o.options || ['매매', '전세', '월세']).forEach(function (v) {
+      var b = el('button', 'seg-btn' + (o.trade === v ? ' is-active' : ''), v);
+      b.type = 'button';
+      // 숫자 입력이 바로 이어지도록 탭 순서에서는 건너뛴다(마우스로 고른다)
+      b.tabIndex = -1;
+      b.dataset.seg = o.segKey;
+      b.dataset.value = v;
+      seg.appendChild(b);
+    });
+    bar.appendChild(seg);
+    if (o.trade === '월세') {
+      var pair = el('div', 'money-pair');
+      pair.appendChild(tradeMoneyLine(o.depositId, o.depositLabel || '보증금', data[o.depositId], o.small !== false));
+      pair.appendChild(tradeMoneyLine(o.rentId, o.rentLabel || '월세', data[o.rentId], o.small !== false));
+      bar.appendChild(pair);
+    } else {
+      bar.appendChild(moneyField({ field: o.amountId, value: data[o.amountId], ph: '', small: o.small !== false }));
+    }
+    return bar;
+  }
+
+  function tradeMoneyLine(fieldId, label, value, small) {
+    var line = el('div', 'money-line');
+    line.appendChild(el('span', 'money-label', label));
+    line.appendChild(moneyField({ field: fieldId, value: value, ph: '', small: small !== false }));
+    return line;
+  }
+
+  function dealMoneyBar(data) {
+    return tradeMoneyBar({
+      segKey: 'trade',
+      trade: T.tradeOf(data),
+      amountId: 'amount',
+      depositId: 'deposit',
+      rentId: 'rent',
+      data: data
+    });
   }
 
   // 시각은 앱 어디서나 5분 단위 — 00분, 05분, …, 55분
@@ -1756,33 +1864,22 @@
       box.appendChild(useRow);
     }
 
-    // 거래 유형
-    var tradeRow = fieldRow('거래 유형');
-    var tseg = el('div', 'seg');
-    var trades = data.calcKind === 'presale' ? [['매매', '매매']] : [['매매', '매매'], ['전세', '전세'], ['월세', '월세']];
-    trades.forEach(function (k) {
-      var b = el('button', 'seg-btn' + ((data.calcTrade || '매매') === k[0] ? ' is-active' : ''), k[1]);
-      b.type = 'button';
-      b.dataset.seg = 'calcTrade';
-      b.dataset.value = k[0];
-      tseg.appendChild(b);
-    });
-    tradeRow.appendChild(tseg);
-    box.appendChild(tradeRow);
-
-    // 금액
-    if (data.calcTrade === '월세') {
-      var dRow = fieldRow('보증금');
-      dRow.appendChild(moneyWrap({}, { id: 'calcDeposit' }, data));
-      box.appendChild(dRow);
-      var rRow = fieldRow('월세');
-      rRow.appendChild(moneyWrap({}, { id: 'calcRent' }, data));
-      box.appendChild(rRow);
-    } else {
-      var aRow = fieldRow('거래 금액');
-      aRow.appendChild(moneyWrap({}, { id: 'calcAmount' }, data));
-      box.appendChild(aRow);
-    }
+    // 거래 유형 + 금액 — 공통 금액박스처럼 [매매][전세][월세] + 금액(월세는 보증금·월세) 한 줄
+    var calcTrade = data.calcTrade === '전세' || data.calcTrade === '월세' ? data.calcTrade : '매매';
+    var calcTrades = (data.calcKind || 'house') === 'presale' ? ['매매'] : ['매매', '전세', '월세'];
+    if (calcTrades.length === 1) calcTrade = '매매';
+    var dealRow = el('div', 'field is-calc-deal');
+    dealRow.appendChild(tradeMoneyBar({
+      segKey: 'calcTrade',
+      trade: calcTrade,
+      options: calcTrades,
+      amountId: 'calcAmount',
+      depositId: 'calcDeposit',
+      rentId: 'calcRent',
+      small: false,
+      data: data
+    }));
+    box.appendChild(dealRow);
 
     // 중개보수 합계(직접 고칠 수 있는 금액칸) + 적용 요율 — 한 줄에 나란히, 계산식은 그 아래 작은 글씨로
     var res = calcResultData(data);
@@ -1814,7 +1911,7 @@
     box.appendChild(summary);
 
     // 부가세 — 고르지 않으면 간이 4%
-    var vatRow = fieldRow('부가세', { hintText: '기본 간이 4% · 미포함(별도) / 일반 10%로 바꿀 수 있어요' });
+    var vatRow = fieldRow('부가세');
     var vseg = el('div', 'seg is-grid3');
     [['none', '미포함(별도)'], ['4', '간이 4%'], ['10', '일반 10%']].forEach(function (k) {
       var b = el('button', 'seg-btn' + ((data.calcVat || '4') === k[0] ? ' is-active' : ''), k[1]);
@@ -2684,18 +2781,35 @@
     $('#fields').addEventListener('input', function (e) {
       var t = e.target;
       var data = dataOf(tplById(store.current));
-      // 비율(%)을 고치면 그 줄 금액을 매매가 기준으로 다시 채운다
+      // 비율(%)을 고치면 그 줄 금액을 다시 채운다
+      // — 지급 일정 총합계를 쓰는 표(t8·t10)에서는 '나머지 금액의 몇 %'로 계산한다
       if (t.dataset.payRate) {
         var pct = parseFloat(String(t.value).replace(/[^0-9.]/g, ''));
-        var base = payBaseMan(tplById(store.current), data);
-        if (!isNaN(pct) && base) {
-          data[t.dataset.payRate] = Math.round(base * pct / 100);
+        var curT = tplById(store.current);
+        var pf = payTableField(curT);
+        var nextMan = null;
+        if (pf && pf.sum) {
+          var others = 0, anyOther = false;
+          (pf.rows || []).forEach(function (r) {
+            if (r.amountId === t.dataset.payRate) return;
+            if (r.showIf && !r.showIf(data)) return;
+            if (r.excludeSum) return;
+            var om = C.parseMan(data[r.amountId]);
+            if (om != null) { others += om; anyOther = true; }
+          });
+          if (!isNaN(pct) && pct >= 0 && pct < 100 && anyOther) {
+            nextMan = Math.round(others * pct / (100 - pct));
+          }
+        } else {
+          var base = payBaseMan(curT, data);
+          if (!isNaN(pct) && base) nextMan = Math.round(base * pct / 100);
+        }
+        if (nextMan != null) {
+          data[t.dataset.payRate] = nextMan;
           var mi = $('#fields [data-field="' + t.dataset.payRate + '"]');
           if (mi) {
-            mi.value = C.group(data[t.dataset.payRate]);
-            var mf = mi.closest('.money-field');
-            var mh = mf && mf.querySelector('.money-hint');
-            setHint(mh, C.moneyHintLine(data[t.dataset.payRate]));
+            mi.value = C.group(nextMan);
+            setHint(hintNodeFor(mi), C.moneyHintLine(nextMan));
           }
         }
         markEdited();
@@ -2798,6 +2912,8 @@
           : (dp[pid2] = (dp[pid2] && typeof dp[pid2] === 'object') ? dp[pid2] : T.defaultProp());
         if (!item2) return;
         item2.trade = pt.dataset.value;
+        // 계약 일정 안내는 매물칸의 거래 유형이 그대로 일정 갈래를 정한다
+        if (tp.id === 't10' && pt.dataset.idx == null) dp.trade = item2.trade;
         var pick = pt.dataset.value === '월세' ? 'deposit' : 'amount';
         save();
         renderForm();
@@ -2843,9 +2959,11 @@
         data[key] = val;
         if (key === 'calcKind' && val === 'presale') data.calcTrade = '매매';
         if (key === 'calcKind' || key === 'calcTrade' || key === 'calcOffice') data.calcTotalWon = '';
-        // 거래 유형을 바꾸면 없는 일정·약정은 계약으로 내린다 (매매만 약정이 있다)
+        // 거래 유형을 바꾸면 없는 일정·계약 갈래는 있는 것으로 내린다
         if (key === 'trade') {
-          if (t.id === 't8') data.kind = val === '매매' ? (data.kind === '약정' ? '약정' : '계약') : '계약';
+          if (t.id === 't8') {
+            data.kind = data.kind === '계약' ? '계약' : '가계약';
+          }
           if (t.id === 't10') {
             var okKinds = T.schedKinds(data).map(function (o) { return o.v; });
             if (okKinds.indexOf(data.kind) === -1) data.kind = okKinds[0];
@@ -2884,17 +3002,14 @@
         renderPreview();
         return;
       }
-      // 안부 인사 칩 (날씨·아침·저녁·연휴) — 다시 누르면 해제
+      // 안부 인사 칩 (날씨·아침·저녁·주말·연휴·명절) — 하나만 골린다, 다시 누르면 해제
       var gr = e.target.closest('[data-greet]');
       if (gr) {
         var tg = tplById(store.current);
         var dg = dataOf(tg);
-        var cur2 = T.greetList(dg);
         var gv = gr.dataset.greet;
-        var gi = cur2.indexOf(gv);
-        if (gi === -1) cur2.push(gv);
-        else cur2.splice(gi, 1);
-        dg.greets = T.GREET_KEYS.filter(function (k) { return cur2.indexOf(k) !== -1; });
+        var nowOn = T.greetList(dg)[0];
+        dg.greets = nowOn === gv ? [] : [gv];
         markEdited();
         save();
         renderForm();
@@ -3167,6 +3282,28 @@
     // 모바일 시트
     $('#btn-sheet').addEventListener('click', openFullList);
     $('#sheet-close').addEventListener('click', closeSheet);
+
+    // 협력업체 목록 보기 — 분야 전체 업체(추가·수정·즐겨찾기)
+    var vlistOpen = $('#btn-vendor-list');
+    if (vlistOpen) vlistOpen.addEventListener('click', openVendorList);
+    var vlistModal = $('#vendor-list');
+    if (vlistModal) {
+      vlistModal.addEventListener('click', function (e) {
+        if (e.target === this || e.target.closest('#btn-vendor-list-close') || e.target.closest('#btn-vendor-list-done')) { closeVendorList(); return; }
+        var cat = vendorCatOf();
+        var fav = e.target.closest('[data-vl-fav]');
+        if (fav) { toggleContactFav(cat, fav.dataset.vlFav); return; }
+        var del = e.target.closest('[data-vl-del]');
+        if (del) { removeContact(cat, del.dataset.vlDel); renderVendorList(); return; }
+        var add = e.target.closest('[data-vl-add]');
+        if (add) { addVendorFromList(cat); return; }
+      });
+      vlistModal.addEventListener('input', function (e) {
+        var ed = e.target.closest('[data-vl-edit]');
+        if (!ed) return;
+        editVendorField(vendorCatOf(), ed.dataset.id, ed.dataset.vlEdit, ed.value);
+      });
+    }
     $('#sheet').addEventListener('click', function (e) { if (e.target === this) closeSheet(); });
 
     // 문구 편집 · 새 문구
@@ -3496,7 +3633,7 @@
     if (C.digits(phone).length < 8) { toast('전화번호를 확인해 주세요'); if (phoneInp) phoneInp.focus(); return; }
     store.contacts[cat] = store.contacts[cat] || [];
     var id = 'c' + Date.now().toString(36) + Math.floor(Math.random() * 1000).toString(36);
-    store.contacts[cat].push({ id: id, name: name, phone: phone });
+    store.contacts[cat].push({ id: id, name: name, phone: phone, fav: true });
     var t = tplById(store.current);
     var d = dataOf(t);
     var sel = selMapOf(d);
@@ -3537,6 +3674,152 @@
       renderForm();
       updatePreviewOnly();
     });
+  }
+
+  /* ---------------- 협력업체 목록 보기 (전문가·협력업체 소개) ----------------
+     분야를 고르고 「목록 보기」를 누르면 그 분야에 저장한 업체 전부를 연다.
+     여기서 추가·수정·지우기·즐겨찾기(★)를 하고, ★한 업체가 「연락처」에 기본으로 보인다. */
+  function vendorCatOf() {
+    var t = tplById(store.current);
+    var d = t ? dataOf(t) : {};
+    return T.VENDOR_CATS.indexOf(d.vendorCat) !== -1 ? d.vendorCat : '대출';
+  }
+
+  function openVendorList() {
+    var m = $('#vendor-list');
+    if (!m) return;
+    renderVendorList();
+    m.classList.add('is-open');
+    m.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeVendorList() {
+    var m = $('#vendor-list');
+    if (!m) return;
+    m.classList.remove('is-open');
+    m.setAttribute('aria-hidden', 'true');
+  }
+
+  function vendorRows(cat) {
+    var list = (store.contacts && store.contacts[cat]) || [];
+    return list;
+  }
+
+  function renderVendorList() {
+    var box = $('#vendor-list-body');
+    if (!box) return;
+    var cat = vendorCatOf();
+    box.innerHTML = '';
+    var head = el('div', 'vendor-list-head');
+    head.appendChild(el('b', 'vendor-list-cat', cat));
+    head.appendChild(el('span', 'vendor-list-count', vendorRows(cat).length + '곳 · ★ 즐겨찾기한 업체가 연락처에 먼저 보여요'));
+    box.appendChild(head);
+    var wrap = el('div', 'contact-list is-tall');
+    vendorRows(cat).forEach(function (c) {
+      var item = el('div', 'contact is-flat' + (c.fav ? ' is-fav' : ''));
+      var star = el('button', 'contact-star' + (c.fav ? ' is-on' : ''), '★');
+      star.type = 'button';
+      star.dataset.vlFav = c.id;
+      star.setAttribute('aria-pressed', c.fav ? 'true' : 'false');
+      star.setAttribute('aria-label', (c.name || '업체') + ' 즐겨찾기');
+      item.appendChild(star);
+      var nameInp = el('input', 'inp contact-inp');
+      nameInp.type = 'text';
+      nameInp.autocomplete = 'off';
+      nameInp.placeholder = '신한대출 담당자';
+      nameInp.value = c.name || '';
+      nameInp.dataset.vlEdit = 'name';
+      nameInp.dataset.id = c.id;
+      nameInp.setAttribute('aria-label', '업체 담당자 이름');
+      item.appendChild(nameInp);
+      var phInp = el('input', 'inp contact-inp');
+      phInp.type = 'tel';
+      phInp.inputMode = 'tel';
+      phInp.autocomplete = 'off';
+      phInp.placeholder = '010-0000-0000';
+      phInp.value = C.formatPhone(c.phone);
+      phInp.dataset.vlEdit = 'phone';
+      phInp.dataset.id = c.id;
+      phInp.setAttribute('aria-label', '업체 연락처');
+      item.appendChild(phInp);
+      var del = el('button', 'icon-btn contact-del', '×');
+      del.type = 'button';
+      del.title = '이 연락처 지우기';
+      del.dataset.vlDel = c.id;
+      item.appendChild(del);
+      wrap.appendChild(item);
+    });
+    if (!vendorRows(cat).length) wrap.appendChild(el('div', 'contact-empty', '저장된 업체가 없어요 · 아래에 이름과 연락처를 넣어 추가하세요'));
+    var addRow = el('div', 'contact is-new');
+    addRow.appendChild(el('span', 'contact-star is-static', '★'));
+    var nInp = el('input', 'inp contact-inp');
+    nInp.type = 'text';
+    nInp.autocomplete = 'off';
+    nInp.placeholder = '신한대출 담당자';
+    nInp.dataset.vlNew = 'name';
+    nInp.setAttribute('aria-label', '새 업체 담당자 이름');
+    addRow.appendChild(nInp);
+    var pInp = el('input', 'inp contact-inp');
+    pInp.type = 'tel';
+    pInp.inputMode = 'tel';
+    pInp.autocomplete = 'off';
+    pInp.placeholder = '010-0000-0000';
+    pInp.dataset.vlNew = 'phone';
+    pInp.setAttribute('aria-label', '새 업체 연락처');
+    addRow.appendChild(pInp);
+    wrap.appendChild(addRow);
+    box.appendChild(wrap);
+    var bar = el('div', 'vendor-list-bar');
+    var addBtn = el('button', 'ghost add-btn has-ico', '추가');
+    addBtn.type = 'button';
+    addBtn.dataset.vlAdd = '1';
+    bar.appendChild(addBtn);
+    box.appendChild(bar);
+  }
+
+  function saveVendorList() {
+    markEdited();
+    save();
+    renderVendorList();
+    renderForm();
+    updatePreviewOnly();
+  }
+
+  function toggleContactFav(cat, id) {
+    var list = vendorRows(cat);
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].id !== id) continue;
+      list[i].fav = !list[i].fav;
+      break;
+    }
+    saveVendorList();
+  }
+
+  function editVendorField(cat, id, key, val) {
+    var list = vendorRows(cat);
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].id !== id) continue;
+      list[i][key] = val;
+      break;
+    }
+    markEdited();
+    save();
+    renderForm();
+    updatePreviewOnly();
+  }
+
+  function addVendorFromList(cat) {
+    var nameInp = $('#vendor-list [data-vl-new="name"]');
+    var phoneInp = $('#vendor-list [data-vl-new="phone"]');
+    var name = nameInp ? nameInp.value.trim() : '';
+    var phone = phoneInp ? phoneInp.value.trim() : '';
+    if (!name) { toast('이름을 먼저 넣어 주세요'); if (nameInp) nameInp.focus(); return; }
+    if (C.digits(phone).length < 8) { toast('전화번호를 확인해 주세요'); if (phoneInp) phoneInp.focus(); return; }
+    store.contacts[cat] = store.contacts[cat] || [];
+    var id = 'c' + Date.now().toString(36) + Math.floor(Math.random() * 1000).toString(36);
+    store.contacts[cat].push({ id: id, name: name, phone: phone, fav: true });
+    saveVendorList();
+    toast('연락처를 추가했어요');
   }
 
   /* ---------------- 다른 문구 · 동호 변환 ---------------- */
