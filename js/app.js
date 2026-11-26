@@ -1342,7 +1342,7 @@
           var nameInp = el('input', 'inp contact-inp');
           nameInp.type = 'text';
           nameInp.autocomplete = 'off';
-          nameInp.placeholder = '신한대출 담당자';
+          nameInp.placeholder = '이름';
           nameInp.value = c.name || '';
           nameInp.dataset.contactId = c.id;
           nameInp.dataset.contactEdit = 'name';
@@ -1353,7 +1353,7 @@
           phInp.type = 'tel';
           phInp.inputMode = 'tel';
           phInp.autocomplete = 'off';
-          phInp.placeholder = '010-0000-0000';
+          phInp.placeholder = '연락처';
           phInp.value = C.formatPhone(c.phone);
           phInp.dataset.contactId = c.id;
           phInp.dataset.contactEdit = 'phone';
@@ -1374,7 +1374,7 @@
         var nameInp2 = el('input', 'inp contact-inp');
         nameInp2.type = 'text';
         nameInp2.autocomplete = 'off';
-        nameInp2.placeholder = '신한대출 담당자';
+        nameInp2.placeholder = '이름';
         nameInp2.dataset.contactNew = 'name';
         nameInp2.setAttribute('aria-label', '새 업체 담당자 이름');
         addRow.appendChild(nameInp2);
@@ -1382,7 +1382,7 @@
         phoneInp2.type = 'tel';
         phoneInp2.inputMode = 'tel';
         phoneInp2.autocomplete = 'off';
-        phoneInp2.placeholder = '010-0000-0000';
+        phoneInp2.placeholder = '연락처';
         phoneInp2.dataset.contactNew = 'phone';
         phoneInp2.setAttribute('aria-label', '새 업체 연락처');
         addRow.appendChild(phoneInp2);
@@ -3836,7 +3836,7 @@
       var nameInp = el('input', 'inp contact-inp');
       nameInp.type = 'text';
       nameInp.autocomplete = 'off';
-      nameInp.placeholder = '신한대출 담당자';
+      nameInp.placeholder = '이름';
       nameInp.value = c.name || '';
       nameInp.dataset.vlEdit = 'name';
       nameInp.dataset.id = c.id;
@@ -3846,7 +3846,7 @@
       phInp.type = 'tel';
       phInp.inputMode = 'tel';
       phInp.autocomplete = 'off';
-      phInp.placeholder = '010-0000-0000';
+      phInp.placeholder = '연락처';
       phInp.value = C.formatPhone(c.phone);
       phInp.dataset.vlEdit = 'phone';
       phInp.dataset.id = c.id;
@@ -3865,7 +3865,7 @@
     var nInp = el('input', 'inp contact-inp');
     nInp.type = 'text';
     nInp.autocomplete = 'off';
-    nInp.placeholder = '신한대출 담당자';
+    nInp.placeholder = '이름';
     nInp.dataset.vlNew = 'name';
     nInp.setAttribute('aria-label', '새 업체 담당자 이름');
     addRow.appendChild(nInp);
@@ -3873,7 +3873,7 @@
     pInp.type = 'tel';
     pInp.inputMode = 'tel';
     pInp.autocomplete = 'off';
-    pInp.placeholder = '010-0000-0000';
+    pInp.placeholder = '연락처';
     pInp.dataset.vlNew = 'phone';
     pInp.setAttribute('aria-label', '새 업체 연락처');
     addRow.appendChild(pInp);

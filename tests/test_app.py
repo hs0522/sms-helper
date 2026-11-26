@@ -2539,10 +2539,12 @@ class AppTest(unittest.TestCase):
                 self.assertAlmostEqual(r['amount']['r'], info['innerRight'], delta=1.0, msg='금액 칸이 카드 오른쪽 끝에 닿지 않는다')
                 self.assertGreaterEqual(r['date']['l'], info['innerLeft'] + 40, msg='일정 칸은 왼쪽 % 열 다음')
                 self.assertTrue(r['hintUnderAmount'], '환산 줄은 금액 칸 바로 아래')
-                # 행 세로 가운데 정렬 — 일정 칸은 금액 칸(환산 줄 포함)의 가운데
-                self.assertAlmostEqual((r['date']['t'] + r['date']['b']) / 2,
-                                       (r['amount']['t'] + r['hint']['b']) / 2, delta=1.5,
-                                       msg='일정 칸이 행 세로 가운데에 오지 않는다')
+                # 일정 칸과 금액 칸은 환산 줄이 있든 없든 위쪽 선·높이가 같다
+                self.assertAlmostEqual(r['date']['t'], r['amount']['t'], delta=0.6,
+                                       msg='일정 칸과 금액 칸의 위쪽이 어긋난다')
+                self.assertAlmostEqual(r['date']['b'] - r['date']['t'],
+                                       r['amount']['b'] - r['amount']['t'], delta=0.6,
+                                       msg='일정 칸과 금액 칸의 높이가 다르다')
                 if r['rate']:
                     self.assertGreaterEqual(r['rateFont'], 16, '퍼센트 칸 글씨가 16px 미만')
                     self.assertTrue(r['rateBelowName'], '퍼센트 칸이 라벨 아래줄이 아니다')
@@ -4678,25 +4680,25 @@ class AppTest(unittest.TestCase):
 
     # ============================================================== 버전 · 배포 파일
 
-    def test_24_version_bumped_to_1_4_1(self):
+    def test_24_version_bumped_to_1_4_2(self):
         # 서비스 워커 · 화면 캐시 주소 · 안드로이드 빌드 번호가 모두 같은 버전을 가리킨다
         with open(os.path.join(ROOT, 'sw.js'), encoding='utf-8') as f:
             sw = f.read()
         m = re.search(r"var VERSION = '(v\d+\.\d+\.\d+)';", sw)
         self.assertIsNotNone(m, 'sw.js에 VERSION이 있다')
         ver = m.group(1)
-        self.assertEqual(ver, 'v1.4.1')
+        self.assertEqual(ver, 'v1.4.2')
         self.assertIn("'js/sync.js'", sw)
         # 새 파일(동호수 타입표)도 오프라인 캐시에 들어간다
         self.assertIn("'js/maraepu-types.js'", sw)
         with open(os.path.join(ROOT, 'index.html'), encoding='utf-8') as f:
             html = f.read()
         for f_ in ('icons', 'maraepu-types', 'core', 'templates', 'sync', 'app'):
-            self.assertIn(f'js/{f_}.js?v=1.4.1', html)
-        self.assertIn('styles.css?v=1.4.1', html)
+            self.assertIn(f'js/{f_}.js?v=1.4.2', html)
+        self.assertIn('styles.css?v=1.4.2', html)
         gradle = open(os.path.join(ROOT, 'android/app/build.gradle'), encoding='utf-8').read()
-        self.assertIn('versionCode 16', gradle)
-        self.assertIn("versionName '1.4.1'", gradle)
+        self.assertIn('versionCode 17', gradle)
+        self.assertIn("versionName '1.4.2'", gradle)
 
     def test_t8_deal_combos_and_labels(self):
         # 계약 조건 안내 — [매매][전세][월세] | [가계약][계약], 다섯 버튼이 한 줄·같은 크기
@@ -5299,19 +5301,21 @@ class AppTest(unittest.TestCase):
                         # 이름과 (+)(−)가 겹치지 않고 사이가 벌어져 있다
                         self.assertLess(r['name']['rt'] + r['stepsW'], r['steps']['l'] + 0.5,
                                         f"{r['label']} 이름과 단추가 겹진다")
-                        # 행 세로 가운데 정렬 — 일정 칸은 금액칸(환산 줄 포함)의 가운데
-                        self.assertAlmostEqual((r['date']['t'] + r['date']['b']) / 2,
-                                               (r['amount']['t'] + r['hint']['b']) / 2, delta=1.5,
-                                               msg=f"{r['label']} 일정 칸이 세로 가운데가 아니다")
-                        # 환산 줄은 금액칸 바로 아래, 왼쪽을 맞춰서
+                        # 일정 칸과 금액 칸은 환산 줄이 있든 없든 위쪽 선과 높이가 같다
+                        self.assertAlmostEqual(r['date']['t'], r['amount']['t'], delta=0.6,
+                                               msg=f"{r['label']} 일정 칸과 금액 칸의 위쪽이 어긋난다")
+                        self.assertAlmostEqual(r['date']['b'] - r['date']['t'],
+                                               r['amount']['b'] - r['amount']['t'], delta=0.6,
+                                               msg=f"{r['label']} 일정 칸과 금액 칸의 높이가 다르다")
+                        # 환산 줄은 금액칸 바로 아래, 칸 너비를 그대로 쓴다
                         self.assertAlmostEqual(r['hint']['l'], r['amount']['l'], delta=1.0,
                                                msg='환산 줄이 금액칸 왼쪽에 맞춰지지 않았다')
                         self.assertGreaterEqual(r['hint']['t'], r['amount']['b'] - 0.5, '환산 줄은 금액칸 아래')
                         self.assertLessEqual(r['hint']['rt'], r['amount']['rt'] + 1.0, '환산 줄이 금액칸 밖으로')
                         if r['rate']:
                             self.assertAlmostEqual((r['rate']['t'] + r['rate']['b']) / 2,
-                                                   (r['amount']['t'] + r['hint']['b']) / 2, delta=1.5,
-                                                   msg='% 칸이 세로 가운데가 아니다')
+                                                   (r['amount']['t'] + r['amount']['b']) / 2, delta=1.5,
+                                                   msg='% 칸이 금액칸 세로 가운데가 아니다')
                             self.assertLessEqual(r['rate']['l'] - r['row']['l'], 1.5, '% 칸은 왼쪽 정렬')
                 # 소계 줄은 마지막 차수 오른쪽 아래에 붙고 행을 흘들리지 않는다
                 sub = page.evaluate("""() => { const s = document.querySelector('#fields .pay-sub');
@@ -5347,6 +5351,203 @@ class AppTest(unittest.TestCase):
                 self.assertTrue(r['below'], '환산 줄이 금액칸 아래가 아니다')
                 self.assertTrue(r['underAmount'], '환산 줄이 금액칸 폭을 벗어난다')
         self.assertIn('원', info[-1]['text'], '잔금 환산 줄이 비어 있다')
+
+    # ============================================== v1.4.2 지급 일정 일직선 · 우측하단 환산 · 목록 버튼
+
+    def _v142_page(self, w, h):
+        ctx = self.browser.new_context(viewport={'width': w, 'height': h},
+                                       is_mobile=w < 500, has_touch=w < 500)
+        page = ctx.new_page()
+        errs = []
+        page.on('pageerror', lambda e: errs.append(str(e)))
+        page.goto(BASE, wait_until='networkidle')
+        page.evaluate('localStorage.clear()')
+        page.reload(wait_until='networkidle')
+        page.wait_for_timeout(200)
+        return ctx, page, errs
+
+    def test_v142_pay_row_straight_line(self):
+        # 지급 일정 — 환산 줄이 한 줄·두 줄·없음 어느 경우에도 % · 일정 · 금액이 같은 위쪽 선, 같은 높이
+        for w, h in ((390, 844), (1440, 900)):
+            with self.subTest(viewport=f'{w}x{h}'):
+                ctx, page, errs = self._v142_page(w, h)
+                self._open(page, 't8', mobile=w < 900)
+                page.fill('#fields [data-field="price"]', '76000')
+                page.fill('#fields [data-pay-amt="jeong"][data-pay-idx="0"]', '1000')   # 환산 한 줄
+                page.fill('#fields [data-pay-amt="jung"][data-pay-idx="0"]', '19000')   # 환산 한 줄
+                page.eval_on_selector('#fields .pay-row[data-pay-item="jung"] [data-pay-add]',
+                                      "e => { e.scrollIntoView({block: 'center'}); e.click(); }")  # 두 번째 차수
+                page.wait_for_timeout(240)
+                page.evaluate('document.activeElement && document.activeElement.blur()')
+                page.wait_for_timeout(220)
+                info = page.evaluate("""() => {
+                  const box = e => { const r = e.getBoundingClientRect();
+                    return {t: +r.top.toFixed(1), b: +r.bottom.toFixed(1), h: +r.height.toFixed(1)}; };
+                  return [...document.querySelectorAll('#fields .pay-row')].map(r => {
+                    const d = r.querySelector('.date-btn'), a = r.querySelector('.money-box');
+                    const hint = r.querySelector('.pay-hint'), rate = r.querySelector('.pay-rate-inp');
+                    return {label: r.querySelector('.pay-name-text').textContent.trim(),
+                            date: box(d), amount: box(a), hintText: hint.textContent.trim(),
+                            rate: rate ? box(rate) : null};
+                  });
+                }""")
+                self.assertEqual(len(info), 6, '지급 일정 행 수')
+                self.assertEqual([r['label'] for r in info],
+                                 ['약정금', '가계약금', '계약금', '중도금 1차', '중도금 2차', '잔금'])
+                for r in info:
+                    with self.subTest(row=r['label']):
+                        self.assertAlmostEqual(r['date']['t'], r['amount']['t'], delta=0.6,
+                                               msg=f"{r['label']} 일정 칸과 금액 칸 위쪽이 어긋난다")
+                        self.assertAlmostEqual(r['date']['h'], r['amount']['h'], delta=0.6,
+                                               msg=f"{r['label']} 일정 칸과 금액 칸 높이가 다르다")
+                        if r['rate']:
+                            self.assertAlmostEqual((r['rate']['t'] + r['rate']['b']) / 2,
+                                                   (r['amount']['t'] + r['amount']['b']) / 2, delta=1.5,
+                                                   msg=f"{r['label']} % 칸이 금액 칸 세로 가운데가 아니다")
+                self.assertEqual(errs, [])
+                ctx.close()
+
+    def test_v142_money_hints_right_bottom(self):
+        # 앱 전체의 환산 줄(.money-hint)은 언제나 자기 금액칸의 우측 하단에 붙는다
+        self.pick('t2')
+        self.page.fill('#fields [data-money="amount"]', '17000')
+        self.wait(200)
+        aligned = self.js("""() => [...document.querySelectorAll('#fields .money-hint')].map(h => {
+          const bx = h.closest('.money-field').querySelector('.money-box').getBoundingClientRect();
+          const rg = document.createRange(); rg.selectNodeContents(h);
+          const rects = [...rg.getClientRects()].filter(x => x.width > 0.5);
+          const textRight = rects.length ? Math.max(...rects.map(x => x.right)) : bx.right;
+          const hr = h.getBoundingClientRect();
+          return {text: h.textContent.trim(), align: getComputedStyle(h).textAlign,
+                  rightGap: +(bx.right - textRight).toFixed(1),
+                  belowGap: +(hr.top - bx.bottom).toFixed(1), widthGap: +(bx.width - hr.width).toFixed(1)};
+        })""")
+        self.assertTrue(aligned, '환산 줄이 있는 화면에서 찾지 못했다')
+        for a in aligned:
+            with self.subTest(text=a['text']):
+                self.assertEqual(a['align'], 'right', '환산 줄이 우측 정렬이 아니다')
+                self.assertLessEqual(abs(a['rightGap']), 2.0, f"환산 글자가 칸 오른쪽 끝에 닿지 않는다 {a}")
+                self.assertGreaterEqual(a['belowGap'], -0.5, '환산 줄이 금액칸 아래가 아니다')
+                self.assertLessEqual(abs(a['widthGap']), 1.0, '환산 줄 폭이 금액칸과 다르다')
+        # 월세 두 칸 · 계산기 금액칸도 같은 규칙
+        self.pick('t14')
+        self.page.fill('#fields [data-field="calcAmount"]', '76000')
+        self.wait(200)
+        calc = self.js("""() => [...document.querySelectorAll('#fields .money-hint')].map(h => ({
+            align: getComputedStyle(h).textAlign, text: h.textContent.trim()}))""")
+        self.assertTrue(calc, '계산기에 환산 줄이 없다')
+        for a in calc:
+            self.assertEqual(a['align'], 'right', f"계산기 환산 줄 {a}")
+        self.pick('t2')
+        self.page.click('#fields [data-prop-trade="prop"][data-value="월세"]')
+        self.wait(180)
+        self.page.fill('#fields [data-money="deposit"]', '10000')
+        self.page.fill('#fields [data-money="rent"]', '300')
+        self.wait(200)
+        pair = self.js("""() => [...document.querySelectorAll('#fields .money-pair .money-hint')].map(h => {
+            const bx = h.closest('.money-field').querySelector('.money-box').getBoundingClientRect();
+            const rg = document.createRange(); rg.selectNodeContents(h);
+            const rects = [...rg.getClientRects()].filter(x => x.width > 0.5);
+            return {align: getComputedStyle(h).textAlign, text: h.textContent.trim(),
+                    rightGap: +(bx.right - Math.max(...rects.map(x => x.right))).toFixed(1)}; })""")
+        self.assertEqual(len(pair), 2, '월세 보증금·월세 두 환산 줄')
+        for a in pair:
+            self.assertEqual(a['align'], 'right', f"월세 {a}")
+            self.assertLessEqual(abs(a['rightGap']), 2.0, f"월세 환산 글자 위치 {a}")
+
+    def test_v142_list_buttons_same_size(self):
+        # 상단 헤더 「목록」과 전문가·협력업체 소개 「목록」은 높이·폭·패딩·글자·아이콘까지 같다
+        for w, h in ((390, 844), (1440, 900)):
+            with self.subTest(viewport=f'{w}x{h}'):
+                ctx, page, errs = self._v142_page(w, h)
+                self._open(page, 't20', mobile=w < 900)
+                m = page.evaluate("""() => {
+                  const of = sel => { const e = document.querySelector(sel); if (!e) return null;
+                    const r = e.getBoundingClientRect(), cs = getComputedStyle(e);
+                    const svg = e.querySelector('svg');
+                    return {h: +r.height.toFixed(1), w: +r.width.toFixed(1), pad: cs.padding,
+                            font: cs.fontSize, gap: cs.gap, radius: cs.borderRadius,
+                            icon: svg ? +svg.getBoundingClientRect().width.toFixed(1) : null,
+                            label: e.querySelector('.btn-label') ?
+                              getComputedStyle(e.querySelector('.btn-label')).fontSize : null}; };
+                  return {sheet: of('#btn-sheet'), vendor: of('#btn-vendor-list'), reset: of('#btn-reset')};
+                }""")
+                if w < 900:   # 폰에서는 헤더 「목록」이 보인다
+                    for k in ('h', 'w', 'pad', 'font', 'gap', 'radius', 'icon', 'label'):
+                        self.assertEqual(m['sheet'][k], m['vendor'][k], f'{k}가 다르다 {m}')
+                # 카드 머리에서 「목록」과 「비우기」도 같은 높이
+                self.assertAlmostEqual(m['vendor']['h'], m['reset']['h'], delta=0.5,
+                                       msg=f"목록·비우기 높이가 다르다 {m}")
+                self.assertEqual(errs, [])
+                ctx.close()
+
+    def test_v142_vendor_placeholders(self):
+        # 업체 입력칸은 예시 대신 「이름」·「연락처」
+        self.pick('t20')
+        ph = self.js("""() => [...document.querySelectorAll('#fields .contact-inp')]
+            .map(e => e.placeholder)""")
+        self.assertTrue(ph, '업체 입력칸이 없다')
+        self.assertTrue(all(v in ('이름', '연락처') for v in ph), f'플레이스홀더 {ph}')
+        self.assertEqual(ph[0], '이름')
+        self.assertEqual(ph[1], '연락처')
+        self.page.click('#btn-vendor-list')
+        self.wait(250)
+        mph = self.js("""() => [...document.querySelectorAll('#vendor-list-body .contact-inp')]
+            .map(e => e.placeholder)""")
+        self.assertTrue(mph, '목록 모달 입력칸이 없다')
+        self.assertTrue(all(v in ('이름', '연락처') for v in mph), f'모달 플레이스홀더 {mph}')
+
+    def test_v142_trade_and_role_rows_match_input_height(self):
+        # 거래유형·임대차 만기 버튼은 옆 금액칸과 같은 높이·같은 위쪽 선
+        for w, h in ((390, 844), (1440, 900)):
+            with self.subTest(viewport=f'{w}x{h}'):
+                ctx, page, errs = self._v142_page(w, h)
+                for tid in ('t2', 't19', 't10', 't14'):
+                    self._open(page, tid, mobile=w < 900)
+                    for trade in ('매매', '전세', '월세'):
+                        sel = f'#fields [data-prop-trade][data-value="{trade}"]'
+                        if page.query_selector(sel):
+                            page.click(sel)
+                        else:
+                            sel2 = f'#fields [data-seg="calcTrade"][data-value="{trade}"]'
+                            if page.query_selector(sel2):
+                                page.click(sel2)
+                        page.wait_for_timeout(150)
+                        info = page.evaluate("""() => {
+                          const pm = document.querySelector('#fields .prop-money');
+                          if (!pm) return null;
+                          const b = e => { const r = e.getBoundingClientRect();
+                            return {t: +r.top.toFixed(1), h: +r.height.toFixed(1)}; };
+                          const seg = pm.querySelector('.seg.is-trade');
+                          const boxes = [...pm.querySelectorAll('.money-box')].map(b);
+                          return {seg: b(seg), boxes: boxes};
+                        }""")
+                        if not info:
+                            continue
+                        with self.subTest(tid=tid, trade=trade):
+                            for bx in info['boxes']:
+                                self.assertAlmostEqual(info['seg']['t'], bx['t'], delta=0.6,
+                                                       msg=f'{tid} {trade} 버튼과 금액칸 위쪽이 어긋난다')
+                                self.assertAlmostEqual(info['seg']['h'], bx['h'], delta=0.6,
+                                                       msg=f'{tid} {trade} 버튼과 금액칸 높이가 다르다')
+                self._v142_open(page, 't15', w)
+                info = page.evaluate("""() => {
+                  const row = document.querySelector('#fields .field.is-role-months');
+                  const b = e => { const r = e.getBoundingClientRect();
+                    return {t: +r.top.toFixed(1), h: +r.height.toFixed(1)}; };
+                  return {seg: b(row.querySelector('.seg.is-role')),
+                          wrap: b(row.querySelector('.money-wrap.is-months'))};
+                }""")
+                self.assertAlmostEqual(info['seg']['t'], info['wrap']['t'], delta=0.6,
+                                       msg=f'임대차 만기 버튼 {info}')
+                self.assertAlmostEqual(info['seg']['h'], info['wrap']['h'], delta=0.6,
+                                       msg=f'임대차 만기 버튼 높이 {info}')
+                self.assertEqual(errs, [])
+                ctx.close()
+
+    def _v142_open(self, page, tid, w):
+        page.evaluate("t => SMSApp.openTemplate(t, {})", tid)
+        page.wait_for_timeout(220)
 
 
 if __name__ == '__main__':
