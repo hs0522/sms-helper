@@ -73,14 +73,22 @@ input, textarea, select { font-family: inherit; letter-spacing: inherit; }
 }
 .stage-tabs { display: flex; gap: 6px; flex: 1 1 auto; overflow-x: auto; scrollbar-width: none; }
 .stage-tabs::-webkit-scrollbar { display: none; }
+/* 카테고리 탭은 모두 같은 높이·패딩·글자 크기로 — 줄 맞춰 가지런히 */
 .tab {
   border: 1px solid var(--line);
   background: #fff;
   color: var(--label);
   border-radius: 999px;
-  padding: 6px 10px;
+  padding: 0 12px;
+  height: 30px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: 11.5px;
+  line-height: 1;
   font-weight: 600;
+  flex: 0 0 auto;
   cursor: pointer;
   white-space: nowrap;
   transition: background .14s, color .14s, border-color .14s, box-shadow .14s;
@@ -90,7 +98,8 @@ input, textarea, select { font-family: inherit; letter-spacing: inherit; }
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
-  box-shadow: 0 3px 10px rgba(91, 95, 233, .28);
+  /* 그림자를 키우면 탭만 커 보인다 — 다섯 개가 같은 크기로 보이게 얇게 */
+  box-shadow: 0 1px 2px rgba(91, 95, 233, .22);
 }
 .top-actions { display: flex; gap: 8px; flex: 0 0 auto; }
 
@@ -311,6 +320,12 @@ input, textarea, select { font-family: inherit; letter-spacing: inherit; }
   letter-spacing: .01em;
   padding-top: 4px;
 }
+/* 두 칸을 한 줄 반반 — 채권자 | 채권최고액 */
+.field.is-pair .pair-row { display: flex; gap: 8px; }
+.field.is-pair .pair-cell { flex: 1 1 0; min-width: 0; }
+.field.is-pair .pair-label { font-size: 11.5px; font-weight: 600; color: var(--label); padding-bottom: 4px; }
+.field.is-pair .money-hint { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
 .field.is-toggle {
   flex-direction: row;
   align-items: center;
@@ -878,7 +893,6 @@ select.inp,
 .cal-time {
   margin-top: 8px;
 }
-.cal-tip { font-size: 10.5px; color: var(--muted2); margin-top: 8px; line-height: 1.5; }
 .cal-foot { display: flex; justify-content: flex-end; gap: 6px; margin-top: 8px; }
 .cal-foot .ghost { padding: 6px 12px; font-size: 11.5px; }
 .cal-foot .cal-reset { color: var(--muted); }
@@ -1026,8 +1040,25 @@ select.inp,
   #btn-sheet { display: inline-flex; }
   #btn-settings { padding: 7px 9px; }
   #btn-settings .btn-label { display: none; }
-  .stage-tabs { order: 3; flex: 1 0 100%; padding-bottom: 2px; }
-  .tab { padding: 6px 12px; font-size: 12px; }
+  .stage-tabs {
+    order: 3;
+    flex: 1 0 100%;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 6px;
+    padding-bottom: 2px;
+    overflow: visible;
+  }
+  .tab {
+    width: 100%;
+    height: 34px;
+    padding: 0 4px;
+    font-size: 11px;
+    line-height: 1.2;
+    white-space: normal;
+    text-align: center;
+    word-break: keep-all;
+  }
   .layout {
     height: auto;
     max-width: none;
@@ -1327,6 +1358,7 @@ select.inp,
 }
 
 .paytable {
+  --pay-name: 82px;
   border: 1px solid var(--line-soft);
   background: #FBFBFE;
   border-radius: 12px;
@@ -1349,16 +1381,50 @@ select.inp,
 }
 .paytable-head { padding-bottom: 5px; }
 .paytable-head span { font-size: 10px; font-weight: 700; color: var(--muted2); }
-.paytable-head .head-name { flex: 0 0 66px; width: 66px; }
+.paytable-head .head-name { flex: 0 0 var(--pay-name, 86px); width: var(--pay-name, 86px); text-align: center; }
 .paytable-head .head-right { flex: 1 1 auto; }
 .pay-row { padding: 8px 0; border-top: 1px dashed var(--line-soft); }
-/* 왼쪽 — 라벨과 % 칸을 위아래로 바짝 붙이고, 행끼리 왼쪽을 맞춘다 */
-.pay-name { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; flex: 0 0 66px; width: 66px; min-width: 0; }
+/* 왼쪽 — 항목 이름과 (+)(−), % 칸을 칸 안에서 가운데로 모은다 */
+.pay-name { display: flex; flex-direction: column; align-items: center; gap: 2px; flex: 0 0 var(--pay-name, 86px); width: var(--pay-name, 86px); min-width: 0; text-align: center; }
+.pay-name-top { display: flex; align-items: center; justify-content: center; gap: 3px; width: 100%; min-width: 0; }
+.pay-steps { display: inline-flex; align-items: center; gap: 2px; flex: 0 0 auto; }
+.pay-step {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  line-height: 1;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.pay-step:hover { border-color: var(--accent); color: var(--accent); }
+.pay-step:disabled { opacity: .4; cursor: default; border-color: var(--line); color: var(--muted2); }
+/* 차수로 나뉜 항목의 소계 — 마지막 차수 오른쪽 아래 */
+.pay-sub {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 5px;
+  padding-top: 3px;
+  font-size: 10.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.pay-sub-label { font-weight: 600; color: var(--muted2); }
+.pay-sub-value { font-size: 11.5px; font-weight: 700; color: var(--label); }
+.pay-sub-ko { color: var(--muted2); }
 /* 오른쪽 — 윗줄에 [일정][금액] 나란히, 아랫줄에 원단위·억 환산 */
 .pay-right { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .pay-row .pay-main { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 6px; align-items: center; }
 .pay-row .pay-amount { min-width: 0; }
-.pay-name-text { font-size: 12px; font-weight: 700; color: var(--ink); white-space: nowrap; }
+.pay-name-text { font-size: 11.6px; font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .pay-rate { display: inline-flex; align-items: center; gap: 1px; }
 .pay-rate-inp {
   width: 30px;
@@ -1371,11 +1437,12 @@ select.inp,
   border-color: var(--line);
 }
 .pay-rate-pct { font-size: 10px; font-weight: 700; color: var(--muted2); }
-.pay-row .date-btn.is-compact { width: 100%; gap: 4px; padding: 9px 4px; font-size: 11.8px; letter-spacing: -0.02em; }
+.pay-row .date-btn.is-compact { width: 100%; gap: 3px; padding: 9px 3px; font-size: 11.4px; letter-spacing: -0.03em; }
+.pay-row .date-clear { width: 13px; height: 15px; font-size: 12px; }
 .pay-row .date-btn.is-compact .date-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pay-row .money-field { min-width: 0; }
-.pay-row .money-box .inp { padding: 9px 32px 9px 8px; font-size: 12.2px; }
-.pay-row .money-box .money-unit { right: 6px; font-size: 9.5px; }
+.pay-row .money-box .inp { padding: 9px 24px 9px 7px; font-size: 12.2px; }
+.pay-row .money-box .money-unit { right: 5px; font-size: 9px; }
 .pay-row.is-auto .money-box .inp { border-style: dashed; background: #F4F5FA; }
 .pay-row.is-auto .pay-name-text { color: var(--label); }
 .pay-row.is-auto .money-field.is-auto .money-box .inp { border-style: dashed; }
@@ -1413,8 +1480,13 @@ select.inp,
     align-items: flex-start;
     padding: 10px 0;
   }
-  .pay-name { flex: 0 0 72px; width: 72px; gap: 1px; }
-  .pay-name-text { font-size: 12.5px; white-space: nowrap; }
+  .paytable { --pay-name: 80px; }
+  .pay-row { gap: 8px; }
+  .pay-row .pay-main { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); }
+  .pay-name { gap: 2px; }
+  .pay-name-text { font-size: 11.4px; }
+  .pay-step { width: 15px; height: 15px; font-size: 11px; }
+  .pay-row .money-box .inp { padding-right: 26px; }
   .pay-rate-inp { width: 44px; padding: 1px 2px; }
   .pay-row .date-btn.is-compact {
     width: 100%;
@@ -1448,7 +1520,10 @@ select.inp,
 .sheet-add { padding: 0 0 8px; }
 
 /* 미리보기 머리의 문구 편집 · 기본값으로 */
-.panel-head .head-actions { display: flex; gap: 6px; flex: 0 0 auto; }
+.panel-head .head-actions { display: flex; gap: 6px; flex: 0 0 auto; margin-left: auto; }
+/* 전문가·협력업체 소개 머리의 「목록」 — 아이콘 + 짧은 글자만큼만 */
+#btn-vendor-list.is-compact-btn { padding: 8px 9px; gap: 4px; }
+#btn-vendor-list.is-compact-btn .btn-label { font-size: 12px; }
 .ghost.is-tpl { padding: 6px 9px; font-size: 11.2px; border-radius: 9px; }
 
 /* 목록의 '내 문구 · 수정됨' 표시 */
@@ -1644,8 +1719,10 @@ select.inp:disabled { appearance: none; -webkit-appearance: none; background-ima
 
 /* [매매][전세][월세] — 세 모드에서 버튼 크기·자리가 그대로 (월세만 금액칸이 두 칸)
    보증금·월세 이름은 금액칸 위 빈자리에 띄워 올려 두 모드의 높이를 똑같이 맞춘다 */
-.prop-money { align-items: start; padding-top: 14px; }
-.prop-money .seg.is-trade { flex: 0 0 auto; width: 140px; align-self: start; margin-top: 6px; }
+/* 매매·전세는 위에 이름표가 없으니 위 여백을 일반 폼 간격으로 줄인다 (월세만 이름표 자리 14px) */
+.prop-money { align-items: start; padding-top: 4px; }
+.prop-money.is-monthly { padding-top: 14px; }
+.prop-money .seg.is-trade { flex: 0 0 auto; width: 140px; align-self: start; margin-top: 3px; }
 .prop-money .seg.is-trade .seg-btn { flex: 1 1 0; min-width: 0; padding: 6px 3px; text-align: center; }
 .prop-money.is-monthly { align-items: start; }
 .money-pair .money-line { position: relative; display: block; }

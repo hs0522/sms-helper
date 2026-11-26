@@ -89,6 +89,37 @@ class AppTest(unittest.TestCase):
     def text(self):
         return self.page.input_value('#preview')
 
+    # 지급 일정 — 항목·차수 칸 (약정금·가계약금·계약금·중도금·잔금)
+    def pay_fill(self, key, man, idx=0):
+        self.page.fill(f'#fields [data-pay-amt="{key}"][data-pay-idx="{idx}"]', str(man))
+        self.wait(120)
+
+    def pay_rate(self, key, pct, idx=0):
+        self.page.fill(f'#fields [data-pay-rate="{key}"][data-pay-idx="{idx}"]', str(pct))
+        self.wait(150)
+
+    def pay_add(self, key, idx=0):
+        sel = f'#fields .pay-row[data-pay-item="{key}"][data-pay-idx="{idx}"] [data-pay-add]'
+        self.page.eval_on_selector(sel, "e => e.scrollIntoView({block: 'center'})")
+        self.wait(80)
+        self.page.click(sel)
+        self.wait(150)
+
+    def pay_del(self, key, idx=0):
+        sel = f'#fields .pay-row[data-pay-item="{key}"][data-pay-idx="{idx}"] [data-pay-del]'
+        self.page.eval_on_selector(sel, "e => e.scrollIntoView({block: 'center'})")
+        self.wait(80)
+        self.page.click(sel)
+        self.wait(150)
+
+    def pay_rows(self):
+        return self.js("""() => [...document.querySelectorAll('#fields .pay-row')].map(r => ({
+            item: r.dataset.payItem, idx: +r.dataset.payIdx,
+            name: r.querySelector('.pay-name-text').textContent.trim(),
+            amt: r.querySelector('[data-pay-amt]').value,
+            rate: (r.querySelector('[data-pay-rate]') || { value: null }).value }))""")
+
+
     def wait(self, ms=120):
         self.page.wait_for_timeout(ms)
 
@@ -971,20 +1002,26 @@ class AppTest(unittest.TestCase):
         self.assertIn('(23억 7천만)', self.page.inner_text('#fields'))
         self.assertIn('* 거래조건 : 매매 23억 7천만', self.text())
 
+
     def test_t8_percent_sets_amount(self):
-        # 지급 일정의 % 칸 — 나머지 금액(중도금·잔금)의 몇 %로 그 줄 금액을 채운다
+        # 지급 일정 % 칸 — 매매가 대비 비율로 그 차수 금액을 채우고, 금액을 적으면 %가 따라온다
         self.pick('t8')
-        self.page.fill('#fields [data-field="jungAmount"]', '19000')
-        self.page.fill('#fields [data-field="janAmount"]', '49400')
-        self.wait(150)
-        self.page.fill('#fields [data-pay-rate="gyeyakAmount"]', '10')
-        self.wait(200)
-        self.assertEqual(self.page.input_value('#fields [data-field="gyeyakAmount"]'), '7,600')
+        self.page.fill('#fields [data-field="price"]', '76000')
+        self.pay_rate('gyeyak', 10)
+        self.assertEqual(self.page.input_value('#fields [data-pay-amt="gyeyak"][data-pay-idx="0"]'), '7,600')
+        self.pay_fill('jung', 19000)
+        self.assertEqual(self.page.input_value('#fields [data-pay-rate="jung"][data-pay-idx="0"]'), '25')
+        # 잔금은 저절로 — 76,000 − 7,600 − 19,000
+        self.assertEqual(self.page.input_value('#fields [data-pay-amt="jan"][data-pay-idx="0"]'), '49,400')
         body = self.text()
-        self.assertIn('* 계약금 10% : 76,000,000원', body)
         self.assertIn('* 매매가 : 760,000,000원', body)
+        self.assertIn('* 계약금 10% : 76,000,000원', body)
         self.assertIn('* 중도금 25% : 190,000,000원', body)
         self.assertIn('* 잔금 : 494,000,000원', body)
+        # 매매가를 바꾸면 잔금이 다시 계산된다
+        self.page.fill('#fields [data-field="price"]', '80000')
+        self.wait(200)
+        self.assertEqual(self.page.input_value('#fields [data-pay-amt="jan"][data-pay-idx="0"]'), '53,400')
 
     def test_calendar_pick_date_and_time(self):
         self.pick_with('t10', {'trade': '매매', 'kind': '약정'})
@@ -2083,10 +2120,10 @@ class AppTest(unittest.TestCase):
         self.wait(120)
         self.assertNotIn('* 매물 :', self.text())
 
+
     def test_amount_display_mode_setting(self):
         self.pick_with('t10', {'trade': '매매', 'kind': '잔금'})
-        self.page.fill('#fields [data-field="jan"]', '67500')
-        self.wait(120)
+        self.pay_fill('gyeyak', 67500)
         self.assertIn('675,000,000원 (6억 7,500만 원)', self.text())
         # 설정 모달 버튼 이름 — 전체 / 만원 단위 / 끊어읽기
         self.page.click('#btn-settings')
@@ -2431,10 +2468,9 @@ class AppTest(unittest.TestCase):
         self.assertEqual(errors, [])
         ctx.close()
 
+
     def test_mobile_pay_table_compact_layout(self):
-        # 390×844 — 지급 일정 표는 위줄 라벨+일정, 아래줄 퍼센트+금액으로 놓인다.
-        # 왼쪽 열은 라벨·퍼센트 폭(76px)만, 오른쪽 열은 카드 오른쪽 끝까지 채워 좌우가 균형을 이룬다
-        # (오른쪽을 200px로 묶어 두면 카드 오른쪽에 빈 여백이 남아 왼쪽으로 쏠려 보인다).
+        # 390×844 — 왼쪽은 라벨·(+)(−)·% 가운데 정렬, 오른쪽은 일정·금액 한 줄 + 환산 줄
         ctx = self.browser.new_context(viewport={'width': 390, 'height': 844}, is_mobile=True, has_touch=True)
         page = ctx.new_page()
         errors = []
@@ -2447,9 +2483,9 @@ class AppTest(unittest.TestCase):
         page.wait_for_timeout(150)
         page.click('#sheet-list [data-id="t8"]')
         page.wait_for_timeout(220)
-        page.fill('#fields [data-field="jungAmount"]', '19000')
-        page.fill('#fields [data-field="janAmount"]', '49400')
-        page.fill('#fields [data-field="gyeyakAmount"]', '7600')
+        page.fill('#fields [data-field="price"]', '76000')
+        page.fill('#fields [data-pay-amt="gyeyak"][data-pay-idx="0"]', '7600')
+        page.fill('#fields [data-pay-amt="jung"][data-pay-idx="0"]', '19000')
         page.evaluate('document.activeElement && document.activeElement.blur()')
         page.wait_for_timeout(250)
         info = page.evaluate("""() => {
@@ -2459,19 +2495,21 @@ class AppTest(unittest.TestCase):
             const g = s => r.querySelector(s);
             const box = e => { const b = e.getBoundingClientRect();
               return {l:+b.left.toFixed(1), r:+b.right.toFixed(1), t:+b.top.toFixed(1), b:+b.bottom.toFixed(1), w:+b.width.toFixed(1)}; };
-            const rate = g('.pay-rate-inp'), rateWrap = g('.pay-rate'), date = g('.date-btn'), amount = g('.pay-amount input');
+            const rate = g('.pay-rate-inp'), date = g('.date-btn'), amount = g('.pay-amount input');
             const nm = g('.pay-name-text');
             const hint = g('.pay-hint');
+            const col = g('.pay-name').getBoundingClientRect();
             return { label: nm.textContent.trim(),
-                     rate: rate ? box(rate) : null, rateWrap: rateWrap ? box(rateWrap) : null,
+                     rate: rate ? box(rate) : null,
                      date: box(date), amount: box(amount), name: box(nm), hint: hint ? box(hint) : null,
-                     nameLines: Math.round(nm.getBoundingClientRect().height /
-                       parseFloat(getComputedStyle(nm).lineHeight || '16')),
+                     centered: Math.abs((nm.getBoundingClientRect().left
+                       + g('.pay-steps').getBoundingClientRect().right) / 2 - (col.left + col.width / 2)) <= 3,
                      amountFont: parseFloat(getComputedStyle(amount).fontSize),
                      rateFont: rate ? parseFloat(getComputedStyle(rate).fontSize) : null,
                      sameRow: Math.abs(date.getBoundingClientRect().top - amount.getBoundingClientRect().top) < 6,
                      rateBelowName: rate ? rate.getBoundingClientRect().top >= nm.getBoundingClientRect().bottom - 0.5 : true,
-                     hintBelow: hint ? hint.getBoundingClientRect().top >= amount.getBoundingClientRect().bottom - 0.5 : true };
+                     hintBelow: hint ? hint.getBoundingClientRect().top >= amount.getBoundingClientRect().bottom - 0.5 : true,
+                     amountNotClipped: amount.scrollWidth <= amount.clientWidth + 1 };
           });
           const cs = getComputedStyle(table);
           const innerRight = tb.right - parseFloat(cs.borderRightWidth) - parseFloat(cs.paddingRight);
@@ -2482,24 +2520,25 @@ class AppTest(unittest.TestCase):
                    panelRight: +document.querySelector('.form-panel').getBoundingClientRect().right.toFixed(1)};
         }""")
         self.assertLessEqual(info['scrollW'], info['winW'], '390px 가로 넘침')
-        self.assertEqual([r['label'] for r in info['rows']], ['가계약금', '계약금', '중도금', '잔금'])
+        self.assertEqual([r['label'] for r in info['rows']], ['약정금', '가계약금', '계약금', '중도금', '잔금'])
         for r in info['rows']:
             with self.subTest(row=r['label']):
                 self.assertGreaterEqual(r['amountFont'], 16, '금액 칸 글씨가 16px 미만')
                 self.assertLessEqual(r['amount']['r'], info['panelRight'] + 0.5, '금액 칸이 패널 밖으로')
+                self.assertTrue(r['centered'], '왼쪽 칸에서 가운데 정렬이 아니다')
+                self.assertTrue(r['amountNotClipped'], '금액이 잘린다')
                 # 일정·금액은 한 줄, 오른쪽은 카드 안쪽 끝까지
                 self.assertTrue(r['sameRow'], '일정과 금액이 한 줄이 아니다')
                 self.assertAlmostEqual(r['amount']['r'], info['innerRight'], delta=1.0, msg='금액 칸이 카드 오른쪽 끝에 닿지 않는다')
-                self.assertGreaterEqual(r['date']['l'], info['innerLeft'] + 70, msg='일정 칸은 왼쪽 구분 열 다음')
-                self.assertEqual(r['nameLines'], 1, f"{r['label']} 라벨이 줄바꿈됐다")
+                self.assertGreaterEqual(r['date']['l'], info['innerLeft'] + 80, msg='일정 칸은 왼쪽 구분 열 다음')
                 self.assertTrue(r['hintBelow'], '환산 줄은 금액 칸 아래')
                 if r['rate']:
                     self.assertGreaterEqual(r['rateFont'], 16, '퍼센트 칸 글씨가 16px 미만')
                     self.assertTrue(r['rateBelowName'], '퍼센트 칸이 라벨 아래줄이 아니다')
                     self.assertIn(r['label'], ('계약금', '중도금'), '비율 칸은 계약금·중도금에만')
                 else:
-                    self.assertIn(r['label'], ('가계약금', '잔금'), '퍼센트가 있으면 안 되는 항목')
-        # t10도 같은 규칙 (비율 칸 없이)
+                    self.assertIn(r['label'], ('약정금', '가계약금', '잔금'), '퍼센트가 있으면 안 되는 항목')
+        # t10도 같은 다섯 항목
         page.click('#btn-sheet')
         page.wait_for_timeout(150)
         page.click('#sheet-list [data-id="t10"]')
@@ -2515,10 +2554,9 @@ class AppTest(unittest.TestCase):
           return { rows, scrollW: document.documentElement.scrollWidth, winW: window.innerWidth };
         }""")
         self.assertLessEqual(info2['scrollW'], info2['winW'], 't10 390px 가로 넘침')
-        self.assertEqual([r['label'] for r in info2['rows']], ['계약금', '중도금', '잔금'])
+        self.assertEqual([r['label'] for r in info2['rows']], ['약정금', '가계약금', '계약금', '중도금', '잔금'])
         for r in info2['rows']:
             with self.subTest(row='t10 ' + r['label']):
-                self.assertFalse(r['hasRate'], '계약 일정 안내는 장부 금액을 그대로 쓰므로 퍼센트 칸이 없다')
                 self.assertTrue(r['sameRow'], 't10 일정·금액 한 줄')
         self.assertEqual(errors, [])
         ctx.close()
@@ -2958,53 +2996,50 @@ class AppTest(unittest.TestCase):
         self.assertEqual(len(self.page.query_selector_all('#fields [data-field="area"]')), 0,
                          '임대 조건에는 평형 칸이 없다')
 
+
     def test_t19_promo_property_block_and_type_info(self):
-        # 특가 매물 홍보 — 추천 매물 안내와 같은 매물 블록 + 강조 문구
+        # 특가 매물 홍보 — 추천 매물 안내와 같은 매물 블록 + 강조 문구, 타입·방향 칸은 없다
         self.pick('t19')
         fields = self.page.inner_text('#fields')
         self.assertIn('강조 문구', fields)
         self.assertIn('+ 매물 추가', fields)
-        # 예전 단지·층 / 평형 / 동·호로 빠르게 / 자동 변환 버튼은 없다
-        for gone in ('단지·층', '평형', '빠르게', '자동 변환'):
+        for gone in ('단지·층', '평형', '빠르게', '자동 변환', '타입·방향'):
             self.assertNotIn(gone, fields)
         self.assertEqual(len(self.page.query_selector_all('#fields [data-action="promoUnit"]')), 0)
+        self.assertEqual(len(self.page.query_selector_all('#fields [data-key="typeInfo"]')), 0,
+                         '타입·방향 칸은 없앴다')
         # 매물 블록은 추천 매물 안내(t7)와 같은 칸을 쓴다
         self.pick('t7')
-        t7_fields = self.js("""() => [...document.querySelectorAll('#fields [data-key]')]
-            .map(e => e.dataset.key)""")
+        t7_fields = self.js("() => [...document.querySelectorAll('#fields [data-key]')].map(e => e.dataset.key)")
         self.pick('t19')
-        t19_fields = self.js("""() => [...document.querySelectorAll('#fields [data-key]')]
-            .map(e => e.dataset.key)""")
-        for key in ('complex', 'dong', 'ho'):
-            self.assertIn(key, t7_fields)
-            self.assertIn(key, t19_fields)
+        t19_fields = self.js("() => [...document.querySelectorAll('#fields [data-key]')].map(e => e.dataset.key)")
+        self.assertEqual(t7_fields, t19_fields, '매물 칸 구성이 같다')
+        self.assertEqual(t19_fields, ['complex', 'dong', 'ho'], '단지·동·호 세 칸만')
         self.assertIn('🔑(매물)\n🔑최저가 조율 가능합니다', self.text())
         self.assertIn('마포래미안푸르지오 매매 특가 소식 전해드립니다!', self.text())
 
-        # 동·호수를 넣으면 그 동·라인의 평형·타입·방향이 자동으로 들어간다
+        # 동·호수를 넣어도 평형·타입·방향 줄이 붙지 않는다 (마래푸밖에 없는 정보)
         dong = '#fields [data-prop="items"][data-idx="0"][data-key="dong"]'
         ho = '#fields [data-prop="items"][data-idx="0"][data-key="ho"]'
         self.page.fill(dong, '205')
         self.page.fill(ho, '1203')
         self.wait(180)
-        type_inp = '#fields [data-prop="items"][data-idx="0"][data-key="typeInfo"]'
-        self.assertEqual(self.page.input_value(type_inp), '34평 84E · 동향')
         self.page.fill('#fields [data-prop="items"][data-idx="0"][data-money="amount"]', '210000')
         self.wait(200)
         body = self.text()
-        self.assertIn('🔑마포래미안푸르지오 205동 1203호 34평 84E · 동향', body)
+        self.assertIn('🔑마포래미안푸르지오 205동 1203호', body)
+        self.assertNotIn('34평', body)
+        self.assertNotIn('동향', body)
+        self.assertNotIn('84E', body)
         self.assertIn('🔑매매 21억으로 최저가 조율 가능합니다', body)
 
-        # [단지]로 가려도 호수 칸·배지는 살아 있고, 평형·타입은 그대로 따라온다
+        # [단지]로 가려도 호수 칸·배지는 살아 있고, 동·호만 따라온다
         self.page.click('#fields [data-prop-unit="dong"]')
         self.wait(150)
-        self.assertIn('🔑마포래미안푸르지오 2단지 1203호 34평 84E · 동향', self.text())
+        self.assertIn('🔑마포래미안푸르지오 2단지 1203호', self.text())
         self.page.click('#fields [data-prop-unit="ho"]')
         self.wait(150)
-        self.assertIn('🔑마포래미안푸르지오 2단지 12층 34평 84E · 동향', self.text())
-        self.page.fill(ho, '1002')
-        self.wait(180)
-        self.assertEqual(self.page.input_value(type_inp), '34평 84A · 동향')
+        self.assertIn('🔑마포래미안푸르지오 2단지 12층', self.text())
 
         # 강조 문구 · 거래 유형은 매물 줄에서 고른다
         self.page.fill('#fields [data-field="emphasis"]', '급매로 조율 가능합니다')
@@ -3015,25 +3050,15 @@ class AppTest(unittest.TestCase):
         self.assertIn('마포래미안푸르지오 전세 특가 소식 전해드립니다!', body)
         self.assertIn('🔑전세 11억 5천만으로 급매로 조율 가능합니다', body)
 
-        # 표에 없는 동이면 빈 칸 — 직접 적은 값은 동·호를 바꿔도 그대로 둔다
-        self.page.fill(dong, '999')
-        self.wait(180)
-        self.assertEqual(self.page.input_value(type_inp), '')
-        self.page.fill(type_inp, '34평 84A · 남향')
-        self.wait(150)
-        self.page.fill(ho, '1203')
-        self.wait(180)
-        self.assertEqual(self.page.input_value(type_inp), '34평 84A · 남향')
-        self.assertIn('34평 84A · 남향', self.text())
 
     def test_t19_promo_other_complex_has_no_type_info(self):
-        # 다른 단지 이름을 넣으면 마래푸 타입표를 쓰지 않는다
+        # 다른 단지 이름을 넣어도 마래푸 타입표를 쓰지 않는다 (타입·방향 줄 자체가 없다)
         self.pick('t19')
         self.page.fill('#fields [data-prop="items"][data-idx="0"][data-key="complex"]', '이편한세상신촌')
         self.page.fill('#fields [data-prop="items"][data-idx="0"][data-key="dong"]', '205')
         self.page.fill('#fields [data-prop="items"][data-idx="0"][data-key="ho"]', '1203')
         self.wait(200)
-        self.assertEqual(self.page.input_value('#fields [data-prop="items"][data-idx="0"][data-key="typeInfo"]'), '')
+        self.assertEqual(len(self.page.query_selector_all('#fields [data-key="typeInfo"]')), 0)
         self.assertIn('이편한세상신촌 205동 1203호', self.text())
 
     def test_maraepu_unit_table(self):
@@ -3398,35 +3423,40 @@ class AppTest(unittest.TestCase):
         self.assertTrue(self.split(totalMan=67500, gyeyakMan=-1)['negative'])
         self.assertEqual(self.split(gyeyakMan=1000)['reason'], 'no-base')
 
+
     def test_t8_payment_split_live(self):
-        # 지급 일정에 적은 금액이 그대로 문자·총합계에 나온다 (가계약금은 계약금에 포함되므로 합계에서 뺀다)
+        # 지급 일정 — 약정금·가계약금은 총합계에서 빼고, 잔금은 매매가 − 계약금 − 중도금
         self.pick('t8')
-        self.page.fill('#fields [data-field="jeongAmount"]', '3000')
-        self.page.fill('#fields [data-field="gyeyakAmount"]', '6750')
-        self.page.fill('#fields [data-field="jungAmount"]', '16875')
-        self.page.fill('#fields [data-field="janAmount"]', '43875')
+        self.page.fill('#fields [data-field="price"]', '67500')
+        self.pay_fill('yakjeong', 1000)
+        self.pay_fill('jeong', 3000)
+        self.pay_fill('gyeyak', 6750)
+        self.pay_fill('jung', 16875)
         self.wait(200)
         total = self.page.inner_text('.pay-total').replace('\n', ' ')
         self.assertIn('총합계', total)
         self.assertIn('675,000,000원', total)
         self.assertIn('(6억 7,500만원)', total)
+        self.assertEqual(self.page.input_value('#fields [data-pay-amt="jan"][data-pay-idx="0"]'), '43,875')
         body = self.text()
+        self.assertIn('* 약정금 : 10,000,000원', body)
         self.assertIn('* 가계약금 : 30,000,000원', body)
         self.assertIn('* 잔금 : 438,750,000원', body)
-        # 가계약금을 빼면 총합계가 줄어든다
-        self.page.fill('#fields [data-field="jeongAmount"]', '')
-        self.wait(150)
-        self.assertIn('675,000,000원', self.page.inner_text('.pay-total'))
-        self.page.fill('#fields [data-field="jungAmount"]', '')
+        # 중도금을 비우면 잔금이 늘어난다
+        self.page.fill('#fields [data-pay-amt="jung"][data-pay-idx="0"]', '')
         self.wait(200)
-        self.assertIn('506,250,000원', self.page.inner_text('.pay-total'))
+        self.assertEqual(self.page.input_value('#fields [data-pay-amt="jan"][data-pay-idx="0"]'), '60,750')
+        # 계약금·중도금이 매매가보다 크면 잔금을 계산하지 않고 경고한다
+        self.pay_fill('jung', 70000)
+        self.wait(200)
+        self.assertEqual(self.page.input_value('#fields [data-pay-amt="jan"][data-pay-idx="0"]'), '')
+        self.assertIn('많습니다', self.page.inner_text('.pay-total'))
 
     def test_paytable_layout_and_rate_edit(self):
-        # 스파이더 계약 팝업형 표 — 구분(+%) | 일정·금액 한 줄 + 원단위 환산 줄
+        # 공통 지급 일정 — 구분(가운데 정렬 + (+)(−) + %) | 일정·금액 한 줄 + 원단위 환산 줄
         self.pick('t8')
-        heads = self.js("() => [...document.querySelectorAll('#fields .paytable-head span')].map(e => e.textContent)""")
+        heads = self.js("() => [...document.querySelectorAll('#fields .paytable-head span')].map(e => e.textContent)")
         self.assertEqual(heads, ['구분', '일정 · 금액'])
-        # 박스 왼쪽 위 섹션 라벨 — 아래 '특약'(.group-head)과 같은 모양
         title = self.page.query_selector('#fields .paytable-title')
         self.assertIsNotNone(title, '지급 일정 섹션 라벨이 없다')
         self.assertEqual(title.inner_text().strip(), '지급 일정')
@@ -3436,59 +3466,40 @@ class AppTest(unittest.TestCase):
           return [a.color === b.color, a.fontSize === b.fontSize, a.fontWeight === b.fontWeight];
         }""")
         self.assertEqual(same, [True, True, True], '섹션 라벨이 특약과 다른 모양이다')
-        pos = self.js("""() => {
-          const t = document.querySelector('#fields .paytable-title').getBoundingClientRect();
-          const b = document.querySelector('#fields .paytable').getBoundingClientRect();
-          return {top: t.top - b.top, left: t.left - b.left};
-        }""")
-        self.assertLess(pos['top'], 14, '섹션 라벨은 박스 위쪽')
-        self.assertLess(pos['left'], 20, '섹션 라벨은 박스 왼쪽')
-        names = self.js("""() => [...document.querySelectorAll('#fields .pay-name-text')].map(e => e.textContent)""")
-        self.assertEqual(names, ['가계약금', '계약금', '중도금', '잔금'])
-        # 왼쪽은 구분 + % 를 위아래로 바짝, 오른쪽은 일정·금액을 한 줄에
-        cols = self.js("""() => {
-          const r = [...document.querySelectorAll('#fields .pay-row')][1];
-          const label = r.querySelector('.pay-name-text');
-          const lb = label.getBoundingClientRect(), rb = r.querySelector('.pay-rate').getBoundingClientRect();
-          const amount = r.querySelector('.money-box').getBoundingClientRect();
-          const date = r.querySelector('.date-btn').getBoundingClientRect();
-          const hint = r.querySelector('.pay-hint').getBoundingClientRect();
-          const nameW = r.querySelector('.pay-name').getBoundingClientRect().width;
-          return {nameW, rateBelow: rb.top >= lb.bottom - 0.5, rateGap: rb.top - lb.bottom,
-                  sameRow: Math.abs((date.top + date.bottom) / 2 - (amount.top + amount.bottom) / 2) < 4,
-                  amountRightOfDate: amount.left >= date.right - 0.5,
-                  hintBelow: hint.top >= amount.bottom - 0.5,
-                  amountW: amount.width, dateW: date.width};
-        }""")
-        self.assertLessEqual(cols['nameW'], 80, '구분 열이 너무 넓다')
-        self.assertTrue(cols['rateBelow'], '% 칸이 라벨 옆에 남아 있다')
-        self.assertLessEqual(cols['rateGap'], 4, '라벨과 % 사이가 떨어져 있다')
-        self.assertTrue(cols['sameRow'], '일정과 금액이 한 줄이 아니다')
-        self.assertTrue(cols['amountRightOfDate'], '금액 칸은 일정 칸 오른쪽')
-        self.assertTrue(cols['hintBelow'], '원단위 환산 줄은 일정·금액 줄 아래')
-        self.assertGreaterEqual(cols['amountW'], 85, '금액 칸이 너무 좁다')
-        self.assertGreater(cols['dateW'], 110, '일정 칸이 좁다')
-        self.assertEqual(len(self.page.query_selector_all('#fields .pay-row .date-btn')), 4, '줄마다 일정 버튼')
-        self.assertEqual(len(self.page.query_selector_all('#fields .pay-row .pay-amount .money-box')), 4)
-        self.assertEqual(len(self.page.query_selector_all('#fields .pay-row .pay-hint')), 4, '줄마다 원단위 환산 줄')
-        # 1차 입금·상세 메모는 덜어냈다 — 접힌 상세도, 그 입력칸도 없다
-        self.assertEqual(self.page.query_selector_all('#fields .pay-more'), [], '1차 입금 상세가 남아 있다')
-        self.assertEqual(self.page.query_selector_all('#fields [data-field="jeongFirst"]'), [])
-        self.assertNotIn('1차 입금', self.page.inner_text('#fields .paytable'))
-        self.assertNotIn('넣으면 잔금이 자동으로 계산됩니다', self.page.inner_text('#fields'))
-        # 금액을 넣으면 비율 배지가 따라오고, 비율을 고치면 그 줄 금액이 바뀐다
-        self.page.fill('#fields [data-field="jungAmount"]', '16875')
-        self.page.fill('#fields [data-field="janAmount"]', '43875')
-        self.page.fill('#fields [data-field="gyeyakAmount"]', '6750')
-        self.wait(200)
-        self.assertEqual(self.page.input_value('#fields [data-pay-rate="gyeyakAmount"]'), '10')
-        self.assertEqual(self.page.input_value('#fields [data-pay-rate="jungAmount"]'), '25')
-        self.page.fill('#fields [data-pay-rate="gyeyakAmount"]', '20')
-        self.wait(250)
-        # 나머지(중도금+잔금)의 20/80 → 계약금
-        self.assertEqual(self.page.input_value('#fields [data-field="gyeyakAmount"]'), '15,188')
-        self.assertIn('* 계약금 20% : 151,880,000원', self.text())
+        # 약정금 → 가계약금 → 계약금 → 중도금 → 잔금 다섯 항목이 늘 서 있다
+        names = [r['name'] for r in self.pay_rows()]
+        self.assertEqual(names, ['약정금', '가계약금', '계약금', '중도금', '잔금'])
+        self.assertEqual(len(self.page.query_selector_all('#fields .pay-row .date-btn')), 5, '줄마다 일정 버튼')
+        self.assertEqual(len(self.page.query_selector_all('#fields .pay-row .pay-amount .money-box')), 5)
+        self.assertEqual(len(self.page.query_selector_all('#fields .pay-row .pay-hint')), 5, '줄마다 원단위 환산 줄')
+        # (+)(−) 는 다섯 항목 모두에 있고, 라벨·비율은 왼쪽 칸 가운데로 모인다
+        self.assertEqual(len(self.page.query_selector_all('#fields .pay-row [data-pay-add]')), 5)
+        self.assertEqual(len(self.page.query_selector_all('#fields .pay-row [data-pay-del]')), 5)
+        centered = self.js("""() => [...document.querySelectorAll('#fields .pay-row')].map(r => {
+          const col = r.querySelector('.pay-name').getBoundingClientRect();
+          const mid = col.left + col.width / 2;
+          const lab = r.querySelector('.pay-name-text').getBoundingClientRect();
+          const steps = r.querySelector('.pay-steps').getBoundingClientRect();
+          const rate = r.querySelector('.pay-rate');
+          const rateOff = rate ? Math.abs((rate.getBoundingClientRect().left + rate.getBoundingClientRect().right) / 2 - mid) : 0;
+          return { off: Math.abs((lab.left + steps.right) / 2 - mid), rateOff,
+                   rateBelow: rate ? rate.getBoundingClientRect().top >= lab.bottom - 0.5 : true };
+        })""")
+        for c in centered:
+            self.assertLessEqual(c['off'], 2.5, '라벨과 (+)(−) 가 칸 가운데에 오지 않는다')
+            self.assertLessEqual(c['rateOff'], 2.5, '% 칸이 칸 가운데에 오지 않는다')
+            self.assertTrue(c['rateBelow'], '% 칸은 라벨 아래줄')
+        # 금액을 넣으면 비율이 따라오고, 비율을 고치면 그 차수 금액이 바뀐다
+        self.page.fill('#fields [data-field="price"]', '67500')
+        self.pay_fill('gyeyak', 6750)
+        self.pay_fill('jung', 16875)
+        self.assertEqual(self.page.input_value('#fields [data-pay-rate="gyeyak"][data-pay-idx="0"]'), '10')
+        self.assertEqual(self.page.input_value('#fields [data-pay-rate="jung"][data-pay-idx="0"]'), '25')
+        self.pay_rate('gyeyak', 20)
+        self.assertEqual(self.page.input_value('#fields [data-pay-amt="gyeyak"][data-pay-idx="0"]'), '13,500')
+        self.assertIn('* 계약금 20% : 135,000,000원', self.text())
         self.assertEqual(self.page.query_selector_all('#fields .pay-total-note'), [], '맞을 때는 안내 글자 없음')
+
 
     def test_paytable_date_column_shows_full_date(self):
         # 일정 칸에 '연.월.일 (요일)'이 잘리지 않고 다 들어간다 (1440·1000 두 창에서)
@@ -3501,11 +3512,13 @@ class AppTest(unittest.TestCase):
                 page.reload(wait_until='networkidle')
                 page.click('#tpl-list [data-id="t8"]')
                 page.wait_for_timeout(200)
-                page.fill('#fields [data-field="gyeyakAmount"]', '6750')
-                page.fill('#fields [data-field="jungAmount"]', '16875')
+                page.fill('#fields [data-field="price"]', '67500')
+                page.fill('#fields [data-pay-amt="gyeyak"][data-pay-idx="0"]', '6750')
+                page.fill('#fields [data-pay-amt="jung"][data-pay-idx="0"]', '16875')
                 page.wait_for_timeout(150)
-                # 가계약금·계약금·중도금·잔금 일정을 달력으로 채운다
-                for field, day in (('jeongDate', 28), ('gyeyakDate', 5), ('jungDate', 15), ('janDate', 26)):
+                # 다섯 항목의 일정을 달력으로 채운다
+                for field, day in (('pay:yakjeong:0', 27), ('pay:jeong:0', 28), ('pay:gyeyak:0', 5),
+                                   ('pay:jung:0', 15), ('pay:jan:0', 26)):
                     page.click(f'#fields [data-date="{field}"]')
                     page.wait_for_timeout(120)
                     page.click(f'#calpop [data-cal-day="{day}"]')
@@ -3525,7 +3538,7 @@ class AppTest(unittest.TestCase):
                             moneyW: money.width, dateW: btn.width, moneyRightOfDate: money.left >= btn.right - 0.5,
                             hintClipped: hint.scrollWidth > hint.clientWidth + 1};
                   })""")
-                self.assertEqual(len(info), 4)
+                self.assertEqual(len(info), 5)
                 for row in info:
                     self.assertRegex(row['text'], r'^\d{4}\.\d{2}\.\d{2} \(\S\)$', '일정이 날짜로 보인다')
                     self.assertGreaterEqual(row['spanW'], row['textW'] - 0.4, f"{row['text']} 가 잘렸다")
@@ -3534,28 +3547,31 @@ class AppTest(unittest.TestCase):
                     self.assertTrue(row['moneyRightOfDate'], '금액 칸은 일정 칸 오른쪽에 나란히')
                 ctx.close()
 
+
     def test_t10_paytable_rows(self):
-        # 계약 일정 안내 — 매매는 가계약|계약|중도금|잔금 4칸, 전세·월세는 계약|중도금|잔금 3칸
+        # 계약 일정 안내 — 매매·전세·월세 모두 같은 다섯 항목 줄
         self.pick_with('t10', {'trade': '매매', 'kind': '잔금'})
         self.assertEqual(self.page.inner_text('#fields .paytable-title').strip(), '지급 일정')
-        names = self.js("""() => [...document.querySelectorAll('#fields .pay-name-text')].map(e => e.textContent)""")
-        self.assertEqual(names, ['계약금', '중도금', '잔금'])
-        kinds = self.js("""() => [...document.querySelectorAll('#fields [data-seg="kind"]')].map(b => b.dataset.value)""")
+        names = [r['name'] for r in self.pay_rows()]
+        self.assertEqual(names, ['약정금', '가계약금', '계약금', '중도금', '잔금'])
+        kinds = self.js("() => [...document.querySelectorAll('#fields [data-seg=\"kind\"]')].map(b => b.dataset.value)")
         self.assertEqual(kinds, ['가계약', '계약', '중도금', '잔금'], '매매는 네 칸')
         # 거래 유형 줄은 없애고 매물칸의 [매매][전세][월세]로 고른다
         self.assertEqual(len(self.page.query_selector_all('#fields [data-seg="trade"]')), 0,
                          '거래 유형 줄은 매물칸 안에만 있다')
         self.page.click('#fields [data-prop-trade="prop"][data-value="전세"]')
         self.wait(150)
-        kinds = self.js("""() => [...document.querySelectorAll('#fields [data-seg="kind"]')].map(b => b.dataset.value)""")
+        kinds = self.js("() => [...document.querySelectorAll('#fields [data-seg=\"kind\"]')].map(b => b.dataset.value)")
         self.assertEqual(kinds, ['계약', '중도금', '잔금'], '전세는 세 칸')
-        names = self.js("""() => [...document.querySelectorAll('#fields .pay-name-text')].map(e => e.textContent)""")
-        self.assertEqual(names, ['계약금', '잔금'], '전세에는 중도금 줄이 없다')
+        names = [r['name'] for r in self.pay_rows()]
+        self.assertEqual(names, ['약정금', '가계약금', '계약금', '중도금', '잔금'], '전세도 같은 포맷')
         self.assertEqual(len(self.page.query_selector_all('#fields [data-money="rent"]')), 0)
         self.page.click('#fields [data-prop-trade="prop"][data-value="월세"]')
         self.wait(150)
         self.assertEqual(len(self.page.query_selector_all('#fields [data-money="rent"]')), 1,
                          '월세일 때만 월차임 칸')
+        names = [r['name'] for r in self.pay_rows()]
+        self.assertEqual(names, ['약정금', '가계약금', '계약금', '중도금', '잔금'], '월세도 같은 포맷')
         # 매매대금 입력칸은 없고, 지급 일정 금액을 더한 총합계가 아래에 나온다
         self.page.click('#fields [data-prop-trade="prop"][data-value="매매"]')
         self.wait(150)
@@ -3563,8 +3579,8 @@ class AppTest(unittest.TestCase):
                          '매물칸에 매매 금액 한 칸')
         self.assertEqual(len(self.page.query_selector_all('#fields [data-field="price"]')), 0,
                          '따로 둔 매매대금 입력칸은 없앴다')
-        self.page.fill('#fields [data-field="gyeyak"]', '1000')
-        self.page.fill('#fields [data-field="jan"]', '9000')
+        self.page.fill('#fields [data-money="amount"]', '10000')
+        self.page.fill('#fields [data-pay-amt="gyeyak"][data-pay-idx="0"]', '1000')
         self.wait(200)
         self.assertIn('(1억원)', self.page.inner_text('.pay-total').replace(' ', ''))
 
@@ -3621,6 +3637,7 @@ class AppTest(unittest.TestCase):
         self.wait(100)
         self.assertIn('2단지', self.text())
 
+
     def test_paytable_mobile_and_small_window(self):
         for w, h in ((1000, 720), (390, 844)):
             with self.subTest(viewport=f'{w}x{h}'):
@@ -3639,9 +3656,9 @@ class AppTest(unittest.TestCase):
                 else:
                     page.click('#tpl-list [data-id="t8"]')
                 page.wait_for_timeout(200)
-                page.fill('#fields [data-field="gyeyakAmount"]', '6750')
-                page.fill('#fields [data-field="jungAmount"]', '16875')
-                page.fill('#fields [data-field="janAmount"]', '43875')
+                page.fill('#fields [data-field="price"]', '67500')
+                page.fill('#fields [data-pay-amt="gyeyak"][data-pay-idx="0"]', '6750')
+                page.fill('#fields [data-pay-amt="jung"][data-pay-idx="0"]', '16875')
                 page.evaluate('document.activeElement && document.activeElement.blur()')
                 page.wait_for_timeout(250)
                 info = page.evaluate("""() => {
@@ -3678,27 +3695,34 @@ class AppTest(unittest.TestCase):
                 self.assertEqual(errors, [])
                 ctx.close()
 
+
     def test_t10_payment_sum_live(self):
-        # 계약 일정 안내 — 장부에 적은 계약금·중도금·잔금을 그대로 더해 총합계를 보여 준다
+        # 계약 일정 안내 — 지급 일정 금액을 그대로 더해 총합계(계약금+중도금+잔금)를 보여 준다
         self.pick_with('t10', {'trade': '매매', 'kind': '중도금'})
-        # 매매는 매매대금 입력칸 없이 지급 일정 금액만 적는다
         self.assertEqual(len(self.page.query_selector_all('#fields [data-field="price"]')), 0,
                          '매매대금 입력칸은 없앤다')
-        self.page.fill('#fields [data-field="gyeyak"]', '6750')
-        self.page.fill('#fields [data-field="jung"]', '51250')
-        self.page.fill('#fields [data-field="jan"]', '9500')
-        self.wait(200)
+        self.page.fill('#fields [data-money="amount"]', '67500')
+        self.pay_fill('gyeyak', 6750)
+        self.pay_fill('jung', 51250)
         self.assertIn('6억 7,500만', self.page.inner_text('.pay-total'))
         body = self.text()
-        self.assertIn('* 계약금 : 67,500,000원', body)
-        self.assertIn('* 중도금 : 512,500,000원', body)
+        self.assertIn('* 계약금 10% : 67,500,000원', body)
+        self.assertIn('* 중도금 75.9% : 512,500,000원', body)
         self.assertIn('* 잔금 : 95,000,000원', body)
         self.assertIn('* 합계 : 675,000,000원', body)
-        # 전세 — 보증금(매물칸) + 계약금·잔금 (중도금 줄 없음)
+        # 약정금·가계약금은 합계에서 빼고 따로 적는다
+        self.pay_fill('yakjeong', 3000)
+        self.pay_fill('jeong', 5000)
+        self.wait(200)
+        body = self.text()
+        self.assertIn('* 약정금 : 30,000,000원', body)
+        self.assertIn('* 가계약금 : 50,000,000원', body)
+        self.assertIn('* 합계 : 675,000,000원', body)
+        # 전세 — 보증금(매물칸) + 같은 다섯 항목
         self.page.click('#fields [data-prop-trade="prop"][data-value="전세"]')
         self.wait(150)
+        self.pay_fill('gyeyak', 1000)
         self.page.fill('#fields [data-money="amount"]', '10000')
-        self.page.fill('#fields [data-field="gyeyak"]', '1000')
         self.wait(250)
         body = self.text()
         self.assertIn('* 보증금 : 100,000,000원', body)
@@ -3708,25 +3732,35 @@ class AppTest(unittest.TestCase):
         self.wait(150)
         self.page.fill('#fields [data-money="deposit"]', '10000')
         self.page.fill('#fields [data-money="rent"]', '50')
-        self.wait(250)
+        self.wait(300)
         body = self.text()
         self.assertIn('* 보증금 : 100,000,000원 (1억 원) / 월차임 : 500,000원 (50만 원)', body)
 
+
     def test_t8_autofill_uses_split(self):
-        # 가계약금은 총합계(매매가)에서 빼고 더한다 — 계약금에 포함되기 때문
+        # 가계약금은 계약금에 포함되므로 계약일에는 계약금에서 가계약금을 뺀 나머지를 입금한다
         self.pick('t8')
-        self.page.fill('#fields [data-field="jeongAmount"]', '3000')
-        self.page.fill('#fields [data-field="gyeyakAmount"]', '6750')
-        self.page.fill('#fields [data-field="janAmount"]', '60750')
+        self.page.click('#fields [data-seg="kind"][data-value="계약"]')
+        self.wait(150)
+        self.page.fill('#fields [data-field="price"]', '67500')
+        self.pay_fill('jeong', 3000)
+        self.pay_fill('gyeyak', 6750)
         self.wait(200)
         total = self.page.inner_text('.pay-total')
         self.assertIn('675,000,000원', total)
         body = self.text()
         self.assertIn('* 매매가 : 675,000,000원', body)
         self.assertIn('* 가계약금 : 30,000,000원', body)
-        self.assertIn('가계약금 30,000,000원', body)
-        self.assertIn('은 반환받고, 계약금 전체를 입금하기로 한다.', body)
+        self.assertIn('가계약금 30,000,000원은 계약금에 포함되므로, 계약일에는 계약금 67,500,000원 중 '
+                      '가계약금을 제외한 37,500,000원을 입금합니다.', body)
         self.assertIn('계약금 10% : 67,500,000원', body)
+        # 계약일에 실제로 입금하는 금액은 계약금 − 가계약금
+        self.assertIn('아래 계좌로 37,500,000원', body)
+        # 약정금이 있으면 계약일에 전액 반환받는다는 안내가 붙는다
+        self.pay_fill('yakjeong', 1000)
+        self.wait(200)
+        self.assertIn('약정금 10,000,000원은 계약일에 전액 반환받고, 계약금 67,500,000원 전액을 입금합니다.',
+                      self.text())
 
     def test_fee_rate_brackets_and_boundaries(self):
         sale = [(4999, 0.6), (5000, 0.5), (19999, 0.5), (20000, 0.4), (89999, 0.4),
@@ -4625,27 +4659,27 @@ class AppTest(unittest.TestCase):
                     ctx.close()
 
     # ============================================================== 버전 · 배포 파일
-    def test_24_version_bumped_to_1_3_0(self):
+
+    def test_24_version_bumped_to_1_4_0(self):
         # 서비스 워커 · 화면 캐시 주소 · 안드로이드 빌드 번호가 모두 같은 버전을 가리킨다
         with open(os.path.join(ROOT, 'sw.js'), encoding='utf-8') as f:
             sw = f.read()
         m = re.search(r"var VERSION = '(v\d+\.\d+\.\d+)';", sw)
         self.assertIsNotNone(m, 'sw.js에 VERSION이 있다')
         ver = m.group(1)
-        self.assertEqual(ver, 'v1.3.0')
+        self.assertEqual(ver, 'v1.4.0')
         self.assertIn("'js/sync.js'", sw)
         # 새 파일(동호수 타입표)도 오프라인 캐시에 들어간다
         self.assertIn("'js/maraepu-types.js'", sw)
         with open(os.path.join(ROOT, 'index.html'), encoding='utf-8') as f:
             html = f.read()
         for f_ in ('icons', 'maraepu-types', 'core', 'templates', 'sync', 'app'):
-            self.assertIn(f'js/{f_}.js?v=1.3.0', html)
-        self.assertIn('styles.css?v=1.3.0', html)
+            self.assertIn(f'js/{f_}.js?v=1.4.0', html)
+        self.assertIn('styles.css?v=1.4.0', html)
         gradle = open(os.path.join(ROOT, 'android/app/build.gradle'), encoding='utf-8').read()
-        self.assertIn('versionCode 14', gradle)
-        self.assertIn("versionName '1.3.0'", gradle)
+        self.assertIn('versionCode 15', gradle)
+        self.assertIn("versionName '1.4.0'", gradle)
 
-    # ============================================================== v1.2.0 피드백(12장) 회귀
     def test_t8_deal_combos_and_labels(self):
         # 계약 조건 안내 — [매매][전세][월세] | [가계약][계약], 다섯 버튼이 한 줄·같은 크기
         self.pick('t8')
@@ -4672,11 +4706,12 @@ class AppTest(unittest.TestCase):
         self.assertLessEqual(btns['divW'], 2, '거래유형·계약구분 사이 얇은 구분선')
         self.assertTrue(btns['divTall'], '구분선이 세로로 서지 않는다')
         self.assertTrue(btns['dividerAfter'], '구분선은 거래유형과 계약구분 사이')
-        # 매매가 입력칸은 없앴다 (지급 일정 총합계가 매매가)
-        self.assertEqual(len(self.page.query_selector_all('#fields [data-field="price"]')), 0,
-                         '매매가 입력칸은 없앴다')
+        # 매매가(기준 금액)는 지급 일정 위 한 칸에서 적는다 — 잔금 자동 계산의 기준
+        self.assertEqual(len(self.page.query_selector_all('#fields [data-field="price"]')), 1,
+                         '매매가 입력칸이 있어야 잔금을 계산한다')
+        self.assertIn('매매가', self.page.inner_text('#fields'))
         body = self.text()
-        self.assertIn('매매가계약 주요내용', body)
+        self.assertIn('매매 가계약 주요내용', body)
         self.assertIn('* 입금계좌 :', body)
         self.assertIn('* 물건지 : 서울시 마포구 아현동 777 외 3필지', body)
         self.page.click('#fields [data-seg="kind"][data-value="계약"]')
@@ -4813,17 +4848,24 @@ class AppTest(unittest.TestCase):
 
     # ============================================================== v1.3.0 피드백(9장) 회귀
     def test_t20_vendor_list_button_and_modal(self):
-        # 「목록 보기」는 전문가·협력업체 소개에서만, 비우기 왼쪽에 선다
+        # 「목록」은 전문가·협력업체 소개에서만, 비우기 바로 왼쪽에 컴팩트하게 선다
         self.pick('t2')
-        self.assertTrue(self.page.query_selector('#btn-vendor-list').is_hidden(), '다른 문자에는 목록 보기가 없다')
+        self.assertTrue(self.page.query_selector('#btn-vendor-list').is_hidden(), '다른 문자에는 목록이 없다')
         self.pick('t20')
         self.assertFalse(self.page.query_selector('#btn-vendor-list').is_hidden(), '전문가·협력업체 소개에는 있다')
-        order = self.js("""() => {
+        self.assertEqual(self.page.inner_text('#btn-vendor-list').strip(), '목록', '글자는 「목록」만')
+        gap = self.js("""() => {
           const a = document.querySelector('#btn-vendor-list').getBoundingClientRect();
           const b = document.querySelector('#btn-reset').getBoundingClientRect();
-          return a.right <= b.left + 0.5;
+          const head = document.querySelector('.form-panel .panel-head').getBoundingClientRect();
+          const title = document.querySelector('#form-title').getBoundingClientRect();
+          return {gap: b.left - a.right, right: head.right - b.right, titleGap: head.right - title.right,
+                  w: a.width, h: a.height};
         }""")
-        self.assertTrue(order, '목록 보기는 비우기 왼쪽')
+        self.assertGreaterEqual(gap['gap'], 0, '목록은 비우기 왼쪽')
+        self.assertLessEqual(gap['gap'], 8, f"목록과 비우기 사이가 멀다 {gap}")
+        self.assertLessEqual(gap['w'], 78, f"목록 버튼이 넓다 {gap}")
+        self.assertLessEqual(gap['right'], 18, '머리 오른쪽 끝에 붙어 있다')
         self.page.click('#btn-vendor-list')
         self.wait(200)
         self.assertTrue(self.page.is_visible('#vendor-list .modal-card'))
@@ -4892,6 +4934,189 @@ class AppTest(unittest.TestCase):
         self.page.fill('#fields [data-field="rent"]', '250')
         self.wait(200)
         self.assertIn('보증금 1억 / 월세 250만 원까지', self.text())
+
+    # ============================================================== v1.4.0 피드백(8장) 회귀
+    def test_v140_common_schedule_parts_add_remove_subtotal(self):
+        # 약정금·가계약금·계약금·중도금·잔금 모두 (+)(−) 로 차수를 더하고 뺄 수 있다
+        self.pick('t8')
+        self.page.fill('#fields [data-field="price"]', '76000')
+        self.pay_fill('gyeyak', 7600)
+        self.pay_fill('jung', 19000)
+        self.pay_add('jung')
+        rows = self.pay_rows()
+        self.assertEqual([(r['item'], r['idx'], r['name']) for r in rows if r['item'] == 'jung'],
+                         [('jung', 0, '중도금 1차'), ('jung', 1, '중도금 2차')])
+        self.pay_fill('jung', 9500, idx=1)
+        # 소계는 그 항목의 마지막 차수 오른쪽 아래에
+        subs = self.js("""() => [...document.querySelectorAll('#fields .pay-sub')].map(e => ({
+            key: e.dataset.paySub, text: e.textContent,
+            row: e.closest('.pay-row').dataset.payItem + e.closest('.pay-row').dataset.payIdx,
+            last: e.closest('.pay-row').nextElementSibling === null ||
+                  e.closest('.pay-row').nextElementSibling.dataset.payItem !== 'jung'}))""")
+        self.assertEqual(len(subs), 1, '차수가 둘 이상인 항목만 소계를 보인다')
+        self.assertEqual(subs[0]['key'], 'jung')
+        self.assertIn('285,000,000', subs[0]['text'])
+        self.assertIn('2억 8,500만', subs[0]['text'])
+        self.assertEqual(subs[0]['row'], 'jung1', '마지막 차수 줄에 붙는다')
+        # 잔금은 중도금 합계를 뺀 나머지
+        self.assertEqual(self.page.input_value('#fields [data-pay-amt="jan"][data-pay-idx="0"]'), '39,900')
+        body = self.text()
+        self.assertIn('* 중도금 1차 25% : 190,000,000원', body)
+        self.assertIn('* 중도금 2차 12.5% : 95,000,000원', body)
+        # (−) 는 그 차수만 뺀다
+        self.pay_del('jung', idx=1)
+        self.assertEqual(len([r for r in self.pay_rows() if r['item'] == 'jung']), 1)
+        self.assertEqual(len(self.page.query_selector_all('#fields .pay-sub')), 0)
+        self.assertEqual(self.page.input_value('#fields [data-pay-amt="jan"][data-pay-idx="0"]'), '49,400')
+        # 1차를 빼면 2차가 1차로 올라온다
+        self.pay_add('gyeyak')
+        self.pay_fill('gyeyak', 2000, idx=1)
+        self.pay_fill('gyeyak', 7600, idx=0)
+        self.pay_del('gyeyak', idx=0)
+        rows = [r for r in self.pay_rows() if r['item'] == 'gyeyak']
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['amt'], '2,000', '2차가 1차로 올라온다')
+        # 다섯 항목 모두 (+)(−) 가 늘 있다
+        for key in ('yakjeong', 'jeong', 'gyeyak', 'jung', 'jan'):
+            with self.subTest(item=key):
+                self.assertEqual(len(self.page.query_selector_all(f'#fields [data-pay-add="{key}"]')), 1)
+                self.assertEqual(len(self.page.query_selector_all(f'#fields [data-pay-del="{key}"]')), 1)
+
+    def test_v140_schedule_total_excludes_deposits(self):
+        # 총합계 = 계약금 + 중도금 + 잔금 (약정금·가계약금은 빼고), 잔금 = 매매가 − 계약금 − 중도금
+        self.pick('t8')
+        self.page.fill('#fields [data-field="price"]', '76000')
+        self.pay_fill('gyeyak', 7600)
+        self.pay_fill('jung', 19000)
+        self.assertEqual(self.page.inner_text('.pay-total').replace('\n', ' '), '총합계 760,000,000원 (7억 6천만원)')
+        self.pay_fill('yakjeong', 1000)
+        self.pay_fill('jeong', 3000)
+        self.assertIn('760,000,000원', self.page.inner_text('.pay-total'), '약정금·가계약금은 총합계에 안 들어간다')
+        body = self.text()
+        # 계약일 안내 — 약정금 전액 반환 + 계약금 전액 / 가계약금 제외한 나머지
+        self.assertIn('약정금 10,000,000원은 계약일에 전액 반환받고, 계약금 76,000,000원 전액을 입금합니다.', body)
+        self.assertIn('가계약금 30,000,000원은 계약금에 포함되므로, 계약일에는 계약금 76,000,000원 중 '
+                      '가계약금을 제외한 46,000,000원을 입금합니다.', body)
+        self.assertNotIn('[', body)
+        self.assertNotIn(']', body)
+
+    def test_v140_schedule_percent_two_way(self):
+        # 퍼센트 먼저 → 금액 자동, 금액 먼저 → 퍼센트 자동 (기준 = 매매가)
+        self.pick('t8')
+        self.page.fill('#fields [data-field="price"]', '50000')
+        self.pay_rate('gyeyak', 10)
+        self.assertEqual(self.page.input_value('#fields [data-pay-amt="gyeyak"][data-pay-idx="0"]'), '5,000')
+        self.pay_rate('jung', 20)
+        self.assertEqual(self.page.input_value('#fields [data-pay-amt="jung"][data-pay-idx="0"]'), '10,000')
+        self.pay_fill('jung', 7500)
+        self.assertEqual(self.page.input_value('#fields [data-pay-rate="jung"][data-pay-idx="0"]'), '15')
+        # 전세·월세는 보증금이 기준
+        self.page.click('#fields [data-seg="trade"][data-value="전세"]')
+        self.wait(150)
+        self.page.fill('#fields [data-pay-amt="jung"][data-pay-idx="0"]', '')
+        self.page.fill('#fields [data-field="price"]', '10000')
+        self.pay_rate('gyeyak', 10)
+        self.assertEqual(self.page.input_value('#fields [data-pay-amt="gyeyak"][data-pay-idx="0"]'), '1,000')
+        self.assertEqual(self.page.input_value('#fields [data-pay-amt="jan"][data-pay-idx="0"]'), '9,000')
+
+    def test_v140_t10_same_schedule_format(self):
+        # 계약 일정 안내도 매매·전세·월세 모두 같은 다섯 항목 포맷을 쓴다
+        for trade, base_field, base in (('매매', 'amount', '76000'), ('전세', 'amount', '10000'), ('월세', 'deposit', '10000')):
+            with self.subTest(trade=trade):
+                self.pick_with('t10', {'kind': '잔금'})
+                self.page.click(f'#fields [data-prop-trade="prop"][data-value="{trade}"]')
+                self.wait(180)
+                self.page.fill(f'#fields [data-money="{base_field}"]', base)
+                self.wait(150)
+                names = [r['name'] for r in self.pay_rows()]
+                self.assertEqual(names, ['약정금', '가계약금', '계약금', '중도금', '잔금'])
+                self.pay_rate('gyeyak', 10)
+                expect = '7,600' if trade == '매매' else '1,000'
+                self.assertEqual(self.page.input_value('#fields [data-pay-amt="gyeyak"][data-pay-idx="0"]'), expect)
+
+    def test_v140_mortgage_holder_and_amount_one_row(self):
+        # 근저당 말소 특약 — 채권자 | 채권최고액 한 줄 반반
+        self.pick('t8')
+        self.page.click('#fields [data-toggle="mortgage"]')
+        self.wait(150)
+        box = self.js("""() => {
+          const holder = document.querySelector('#fields [data-field="mortgageHolder"]');
+          const amount = document.querySelector('#fields [data-field="mortgageAmount"]');
+          if (!holder || !amount) return null;
+          const h = holder.getBoundingClientRect(), a = amount.getBoundingClientRect();
+          const cells = [...holder.closest('.pair-row').querySelectorAll('.pair-cell')].map(c => c.getBoundingClientRect().width);
+          return {holder: {l: h.left, r: h.right, t: h.top}, amount: {l: a.left, r: a.right, t: a.top},
+                  sameRow: Math.abs(h.top - a.top) < 6, leftFirst: h.left < a.left, cells};
+        }""")
+        self.assertIsNotNone(box, '채권자·채권최고액 칸이 없다')
+        self.assertTrue(box['sameRow'], '두 칸이 한 줄이 아니다')
+        self.assertTrue(box['leftFirst'], '채권자가 왼쪽')
+        self.assertEqual(len(box['cells']), 2)
+        self.assertAlmostEqual(box['cells'][0], box['cells'][1], delta=2.0, msg='반반이 아니다')
+        self.page.fill('#fields [data-field="mortgageHolder"]', '카카오뱅크')
+        self.page.fill('#fields [data-field="mortgageAmount"]', '12000')
+        self.wait(200)
+        self.assertIn('채권최고액 1건 금 120,000,000원 (1억 2천만 원) (카카오뱅크)', self.text())
+
+    def test_v140_stage_tabs_uniform(self):
+        # 상단 카테고리 탭 — 다섯 개가 같은 폭·높이·글자 크기로 한 줄에 다 보인다
+        for w, h in ((390, 844), (1440, 900)):
+            with self.subTest(viewport=f'{w}x{h}'):
+                ctx = self.browser.new_context(viewport={'width': w, 'height': h},
+                                               is_mobile=w < 500, has_touch=w < 500)
+                page = ctx.new_page()
+                page.goto(BASE, wait_until='networkidle')
+                page.wait_for_timeout(200)
+                tabs = page.evaluate("""() => [...document.querySelectorAll('.stage-tabs .tab')].map(t => {
+                    const r = t.getBoundingClientRect(), cs = getComputedStyle(t);
+                    return {w: +r.width.toFixed(1), h: +r.height.toFixed(1), t: +r.top.toFixed(1),
+                            fs: cs.fontSize, pad: cs.padding, bw: cs.borderWidth}; })""")
+                self.assertEqual(len(tabs), 5)
+                self.assertEqual(len(set(t['h'] for t in tabs)), 1, f'탭 높이가 다르다 {tabs}')
+                self.assertEqual(len(set(t['fs'] for t in tabs)), 1, f'글자 크기가 다르다 {tabs}')
+                self.assertEqual(len(set(t['pad'] for t in tabs)), 1, f'패딩이 다르다 {tabs}')
+                self.assertEqual(len(set(t['bw'] for t in tabs)), 1, f'테두리가 다르다 {tabs}')
+                self.assertEqual(len(set(t['t'] for t in tabs)), 1, f'한 줄이 아니다 {tabs}')
+                if w < 900:
+                    self.assertEqual(len(set(t['w'] for t in tabs)), 1, f'폭이 다르다 {tabs}')
+                    bar = page.evaluate("""() => { const b = document.querySelector('.stage-tabs');
+                        return {scroll: b.scrollWidth, client: b.clientWidth}; }""")
+                    self.assertLessEqual(bar['scroll'], bar['client'] + 1, '가로로 잘려 스크롤된다')
+                ctx.close()
+
+    def test_v140_no_type_direction_field_anywhere(self):
+        # 타입·방향(동·호수를 넣으면 자동) 칸은 모든 매물 입력칸에서 사라졌다
+        for tid in ('t2', 't3', 't5', 't7', 't19', 't8', 't10'):
+            with self.subTest(tid=tid):
+                self.pick(tid)
+                self.assertNotIn('타입·방향', self.page.inner_text('#fields'))
+                self.assertEqual(len(self.page.query_selector_all('#fields [data-key="typeInfo"]')), 0)
+                self.assertEqual(len(self.page.query_selector_all('#fields .prop-type')), 0)
+
+    def test_v140_calendar_popup_has_no_tip(self):
+        # 달력 팝업 아래 안내 멘트는 없다 (입주일 기간 칸 포함)
+        self.pick('t2')
+        self.page.click('#fields [data-date-mode="movein"][data-value="기간"]')
+        self.wait(150)
+        self.page.click('#fields [data-date="moveinStart"]')
+        self.wait(200)
+        self.assertTrue(self.page.is_visible('#calpop'))
+        self.assertEqual(len(self.page.query_selector_all('#calpop .cal-tip')), 0)
+        self.assertNotIn('날짜를 고르면', self.page.inner_text('#calpop'))
+        self.page.click('#calpop [data-cal-close]')
+
+    def test_v140_trade_row_spacing_compact(self):
+        # [매매][전세][월세] 줄 위아래 여백은 일반 폼 간격 — 위아래로 벌어지지 않는다
+        self.pick('t10')
+        gaps = self.js("""() => {
+          const seg = document.querySelector('#fields [data-prop-trade="prop"]').closest('.seg').getBoundingClientRect();
+          const dong = document.querySelector('#fields [data-key="dong"]').getBoundingClientRect();
+          const whenField = document.querySelector('#fields [data-date="when"]').closest('.field').getBoundingClientRect();
+          return {above: seg.top - dong.bottom, below: whenField.top - seg.bottom};
+        }""")
+        self.assertLessEqual(gaps['above'], 18, f"거래유형 위 여백이 넓다 {gaps}")
+        self.assertLessEqual(gaps['below'], 40, f"거래유형 아래 여백이 넓다 {gaps}")
+
 
 
 if __name__ == '__main__':

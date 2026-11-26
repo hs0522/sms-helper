@@ -292,11 +292,7 @@
       item.dong = dm[1];
       item.ho = hm[1];
     } else {
-      // 동·호를 못 읽으면 예전 단지·층·평형 글자를 그대로 살려 둔다
-      var area = String(data.area == null ? '' : data.area).trim().replace(/\s*(평형|평)$/, '');
-      var spot = String(data.spot == null ? '' : data.spot).trim();
-      var keep = [spot, area ? area + '평형' : ''].filter(Boolean).join(' ');
-      if (keep) { item.typeInfo = keep; item.typeInfoManual = true; }
+      // 동·호를 못 읽으면 예전 단지·층·평형 글자는 버리고 단지명만 남긴다
       item.complex = '';
     }
     data.items = [item];
@@ -669,75 +665,97 @@
     return wrap;
   }
 
-  // 입력 중에는 잔금 칸·확인 줄만 다시 그린다(포커스 유지)
-  function syncPayUI() {
-    var t = tplById(store.current);
-    if (!t) return;
-    var pf = payTableField(t);
-    var isSum = !!(pf && pf.sum);
-    if (!pf && t.id !== 't8') return;
-    var data = dataOf(t);
-    if (!isSum) {
-      var s = paySplitOf(t, data);
-      var man = s && s.ok ? s.janMan : null;
-      var inp = $('#fields [data-auto]');
-      if (inp) {
-        inp.value = man == null ? '' : C.group(man);
-        inp.placeholder = s && s.over ? '확인 필요' : '자동';
-        setHint(hintNodeFor(inp), man == null ? '' : C.moneyHintLine(man));
-      }
-      // 저장되는 값도 계산 결과로 맞춰 둔다 (음수·초과면 비운다)
-      data[t.id === 't8' ? 'janAmount' : 'jan'] = man == null ? '' : man;
-    }
-    // 비율(%) 배지도 금액에 맞춰 다시
-    payRows(t).forEach(function (r) {
-      if (!r.rate) return;
-      var ri = $('#fields [data-pay-rate="' + r.amountId + '"]');
-      if (ri && document.activeElement !== ri) ri.value = payRowRate(t, data, r);
-    });
-    var old = $('#fields [data-paytotal]');
-    if (old) old.replaceWith(payTotal(t, data));
-    var oldCheck = $('#fields [data-autofill]');
-    if (oldCheck) oldCheck.replaceWith(payCheck(t, data));
-  }
-
-  /* ---------------- 지급 일정 표 (매물 스파이더 계약 팝업형) ---------------- */
-  function payRows(t) {
-    var f = (t.fields || []).filter(function (x) { return x.t === 'paytable'; })[0];
-    return (f && f.rows) || [];
-  }
+  /* ---------------- 공통 지급 일정 (약정금 · 가계약금 · 계약금 · 중도금 · 잔금) ----------------
+     · 1차는 평면 칸(amountId·dateId), 2차부터는 data.payExtra[항목] 배열
+     · 약정금·가계약금은 총합계에서 빼고, 잔금은 기준금액 − 계약금 − 중도금으로 자동 계산
+     · 퍼센트는 기준금액 대비로 양방향 계산한다 */
 
   function payTableField(t) {
     return (t.fields || []).filter(function (x) { return x.t === 'paytable'; })[0] || null;
   }
 
-  // 하단 지급 일정의 금액을 그대로 더한 총합계 (거래금액 칸을 없앤 표)
-  function paySumMan(t, data) {
+  function payItemsOf(t) {
     var f = payTableField(t);
-    if (!f || !f.sum) return null;
-    var total = 0, any = false;
-    (f.rows || []).forEach(function (r) {
-      if (r.showIf && !r.showIf(data)) return;
-      if (r.excludeSum) return;
-      var m = C.parseMan(data[r.amountId]);
-      if (m != null) { total += m; any = true; }
+    return (f && f.items) || [];
+  }
+
+  function payItemByKey(t, key) {
+    return T.payItemOf(payItemsOf(t), key);
+  }
+
+  // 기준 금액(매매가·보증금) 대비 비율
+  function payRateValue(t, data, man) {
+    var base = T.payScheduleBase(t, data);
+    if (man == null || !base) return '';
+    return String(Math.round((man / base) * 1000) / 10);
+  }
+
+  // 항목·차수의 금액 저장 — 1차는 평면 칸, 2차부터는 payExtra
+  function setPayPartAmount(data, item, idx, man) {
+    if (!item) return;
+    if (idx === 0) {
+      data[item.amountId] = man == null ? '' : man;
+      return;
+    }
+    var ex = data.payExtra = data.payExtra || {};
+    var arr = ex[item.key] = Array.isArray(ex[item.key]) ? ex[item.key] : [];
+    while (arr.length < idx) arr.push({ amount: '', date: null });
+    arr[idx - 1].amount = man == null ? '' : man;
+  }
+
+  // 지급 일정의 날짜 칸은 'pay:항목:차수' 로 가리킨다
+  function isPayFieldId(fieldId) { return String(fieldId || '').indexOf('pay:') === 0; }
+
+  function payFieldValue(data, fieldId) {
+    var p = String(fieldId).split(':');
+    var item = payItemByKey(tplById(store.current), p[1]);
+    return T.payPartDate(data, item, Number(p[2] || 0));
+  }
+
+  function setPayFieldValue(data, fieldId, value) {
+    var p = String(fieldId).split(':');
+    var item = payItemByKey(tplById(store.current), p[1]);
+    var idx = Number(p[2] || 0);
+    if (!item) return;
+    if (idx === 0) { data[item.dateId] = value; return; }
+    var ex = data.payExtra = data.payExtra || {};
+    var arr = ex[item.key] = Array.isArray(ex[item.key]) ? ex[item.key] : [];
+    while (arr.length < idx) arr.push({ amount: '', date: null });
+    arr[idx - 1].date = value;
+  }
+
+  // 입력 중에는 금액 칸·소계·총합계만 다시 채운다 (포커스 유지)
+  function syncPayUI() {
+    var t = tplById(store.current);
+    if (!t) return;
+    if (!payTableField(t)) return;
+    var data = dataOf(t);
+    var items = payItemsOf(t);
+    items.forEach(function (item) {
+      var n = T.payPartCount(data, item);
+      for (var i = 0; i < n; i++) {
+        var auto = !!(item.auto && i === n - 1);
+        var man = T.payPartValue(t, data, items, item, i);
+        var bad = auto && man != null && man < 0;
+        var inp = $('#fields [data-pay-amt="' + item.key + '"][data-pay-idx="' + i + '"]');
+        if (inp && document.activeElement !== inp) {
+          inp.value = (man == null || (auto && bad)) ? '' : C.group(man);
+          if (auto) inp.placeholder = bad ? '확인 필요' : '자동';
+        }
+        var hint = $('#fields [data-pay-hint="' + item.key + ':' + i + '"]');
+        if (hint) setHint(hint, (man == null || (auto && bad)) ? '' : C.moneyHintLine(man));
+        if (item.rate) {
+          var ri = $('#fields [data-pay-rate="' + item.key + '"][data-pay-idx="' + i + '"]');
+          if (ri && document.activeElement !== ri) ri.value = payRateValue(t, data, man);
+        }
+      }
+      if (n > 1) {
+        var sub = $('#fields [data-pay-sub="' + item.key + '"]');
+        if (sub) sub.replaceWith(paySubLine(item, T.payItemSum(data, item)));
+      }
     });
-    return any ? total : null;
-  }
-
-  function payBaseMan(t, data) {
-    if (!t || !data) return null;
-    var f = payTableField(t);
-    // 지급 일정이 총합계를 내는 문자는 그 총합계가 금액(매매가)이다
-    if (f && f.sum) return paySumMan(t, data);
-    return C.parseMan(data.price);
-  }
-
-  function payRowRate(t, data, row) {
-    var base = payBaseMan(t, data);
-    var man = C.parseMan(data[row.amountId]);
-    if (base && man != null) return String(Math.round((man / base) * 1000) / 10);
-    return row.id === 'jung' ? '25' : '10';
+    var old = $('#fields [data-paytotal]');
+    if (old) old.replaceWith(payTotal(t, data));
   }
 
   // 달력 입력칸 — 값이 있든 없든 폭이 변하지 않게 늘 칸 폭 그대로(100%)로 그린다
@@ -787,6 +805,8 @@
     if (String(fieldId).indexOf('__range') !== -1) {
       var rs = rangeState[t.id] || {};
       value = rs.date ? { date: rs.date } : null;
+    } else if (isPayFieldId(fieldId)) {
+      value = payFieldValue(data, fieldId);
     } else {
       value = data[fieldId];
     }
@@ -832,44 +852,113 @@
     return row;
   }
 
-  function rateBadge(t, data, r) {
+  function rateBadge(t, data, item, idx) {
     var wrap = el('span', 'pay-rate');
     var inp = el('input', 'inp pay-rate-inp');
     inp.type = 'text';
     inp.inputMode = 'decimal';
     inp.autocomplete = 'off';
-    inp.dataset.payRate = r.amountId;
-    inp.setAttribute('aria-label', r.label + ' 비율');
-    inp.value = payRowRate(t, data, r);
+    inp.dataset.payRate = item.key;
+    inp.dataset.payIdx = String(idx);
+    inp.setAttribute('aria-label', item.label + (idx ? ' ' + (idx + 1) + '차' : '') + ' 비율');
+    inp.value = payRateValue(t, data, T.payPartValue(t, data, payItemsOf(t), item, idx));
     wrap.appendChild(inp);
     wrap.appendChild(el('span', 'pay-rate-pct', '%'));
     return wrap;
   }
 
+  // 금액 칸 — 잔금 마지막 차수는 자동 계산(읽기 전용)
+  function payAmountField(o) {
+    var field = el('div', 'money-field' + (o.auto ? ' is-auto' : ''));
+    var box = el('div', 'money-box');
+    var inp = el('input', 'inp inp-money');
+    inp.type = 'text';
+    inp.inputMode = 'numeric';
+    inp.autocomplete = 'off';
+    inp.dataset.payAmt = o.item.key;
+    inp.dataset.payIdx = String(o.idx);
+    inp.setAttribute('aria-label', o.item.label + (o.idx ? ' ' + (o.idx + 1) + '차' : '') + (o.auto ? ' (자동 계산)' : ''));
+    if (o.auto) {
+      inp.readOnly = true;
+      inp.tabIndex = -1;
+      inp.value = (o.man == null || o.bad) ? '' : C.group(o.man);
+      inp.placeholder = o.bad ? '확인 필요' : '자동';
+    } else {
+      inp.value = o.man == null ? '' : C.group(o.man);
+      inp.placeholder = '0';
+    }
+    box.appendChild(inp);
+    box.appendChild(el('span', 'money-unit', '만원'));
+    field.appendChild(box);
+    return field;
+  }
+
+  // 여러 차수로 나뉜 항목의 소계 — 마지막 차수 오른쪽 아래
+  function paySubLine(item, sum) {
+    var d = el('div', 'pay-sub');
+    d.dataset.paySub = item.key;
+    d.appendChild(el('span', 'pay-sub-label', item.label + ' 소계'));
+    d.appendChild(el('b', 'pay-sub-value', sum == null ? '—' : C.formatWonPlain(sum * 10000)));
+    if (sum != null) d.appendChild(el('span', 'pay-sub-ko', '(' + C.koreanAmount(sum * 10000, { omitWon: true }) + '원)'));
+    return d;
+  }
+
+  // (+) 차수 하나 더 — 같은 항목의 마지막 차수 뒤에 붙는다
+  function addPayPart(key) {
+    var t = tplById(store.current);
+    if (!t) return;
+    var data = dataOf(t);
+    var item = payItemByKey(t, key);
+    if (!item) return;
+    var ex = data.payExtra = data.payExtra || {};
+    var arr = ex[key] = Array.isArray(ex[key]) ? ex[key] : [];
+    arr.push({ amount: '', date: null });
+    markEdited();
+    save();
+    renderForm();
+    renderPreview();
+  }
+
+  // (−) 이 차수 빼기 — 1차를 빼면 2차가 1차로 올라오고, 한 차수뿐이면 값만 지운다
+  function removePayPart(key, idx) {
+    var t = tplById(store.current);
+    if (!t) return;
+    var data = dataOf(t);
+    var item = payItemByKey(t, key);
+    if (!item) return;
+    var n = T.payPartCount(data, item);
+    if (n === 1) {
+      setPayPartAmount(data, item, 0, null);
+      data[item.dateId] = null;
+    } else {
+      var arr = data.payExtra && data.payExtra[key];
+      if (!Array.isArray(arr)) return;
+      if (idx === 0) {
+        var next = arr.shift() || {};
+        data[item.amountId] = next.amount == null ? '' : next.amount;
+        data[item.dateId] = next.date || null;
+      } else {
+        arr.splice(idx - 1, 1);
+      }
+      if (!arr.length) delete data.payExtra[key];
+    }
+    markEdited();
+    save();
+    renderForm();
+    renderPreview();
+  }
+
   function payTotal(t, data) {
     var box = el('div', 'pay-total');
     box.dataset.paytotal = '1';
-    var man = null, note = '';
-    var f = payTableField(t);
-    if (f && f.sum) {
-      man = paySumMan(t, data);
-    } else {
-      var s = paySplitOf(t, data);
-      var base = payBaseLabel(t, data);
-      if (s && s.ok) {
-        // 금액이 정확히 맞으면 안내 글자를 두지 않는다 (맞지 않을 때만 빨간 경고)
-        man = s.baseMan;
-      } else if (s && s.over) {
-        man = s.paidMan;
-        note = '계약금·중도금이 ' + base + '보다 ' + C.formatWonPlain(s.overByMan * 10000) + ' 많습니다';
-        box.classList.add('is-bad');
-      } else if (s && s.negative) {
-        note = '음수 금액은 계산할 수 없습니다 · 지급액을 확인해 주세요';
-        box.classList.add('is-bad');
-      } else if (s) {
-        man = s.paidMan || null;
-        note = '';
-      }
+    var items = payItemsOf(t);
+    var man = T.payScheduleMan(t, data, items);
+    var janTotal = T.payJanTotal(t, data, items);
+    var note = '';
+    if (janTotal != null && janTotal < 0) {
+      note = '계약금·중도금이 ' + (T.isRentTrade(data) ? '보증금' : '매매가') + '보다 ' +
+        C.formatWonPlain(Math.abs(janTotal) * 10000) + ' 많습니다';
+      box.classList.add('is-bad');
     }
     var line = el('div', 'pay-total-line');
     line.appendChild(el('span', 'pay-total-label', '총합계'));
@@ -890,38 +979,59 @@
     head.appendChild(el('span', 'head-name', '구분'));
     head.appendChild(el('span', 'head-right', '일정 · 금액'));
     box.appendChild(head);
-    var split = paySplitOf(t, data);
-    payRows(t).forEach(function (r) {
-      if (r.showIf && !r.showIf(data)) return;
-      var line = el('div', 'pay-row' + (r.auto ? ' is-auto' : ''));
-      // 왼쪽 — 라벨과 % 칸을 위아래로 붙여 두고, 행끼리 왼쪽을 맞춘다
-      var name = el('div', 'pay-name');
-      name.appendChild(el('span', 'pay-name-text', typeof r.label === 'function' ? r.label(data) : r.label));
-      if (r.rate) name.appendChild(rateBadge(t, data, r));
-      line.appendChild(name);
-      // 오른쪽 — 윗줄에 [일정][금액], 아랫줄에 원단위·억 환산
-      var right = el('div', 'pay-right');
-      var main = el('div', 'pay-main');
-      main.appendChild(dateButton(r.dateId, data[r.dateId], '일정'));
-      var amount = el('div', 'pay-amount');
-      var autoMan = split && split.ok ? split.janMan : null;
-      amount.appendChild(r.auto
-        ? autoMoneyField({
-          id: r.amountId,
-          value: autoMan,
-          placeholder: split && split.over ? '확인 필요' : '자동',
-          label: (typeof r.label === 'function' ? r.label(data) : r.label) + ' (자동 계산)',
-          bare: true
-        })
-        : moneyField({ field: r.amountId, value: data[r.amountId], ph: '', bare: true }));
-      main.appendChild(amount);
-      right.appendChild(main);
-      var hint = el('div', 'money-hint pay-hint');
-      hint.dataset.payHint = r.amountId;
-      setHint(hint, C.moneyHintLine(r.auto ? autoMan : data[r.amountId]));
-      right.appendChild(hint);
-      line.appendChild(right);
-      box.appendChild(line);
+    var items = payItemsOf(t);
+    items.forEach(function (item) {
+      var n = T.payPartCount(data, item);
+      for (var i = 0; i < n; i++) {
+        var isLast = i === n - 1;
+        var auto = !!(item.auto && isLast);
+        var man = T.payPartValue(t, data, items, item, i);
+        var bad = auto && man != null && man < 0;
+        var label = item.label + (n > 1 ? ' ' + (i + 1) + '차' : '');
+        var line = el('div', 'pay-row' + (auto ? ' is-auto' : '') + (n > 1 ? ' is-part' : ''));
+        line.dataset.payItem = item.key;
+        line.dataset.payIdx = String(i);
+
+        // 왼쪽 — 항목 이름과 (+)(−) 를 한 줄에, % 칸은 그 아래. 칸 안에서 가운데 정렬
+        var name = el('div', 'pay-name');
+        var top = el('div', 'pay-name-top');
+        top.appendChild(el('span', 'pay-name-text', label));
+        var steps = el('span', 'pay-steps');
+        var add = el('button', 'pay-step is-add', '+');
+        add.type = 'button';
+        add.dataset.payAdd = item.key;
+        add.dataset.payIdx = String(i);
+        add.setAttribute('aria-label', item.label + ' ' + (n + 1) + '차 추가');
+        add.title = '차수를 하나 더 추가합니다';
+        steps.appendChild(add);
+        var del = el('button', 'pay-step is-del', '−');
+        del.type = 'button';
+        del.dataset.payDel = item.key;
+        del.dataset.payIdx = String(i);
+        del.setAttribute('aria-label', label + ' 빼기');
+        del.title = n > 1 ? '이 차수를 뺍니다' : '이 줄의 금액·일정을 지웁니다';
+        steps.appendChild(del);
+        top.appendChild(steps);
+        name.appendChild(top);
+        if (item.rate) name.appendChild(rateBadge(t, data, item, i));
+        line.appendChild(name);
+
+        // 오른쪽 — [일정][금액] 한 줄, 아래에 원단위·억 환산과 소계
+        var right = el('div', 'pay-right');
+        var main = el('div', 'pay-main');
+        main.appendChild(dateButton('pay:' + item.key + ':' + i, T.payPartDate(data, item, i), '일정'));
+        var amount = el('div', 'pay-amount');
+        amount.appendChild(payAmountField({ item: item, idx: i, man: man, auto: auto, bad: bad }));
+        main.appendChild(amount);
+        right.appendChild(main);
+        var hint = el('div', 'money-hint pay-hint');
+        hint.dataset.payHint = item.key + ':' + i;
+        setHint(hint, (man == null || bad) ? '' : C.moneyHintLine(man));
+        right.appendChild(hint);
+        if (n > 1 && isLast) right.appendChild(paySubLine(item, T.payItemSum(data, item)));
+        line.appendChild(right);
+        box.appendChild(line);
+      }
     });
     box.appendChild(payTotal(t, data));
     return box;
@@ -961,6 +1071,31 @@
         row = fieldRow(f.label);
         row.appendChild(moneyWrap(t, f, data));
         return row;
+      }
+
+      // 두 칸을 한 줄 반반 — 채권자 | 채권최고액
+      case 'moneyPair': {
+        var pair = el('div', 'field is-pair');
+        if (f.label) pair.appendChild(el('div', 'field-label', f.label));
+        var cells = el('div', 'pair-row');
+        [f.left, f.right].forEach(function (sub2) {
+          var cell = el('div', 'pair-cell');
+          cell.appendChild(el('div', 'pair-label', sub2.label));
+          if (sub2.t === 'money') {
+            cell.appendChild(moneyWrap(t, { id: sub2.id, ph: '' }, data));
+          } else {
+            var pi2 = el('input', 'inp');
+            pi2.type = 'text';
+            pi2.autocomplete = 'off';
+            pi2.placeholder = sub2.ph || '';
+            pi2.dataset.field = sub2.id;
+            pi2.value = data[sub2.id] == null ? '' : data[sub2.id];
+            cell.appendChild(pi2);
+          }
+          cells.appendChild(cell);
+        });
+        pair.appendChild(cells);
+        return pair;
       }
 
       // 잔금처럼 자동으로 계산되는 금액 (t13)
@@ -1401,39 +1536,7 @@
     }
     box.appendChild(top);
     if (f.price) box.appendChild(propMoney(f.id, idx, item));
-    // 동·호수로 찾은 평형·타입·방향 — 자동으로 채우고, 표에 없으면 직접 적는다
-    if (f.typeInfo) box.appendChild(propTypeInfo(f, item, idx));
     return box;
-  }
-
-  function propTypeInfo(f, item, idx) {
-    var line = el('div', 'prop-type');
-    var i = el('input', 'inp inp-type');
-    i.type = 'text';
-    i.autocomplete = 'off';
-    i.placeholder = '타입·방향 (동·호수를 넣으면 자동)';
-    i.title = '마래푸 1~4단지 동·라인 표에서 평형·타입·방향을 채웁니다 · 다르면 직접 고쳐 쓰세요';
-    i.dataset.prop = f.id;
-    if (idx != null) i.dataset.idx = idx;
-    i.dataset.key = 'typeInfo';
-    var stored = item.typeInfo == null ? '' : String(item.typeInfo).trim();
-    i.value = stored || C.maraepuUnit(item.complex, item.dong, item.ho);
-    line.appendChild(i);
-    return line;
-  }
-
-  // 동·호수가 바뀌면 평형·타입·방향을 다시 찾아 칸에 넣는다 (직접 고친 값은 건드리지 않는다)
-  function fillTypeInfo(item, box) {
-    if (!item || item.typeInfoManual) return;
-    var info = C.maraepuUnit(item.complex, item.dong, item.ho);
-    if (!info) {
-      if (item.typeInfoAuto) { item.typeInfo = ''; item.typeInfoAuto = false; }
-    } else {
-      item.typeInfo = info;
-      item.typeInfoAuto = true;
-    }
-    var inp = box && box.querySelector('[data-key="typeInfo"]');
-    if (inp && document.activeElement !== inp) inp.value = item.typeInfo || '';
   }
 
   function propInput(f, item, idx, key, ph, cls, title) {
@@ -2005,8 +2108,8 @@
       cal.fieldId = fieldId.replace('__range', '');
     } else {
       cal.rangeMode = false;
-      value = data[fieldId] || null;
       cal.fieldId = fieldId;
+      value = isPayFieldId(fieldId) ? payFieldValue(data, fieldId) : (data[fieldId] || null);
     }
     var d = value && value.date ? C.parseDateValue(value) : null;
     var now = new Date();
@@ -2124,7 +2227,7 @@
       var rs = rangeState[t.id] || {};
       return rs.date ? { date: rs.date } : null;
     }
-    return data[cal.fieldId] || null;
+    return isPayFieldId(cal.fieldId) ? payFieldValue(data, cal.fieldId) : (data[cal.fieldId] || null);
   }
 
   function renderCal() {
@@ -2182,8 +2285,6 @@
         }
       }));
       pop.appendChild(time);
-    } else if (cal.rangeMode) {
-      pop.appendChild(el('div', 'cal-tip', '날짜를 고르면 아래 시간 선택과 함께 문구가 만들어집니다'));
     }
 
     var foot = el('div', 'cal-foot');
@@ -2214,6 +2315,13 @@
   function setCalDateTime(fieldId, patch) {
     var t = tplById(store.current);
     var data = dataOf(t);
+    // 지급 일정의 차수별 일정 칸
+    if (isPayFieldId(fieldId)) {
+      var oldVal = payFieldValue(data, fieldId) || {};
+      setPayFieldValue(data, fieldId, Object.assign({ date: '', hour: null, min: 0 }, oldVal, patch));
+      save();
+      return;
+    }
     if (!data[fieldId] || typeof data[fieldId] !== 'object') data[fieldId] = { date: '', hour: null, min: 0 };
     Object.assign(data[fieldId], patch);
     // 달력으로 날짜를 골랐으면 직접 적은 글자(협의·즉시)는 지운다
@@ -2781,36 +2889,28 @@
     $('#fields').addEventListener('input', function (e) {
       var t = e.target;
       var data = dataOf(tplById(store.current));
-      // 비율(%)을 고치면 그 줄 금액을 다시 채운다
-      // — 지급 일정 총합계를 쓰는 표(t8·t10)에서는 '나머지 금액의 몇 %'로 계산한다
+      // 지급 일정 — 차수별 금액 (금액을 적으면 퍼센트가 따라온다)
+      if (t.dataset.payAmt) {
+        var paT = tplById(store.current);
+        var paItem = payItemByKey(paT, t.dataset.payAmt);
+        setPayPartAmount(data, paItem, Number(t.dataset.payIdx || 0), formatMoneyInput(t));
+        markEdited();
+        syncPayUI();
+        updatePreviewOnly();
+        validateInline();
+        save();
+        return;
+      }
+      // 비율(%)을 고치면 그 차수의 금액을 기준금액 대비로 다시 채운다
+      // (퍼센트 먼저 → 금액 자동, 금액 먼저 → 퍼센트 자동)
       if (t.dataset.payRate) {
         var pct = parseFloat(String(t.value).replace(/[^0-9.]/g, ''));
         var curT = tplById(store.current);
-        var pf = payTableField(curT);
-        var nextMan = null;
-        if (pf && pf.sum) {
-          var others = 0, anyOther = false;
-          (pf.rows || []).forEach(function (r) {
-            if (r.amountId === t.dataset.payRate) return;
-            if (r.showIf && !r.showIf(data)) return;
-            if (r.excludeSum) return;
-            var om = C.parseMan(data[r.amountId]);
-            if (om != null) { others += om; anyOther = true; }
-          });
-          if (!isNaN(pct) && pct >= 0 && pct < 100 && anyOther) {
-            nextMan = Math.round(others * pct / (100 - pct));
-          }
-        } else {
-          var base = payBaseMan(curT, data);
-          if (!isNaN(pct) && base) nextMan = Math.round(base * pct / 100);
-        }
-        if (nextMan != null) {
-          data[t.dataset.payRate] = nextMan;
-          var mi = $('#fields [data-field="' + t.dataset.payRate + '"]');
-          if (mi) {
-            mi.value = C.group(nextMan);
-            setHint(hintNodeFor(mi), C.moneyHintLine(nextMan));
-          }
+        var base = T.payScheduleBase(curT, data);
+        var item = payItemByKey(curT, t.dataset.payRate);
+        var idx = Number(t.dataset.payIdx || 0);
+        if (item && !isNaN(pct) && pct >= 0 && base) {
+          setPayPartAmount(data, item, idx, Math.round(base * pct / 100));
         }
         markEdited();
         syncPayUI();
@@ -2845,14 +2945,6 @@
           pitem[t.dataset.money] = pman == null ? '' : pman;
         } else {
           pitem[t.dataset.key] = t.value;
-          if (t.dataset.key === 'typeInfo') {
-            // 직접 고친 값은 동·호수를 다시 넣어도 그대로 둔다
-            pitem.typeInfoManual = !!String(t.value).trim();
-            pitem.typeInfoAuto = false;
-          }
-        }
-        if (t.dataset.key === 'dong' || t.dataset.key === 'ho' || t.dataset.key === 'complex') {
-          fillTypeInfo(pitem, t.closest('.prop-item'));
         }
         markEdited();
         updatePreviewOnly();
@@ -2901,6 +2993,12 @@
       if (cpick) { toggleContact(cpick.dataset.cat, cpick.dataset.contactPick); return; }
       var cadd = e.target.closest('[data-contact-add]');
       if (cadd) { addContact(cadd.dataset.contactAdd); return; }
+
+      // 지급 일정 — (+) 차수 추가 · (−) 이 차수 빼기
+      var payAdd = e.target.closest('[data-pay-add]');
+      if (payAdd) { addPayPart(payAdd.dataset.payAdd); return; }
+      var payDel = e.target.closest('[data-pay-del]');
+      if (payDel) { removePayPart(payDel.dataset.payDel, Number(payDel.dataset.payIdx || 0)); return; }
 
       var pt = e.target.closest('[data-prop-trade]');
       if (pt) {

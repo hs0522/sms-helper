@@ -15,3 +15,4 @@ android/app/src/main/assets/www/
 
 # 빌드 도구가 실수로 만드는 "?" 폴더
 android/[?]/
+.tmp/

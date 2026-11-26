@@ -27,6 +27,9 @@
     return blocks.filter(function (b) { return b != null && b !== ''; }).join('\n\n');
   }
   function hint(v) { var s = C.manHint(C.parseMan(v)); return s || ''; }
+  // 안내 문장 안의 금액 — 괄호 환산 없이 원단위만
+  function won(man) { return man == null ? '' : C.formatWonPlain(man * 10000); }
+  function wonOr(man, ph) { return won(man) || ph; }
   // 금액이 매매가의 몇 % 인지 (예: 25 → " 25%")
   function pctOf(part, whole) {
     var p = C.parseMan(part), w = C.parseMan(whole);
@@ -35,6 +38,154 @@
   }
   function pctLabel(p, fallback) {
     return ' ' + (p == null ? fallback : p) + '%';
+  }
+
+  /* ---------------- 공통 지급 일정 (약정금 · 가계약금 · 계약금 · 중도금 · 잔금) -------------
+     계약 조건 안내(t8)와 계약 일정 안내(t10)가 같은 포맷을 쓴다.
+     · 1차 금액·일정은 평면 칸(amountId·dateId), 2차부터는 data.payExtra[항목] 배열에 담는다.
+     · 약정금·가계약금은 총합계에서 빼고, 잔금은 기준금액(매매가·보증금) − 계약금 − 중도금으로 자동 계산한다. */
+  var PAY_ITEM_DEFS = [
+    { key: 'yakjeong', label: '약정금', excludeSum: true },
+    { key: 'jeong', label: '가계약금', excludeSum: true },
+    { key: 'gyeyak', label: '계약금', rate: true },
+    { key: 'jung', label: '중도금', rate: true },
+    { key: 'jan', label: '잔금', auto: true }
+  ];
+
+  // suffix: t8 은 'Amount'(gyeyakAmount) · t10 은 접미사 없이(gyeyak)
+  function payItems(suffix) {
+    return PAY_ITEM_DEFS.map(function (it) {
+      return {
+        key: it.key, label: it.label,
+        excludeSum: !!it.excludeSum, rate: !!it.rate, auto: !!it.auto,
+        amountId: it.key + (suffix || ''),
+        dateId: it.key + 'Date'
+      };
+    });
+  }
+  function payItemOf(items, key) {
+    return (items || []).filter(function (it) { return it.key === key; })[0] || null;
+  }
+  function payExtraOf(d, key) {
+    var e = d && d.payExtra;
+    var list = e && Array.isArray(e[key]) ? e[key] : [];
+    return list;
+  }
+  // 그 항목의 차수 개수 (1차는 늘 있다)
+  function payPartCount(d, item) {
+    return item ? 1 + payExtraOf(d, item.key).length : 0;
+  }
+  function payPartAmount(d, item, idx) {
+    if (!item) return null;
+    if (idx === 0) return C.parseMan(d && d[item.amountId]);
+    var p = payExtraOf(d, item.key)[idx - 1];
+    return C.parseMan(p && p.amount);
+  }
+  function payPartDate(d, item, idx) {
+    if (!item) return null;
+    if (idx === 0) return (d && d[item.dateId]) || null;
+    var p = payExtraOf(d, item.key)[idx - 1];
+    return (p && p.date) || null;
+  }
+  // 한 항목의 합계 (1차 + 2차 …)
+  function payItemSum(d, item) {
+    if (!item) return null;
+    var total = 0, any = false;
+    for (var i = 0; i < payPartCount(d, item); i++) {
+      var m = payPartAmount(d, item, i);
+      if (m != null) { total += m; any = true; }
+    }
+    return any ? total : null;
+  }
+  // 기준 금액 — 매매가는 매매가 칸, 보증금은 매물칸(전세·월세)
+  function payScheduleBase(t, d) {
+    if (!d) return null;
+    var id = (t && typeof t === 'object') ? t.id : t;
+    if (id === 't10') {
+      var p = (d.prop && typeof d.prop === 'object') ? d.prop : {};
+      var trade = p.trade || d.trade || '매매';
+      return C.parseMan(trade === '월세' ? p.deposit : p.amount);
+    }
+    return C.parseMan(d.price);
+  }
+  // 잔금 합계 (자동) = 기준금액 − 계약금 합계 − 중도금 합계
+  function payJanTotal(t, d, items) {
+    var base = payScheduleBase(t, d);
+    if (base == null) return null;
+    var used = 0;
+    (items || []).forEach(function (it) {
+      if (it.key === 'jan' || it.excludeSum) return;
+      var s = payItemSum(d, it);
+      if (s != null) used += s;
+    });
+    return base - used;
+  }
+  // 화면·문자에 쓰는 값 — 잔금 마지막 차수는 자동 계산 값
+  function payPartValue(t, d, items, item, idx) {
+    var n = payPartCount(d, item);
+    if (item && item.auto && idx === n - 1) {
+      var jt = payJanTotal(t, d, items);
+      if (jt == null) return payPartAmount(d, item, idx);
+      var earlier = 0;
+      for (var i = 0; i < n - 1; i++) {
+        var m = payPartAmount(d, item, i);
+        if (m != null) earlier += m;
+      }
+      return jt - earlier;
+    }
+    return payPartAmount(d, item, idx);
+  }
+  // 총합계 = 계약금 + 중도금 + 잔금 (약정금·가계약금은 빼고)
+  function payScheduleMan(t, d, items) {
+    var total = 0, any = false;
+    (items || []).forEach(function (it) {
+      if (it.excludeSum) return;
+      if (it.auto) {
+        var jt = payJanTotal(t, d, items);
+        var janSum = payItemSum(d, it);
+        if (jt != null) { total += Math.max(0, jt); any = true; }
+        else if (janSum != null) { total += janSum; any = true; }
+        return;
+      }
+      var s = payItemSum(d, it);
+      if (s != null) { total += s; any = true; }
+    });
+    return any ? total : null;
+  }
+  // 계약일에 실제로 입금하는 금액 — 가계약금은 계약금에서 빼고 채운다
+  function payDepositMan(t, d, items, kind) {
+    var jeong = payItemOf(items, 'jeong');
+    var gyeyak = payItemOf(items, 'gyeyak');
+    var jeongSum = payItemSum(d, jeong);
+    var gySum = payItemSum(d, gyeyak);
+    if (kind === '가계약') return jeongSum != null ? jeongSum : gySum;
+    if (gySum != null) return gySum - (jeongSum || 0);
+    return jeongSum;
+  }
+  // 한 항목의 줄 — 차수가 여럿이면 1차·2차로 나눠 적는다 (지급 일정 표의 라벨과 같은 모양)
+  function payLines(t, d, items, item, ctx, o) {
+    o = o || {};
+    var out = [];
+    var n = payPartCount(d, item);
+    var base = payScheduleBase(t, d);
+    for (var i = 0; i < n; i++) {
+      var man = payPartValue(t, d, items, item, i);
+      var dv = payPartDate(d, item, i);
+      if (man == null && !dv) continue;
+      var label = item.label + (n > 1 ? ' ' + (i + 1) + '차' : '');
+      var pct = '';
+      if (item.rate && base && man != null) {
+        var p = Math.round((man / base) * 1000) / 10;
+        pct = ' ' + p + '%';
+      }
+      var line = '* ' + label + pct + ' : ' + (amt(man, ctx) || '(' + item.label + ')');
+      var when = C.formatDateTime(dv);
+      if (o.date !== false) line += ' (' + (when || o.blankDate || '일정') + ')';
+      out.push(line);
+    }
+    // 아직 안 적은 항목도 자리는 보여 준다 (가계약금·계약금·잔금)
+    if (!out.length && o.force) out.push('* ' + item.label + ' : (' + item.label + ')');
+    return out;
   }
   function prop(p, mode) {
     var o = Object.assign({}, p || {});
@@ -49,11 +200,6 @@
     var base = prop(p, mode);
     var price = C.propPrice(p);
     return price ? base + ' (' + price + ')' : base + ' (가격)';
-  }
-  // 동·호수로 찾은 평형·타입·방향 → " 34평 84A · 남동향" (표에 없으면 직접 적은 값, 그것도 없으면 빈칸)
-  function typeLine(p) {
-    var s = String((p && p.typeInfo) || '').trim() || C.maraepuUnit(p && p.complex, p && p.dong, p && p.ho);
-    return s ? ' ' + s : '';
   }
   function itemsOf(data, key, mode) {
     var list = data[key];
@@ -302,7 +448,7 @@
       title: '특가 매물 홍보',
       desc: '매물 정보 · 거래조건 · 강조 문구',
       fields: [
-        { t: 'props', id: 'items', label: '매물', price: true, typeInfo: true },
+        { t: 'props', id: 'items', label: '매물', price: true },
         { t: 'text', id: 'emphasis', label: '강조 문구', ph: '예: 최저가 조율 가능합니다' }
       ],
       build: function (d, ctx) {
@@ -310,12 +456,9 @@
         var first = list[0] || {};
         var headTrade = first.trade === '전세' || first.trade === '월세' ? first.trade : '매매';
         var emph = String(d.emphasis == null ? '' : d.emphasis).trim() || '최저가 조율 가능합니다';
-        // 매물이 여럿이면 한 줄씩: 단지·동·호 + 평형·타입·방향, 그 아래 거래조건 한 줄
+        // 매물이 여럿이면 한 줄씩: 단지·동·호, 그 아래 거래조건 한 줄
         var lines = list.length ? list.map(function (p) {
           var head = prop(p, d.mode);
-          var tl = typeLine(p).trim();
-          if (head === '(매물)' && tl) head = tl;
-          else if (tl) head += ' ' + tl;
           var price = C.propPrice(p);
           return '🔑' + head + '\n🔑' + (price ? price + '으로 ' : '') + emph;
         }).join('\n') : '🔑(매물) (가격)';
@@ -523,21 +666,19 @@
           { id: 'trade', options: [{ v: '매매', l: '매매' }, { v: '전세', l: '전세' }, { v: '월세', l: '월세' }] },
           { id: 'kind', options: [{ v: '가계약', l: '가계약' }, { v: '계약', l: '계약' }] }
         ] },
-        // 전세·월세만 금액칸을 둔다 (매매가는 지급 일정의 금액을 더한 총합계를 쓴다)
-        { t: 'price', id: 'price', label: '금액', showIf: function (d) { return isRentTrade(d); } },
+        // 기준 금액 — 매매는 매매가, 전세·월세는 보증금(월세는 월차임까지)
+        { t: 'price', id: 'price', label: '금액' },
         { t: 'account', id: 'account', label: '입금계좌', ph: '예: 국민 123456-01-234567 홍길동' },
         { t: 'property', id: 'prop', label: '물건지', address: true },
-        { t: 'paytable', id: 'pay', sum: true, rows: [
-          { id: 'jeong', label: '가계약금', amountId: 'jeongAmount', dateId: 'jeongDate', excludeSum: true, showIf: function (d) { return !isRentTrade(d) && dealKind(d) === '가계약'; } },
-          { id: 'gyeyak', label: '계약금', amountId: 'gyeyakAmount', dateId: 'gyeyakDate', rate: true },
-          { id: 'jung', label: '중도금', amountId: 'jungAmount', dateId: 'jungDate', rate: true, showIf: function (d) { return !isRentTrade(d); } },
-          { id: 'jan', label: '잔금', amountId: 'janAmount', dateId: 'janDate' }
-        ] },
+        // 공통 지급 일정 — 약정금 → 가계약금 → 계약금 → 중도금 → 잔금 (차수별 추가·제거)
+        { t: 'paytable', id: 'pay', sum: true, items: payItems('Amount') },
         { t: 'group', label: '특약' },
         { t: 'toggle', id: 'permit', label: '토지거래허가구역 (특약 자동 포함)', showIf: function (d) { return isSaleAgreement(d); } },
         { t: 'toggle', id: 'mortgage', label: '근저당 말소 특약 포함' },
-        { t: 'money', id: 'mortgageAmount', label: '채권최고액', showIf: function (d) { return d.mortgage; } },
-        { t: 'text', id: 'mortgageHolder', label: '채권자', ph: '예: 주식회사 카카오뱅크', showIf: function (d) { return d.mortgage; } }
+        // 채권자 · 채권최고액은 한 줄 반반
+        { t: 'moneyPair', id: 'mortgageInfo', showIf: function (d) { return d.mortgage; },
+          left: { t: 'text', id: 'mortgageHolder', label: '채권자', ph: '예: 주식회사 카카오뱅크' },
+          right: { t: 'money', id: 'mortgageAmount', label: '채권최고액' } }
       ],
       build: function (d, ctx) {
         var trade = tradeOf(d);
@@ -550,40 +691,54 @@
         var n = 0;
         var mAmt = amt(C.parseMan(d.mortgageAmount), ctx) || '(채권최고액)';
         var holder = String(d.mortgageHolder || '').trim();
+        var items = payItems('Amount');
+        var yakjeong = payItemOf(items, 'yakjeong');
+        var jeong = payItemOf(items, 'jeong');
+        var yakSum = payItemSum(d, yakjeong);
+        var jeongSum = payItemSum(d, jeong);
+        var gySum = payItemSum(d, payItemOf(items, 'gyeyak'));
+        var baseMan = payScheduleBase(null, d);
+        var totalMan = payScheduleMan(null, d, items);
+        var dealMan = baseMan != null ? baseMan : totalMan;
+        var askMan = payDepositMan(null, d, items, kind);
+        var askAmt = amt(askMan, ctx);
+        // 약정금·가계약금은 총합계에 넣지 않고, 계약일에 돌려받거나 계약금에서 빼고 채운다
+        var sub = [];
+        if (kind === '가계약' && d.permit) sub.push('  - 단, 토지거래허가 일정에 맞춰 쌍방이 협의할 수 있다.');
+        if (yakSum != null) {
+          sub.push('  - 약정금 ' + won(yakSum) + '은 계약일에 전액 반환받고, 계약금 ' +
+            (wonOr(gySum, '(계약금)')) + ' 전액을 입금합니다.');
+        }
+        if (jeongSum != null) {
+          var gyLeft = (gySum != null ? gySum : 0) - jeongSum;
+          sub.push('  - 가계약금 ' + won(jeongSum) + '은 계약금에 포함되므로, 계약일에는 계약금 ' +
+            wonOr(gySum, '(계약금)') + ' 중 가계약금을 제외한 ' + wonOr(gyLeft, '(나머지 금액)') + '을 입금합니다.');
+        }
+        var compLines = ['* ' + (trade === '매매' ? '매매가' : '보증금') + ' : ' + (amt(dealMan, ctx) || '(금액)')];
+        if (trade === '월세') {
+          var rentAmt0 = amt(C.parseMan(d.rent), ctx);
+          if (rentAmt0) compLines[0] += ' / 월차임 : ' + rentAmt0;
+        }
+        compLines = compLines
+          .concat(payLines(null, d, items, yakjeong, ctx))
+          .concat(payLines(null, d, items, jeong, ctx, { force: kind === '가계약' }));
+        compLines = compLines.concat(payLines(null, d, items, payItemOf(items, 'gyeyak'), ctx, { force: true })).concat(sub);
+        compLines = compLines
+          .concat(payLines(null, d, items, payItemOf(items, 'jung'), ctx))
+          .concat(payLines(null, d, items, payItemOf(items, 'jan'), ctx, { force: true }));
 
         if (trade === '매매') {
-          var jeongAmt = amt(C.parseMan(d.jeongAmount), ctx);
-          var gyeyakAmt = amt(C.parseMan(d.gyeyakAmount), ctx);
-          var jungAmt = amt(C.parseMan(d.jungAmount), ctx);
-          var janAmt = amt(C.parseMan(d.janAmount), ctx);
-          // 매매가는 지급 일정(계약금·중도금·잔금)을 더한 총합계 — 가계약금은 계약금에 포함되므로 빼고 더한다
-          var totalMan = payTotalMan(d, false);
-          var janWhen = C.formatDateTime(d.janDate) || String(d.janText || '').trim();
-          var gyeyakLine = '* 계약금' + pctLabel(pctOf(d.gyeyakAmount, totalMan), '10') + ' : ' + (gyeyakAmt || '(계약금)') +
-            ' (' + (C.formatDateTime(d.gyeyakDate) || String(d.gyeyakText || '').trim() || '일정') + ')';
-          var jungLine = '* 중도금' + pctLabel(pctOf(d.jungAmount, totalMan), '25') + ' : ' + (jungAmt || '(중도금)') +
-            ' (' + (C.formatDateTime(d.jungDate) || String(d.jungText || '').trim() || '일정') + ')';
-          var jeongLine = '* 가계약금 : ' + (jeongAmt || '(가계약금)');
-          var jd = C.formatDateTime(d.jeongDate);
-          if (jd) jeongLine += ' (' + jd + ')';
-          var sub = [];
-          if (d.permit) sub.push('  - 단, 토지거래허가 일정에 맞춰 쌍방이 협의할 수 있다.');
-          if (jeongAmt) sub.push('  - 가계약금 ' + jeongAmt + '은 반환받고, 계약금 전체를 입금하기로 한다.');
+          var jd = C.formatDateTime(payPartDate(d, jeong, 0));
           var blocks = [
             '안녕하세요, ' + ctx.office + '입니다 😊',
-            kind === '가계약'
-              ? '아래 표시부동산의 매매가계약 주요내용을 보내드리오니, 내용 확인 후 동의하시면 아래 계좌로 ' + (jeongAmt || '(가계약금)') + '을 입금해 주세요.'
-              : '아래 표시부동산의 매매계약 주요내용을 보내드리오니, 내용 확인 후 동의하시면 아래 계좌로 ' + (gyeyakAmt || '(계약금)') + '을 입금해 주세요.',
+            '아래 표시부동산의 ' + (kind === '가계약' ? '매매 가계약' : '매매계약') +
+              ' 주요내용을 보내드리오니, 내용 확인 후 동의하시면 아래 계좌로 ' +
+              (askAmt || (kind === '가계약' ? '(가계약금)' : '(계약금)')) + '을 입금해 주세요.',
             accountLine,
-            '■ 계약 구성\n' + [
-              '* 매매가 : ' + (amt(totalMan, ctx) || '(매매가)')
-            ].concat(kind === '가계약' ? [jeongLine, gyeyakLine] : [gyeyakLine]).concat(sub).concat([
-              jungLine,
-              '* 잔금 : ' + (janAmt || '(잔금)') + ' (' + (janWhen || '일정') + ')'
-            ]).join('\n'),
+            '■ 계약 구성\n' + compLines.join('\n'),
             kind === '가계약'
-              ? (jd ? jd + '에 ' + (jeongAmt || '(가계약금)') + '을 입금하면 가계약의 효력이 발생합니다.'
-                : (jeongAmt || '(가계약금)') + '을 입금하면 가계약의 효력이 발생합니다.')
+              ? (jd ? jd + '에 ' + (askAmt || '(가계약금)') + '을 입금하면 가계약의 효력이 발생합니다.'
+                : (askAmt || '(가계약금)') + '을 입금하면 가계약의 효력이 발생합니다.')
               : '잔금일에 소유권 이전 등기와 동시에 잔금을 지급합니다.'
           ];
           if (kind === '가계약') {
@@ -609,21 +764,20 @@
           return join(blocks);
         }
 
-        // 전세 · 월세 계약 (가계약을 고르면 가계약금으로 나간다)
+        // 전세 · 월세 계약 (가계약을 고르면 가계약금으로 나간다) — 같은 공통 지급 일정 포맷
         var payLabel = kind === '가계약' ? '가계약금' : '계약금';
         var depMan = C.parseMan(d.price);
-        var depAmt = depMan != null ? amt(depMan, ctx) : amt(payTotalMan(d, true), ctx);
+        var depAmt = depMan != null ? amt(depMan, ctx) : amt(totalMan, ctx);
         var rentAmt = trade === '월세' ? amt(C.parseMan(d.rent), ctx) : '';
-        var gyeyakAmt2 = amt(C.parseMan(d.gyeyakAmount), ctx);
-        var janAmt2 = amt(C.parseMan(d.janAmount), ctx);
-        var rows = [
-          '* 보증금 : ' + (depAmt || '(보증금)') + (rentAmt ? ' / 월차임 : ' + rentAmt : ''),
-          '* ' + payLabel + ' : ' + (gyeyakAmt2 || '(' + payLabel + ')') + ' (' + (C.formatDateTime(d.gyeyakDate) || '일정') + ')'
-        ];
-        if (C.parseMan(d.jungAmount) != null && trade === '월세') {
-          rows.push('* 중도금 : ' + (amt(C.parseMan(d.jungAmount), ctx) || '(중도금)') + ' (' + (C.formatDateTime(d.jungDate) || '일정') + ')');
-        }
-        rows.push('* 잔금 : ' + (janAmt2 || '(잔금)') + ' (' + (C.formatDateTime(d.janDate) || '일정') + ')');
+        var rows = ['* 보증금 : ' + (depAmt || '(보증금)') + (rentAmt ? ' / 월차임 : ' + rentAmt : '')];
+        rows = rows
+          .concat(payLines(null, d, items, yakjeong, ctx))
+          .concat(payLines(null, d, items, jeong, ctx, { force: kind === '가계약' }))
+          .concat(payLines(null, d, items, payItemOf(items, 'gyeyak'), ctx, { force: true }));
+        if (jeongSum != null) rows = rows.concat(sub);
+        rows = rows
+          .concat(payLines(null, d, items, payItemOf(items, 'jung'), ctx))
+          .concat(payLines(null, d, items, payItemOf(items, 'jan'), ctx, { force: true }));
         if (d.mortgage) {
           clauseLines.push(++n + '. 현 등기부등본상 채권최고액 1건 금 ' + mAmt + (holder ? ' (' + holder + ')' : '') + ' 상태의 계약이며, 임대인은 잔금 시 전액 상환 말소한다. (설정해지비용 임대인 부담)');
         }
@@ -632,7 +786,7 @@
         clauseLines.push(++n + '. 본 특약사항에 기재되지 않은 사항은 주택임대차보호법과 민법에 따른다.');
         return join([
           '안녕하세요, ' + ctx.office + '입니다 😊',
-          '아래 표시부동산의 ' + trade + (kind === '가계약' ? ' 가계약' : '계약') + ' 주요내용을 보내드리오니, 내용 확인 후 동의하시면 아래 계좌로 ' + (gyeyakAmt2 || '(' + payLabel + ')') + '을 입금해 주세요.',
+          '아래 표시부동산의 ' + trade + (kind === '가계약' ? ' 가계약' : '계약') + ' 주요내용을 보내드리오니, 내용 확인 후 동의하시면 아래 계좌로 ' + (askAmt || '(' + payLabel + ')') + '을 입금해 주세요.',
           accountLine,
           '■ 계약 구성\n' + rows.join('\n'),
           '■ 특약\n' + clauseLines.join('\n'),
@@ -659,11 +813,8 @@
         { t: 'toggle', id: 'priority', label: '선순위 권리내역 안내 포함', showIf: function (d) { return isRentTrade(d) && schedKind(d) === '계약'; } },
         { t: 'toggle', id: 'registry', label: '당일 등기부 확인 안내 포함', showIf: function (d) { return isRentTrade(d) && schedKind(d) !== '계약'; } },
         { t: 'toggle', id: 'docs', label: '잔금 구비서류 포함', showIf: function (d) { return !isRentTrade(d) && schedKind(d) === '잔금'; } },
-        { t: 'paytable', id: 'pay', sum: true, showIf: function (d) { return schedKind(d) !== '가계약'; }, rows: [
-          { id: 'gyeyak', label: '계약금', amountId: 'gyeyak', dateId: 'gyeyakDate' },
-          { id: 'jung', label: '중도금', amountId: 'jung', dateId: 'jungDate', showIf: function (d) { return !isRentTrade(d); } },
-          { id: 'jan', label: '잔금', amountId: 'jan', dateId: 'janDate' }
-        ] },
+        // 공통 지급 일정 — 약정금 → 가계약금 → 계약금 → 중도금 → 잔금 (차수별 추가·제거)
+        { t: 'paytable', id: 'pay', sum: true, showIf: function (d) { return schedKind(d) !== '가계약'; }, items: payItems('') },
         { t: 'account', id: 'account', label: '입금 계좌', ph: '예: 국민은행 123456-01-234567 홍길동', showIf: function (d) { var k = schedKind(d); return k !== '가계약' && k !== '계약'; } }
       ],
       build: function (d, ctx) {
@@ -721,23 +872,23 @@
               : '')
         ];
         var rows = [];
+        var items10 = payItems('');
         if (rentTrade) {
           // 금액은 매물칸에서 — 매매·전세는 amount, 월세는 보증금(deposit)·월차임(rent)
           var pp = (d.prop && typeof d.prop === 'object') ? d.prop : {};
-          var dep = amt(C.parseMan(pp.trade === '월세' ? pp.deposit : pp.amount), ctx);
+          var depMan10 = C.parseMan(pp.trade === '월세' ? pp.deposit : pp.amount);
+          var dep = amt(depMan10, ctx);
           var rentAmt2 = pp.trade === '월세' ? amt(C.parseMan(pp.rent), ctx) : '';
-          var gySum = C.parseMan(d.gyeyak) || 0;
-          var juSum = C.parseMan(d.jung) || 0;
-          var jaSum = C.parseMan(d.jan) || 0;
-          var totalMan2 = gySum + juSum + jaSum;
+          var totalMan2 = payScheduleMan('t10', d, items10);
           if (!dep && totalMan2) dep = amt(totalMan2, ctx);
           rows.push('* 보증금 : ' + (dep || '(보증금)') + (rentAmt2 ? ' / 월차임 : ' + rentAmt2 : ''));
         }
-        var gy = C.parseMan(d.gyeyak), ju = rentTrade ? null : C.parseMan(d.jung), ja = C.parseMan(d.jan);
-        rows.push('* 계약금 : ' + (amt(gy, ctx) || '(계약금)'));
-        if (!rentTrade) rows.push('* 중도금 : ' + (amt(ju, ctx) || '(중도금)'));
-        rows.push('* 잔금 : ' + (amt(ja, ctx) || '(잔금)'));
-        var sumMan = (gy || 0) + (ju || 0) + (ja || 0);
+        // 약정금 → 가계약금 → 계약금 → 중도금 → 잔금 (차수가 여럿이면 1차·2차로)
+        items10.forEach(function (item) {
+          rows = rows.concat(payLines('t10', d, items10, item, ctx,
+            { date: false, force: item.key === 'gyeyak' || item.key === 'jan' }));
+        });
+        var sumMan = payScheduleMan('t10', d, items10);
         if (sumMan) rows.push('* 합계 : ' + amt(sumMan, ctx));
         blocks2.push('■ 금액 세부사항\n' + rows.join('\n'));
         blocks2.push('* 입금 계좌 : ' + (C.accountParse(d.account) || '(계좌번호)'));
@@ -950,29 +1101,6 @@
   }
   function isSaleAgreement(d) { return !isRentTrade(d) && dealKind(d) === '가계약'; }
   function isSaleContract(d) { return !isRentTrade(d) && dealKind(d) === '계약'; }
-  // 지급 일정 표의 금액을 그대로 더한다 (표에 없는 항목·가계약금처럼 합계에서 빼는 항목은 건너뛴다)
-  function rowSum(d, rows) {
-    var total = 0, any = false;
-    (rows || []).forEach(function (r) {
-      if (r.showIf && !r.showIf(d)) return;
-      if (r.excludeSum) return;
-      var m = C.parseMan(d[r.amountId]);
-      if (m != null) { total += m; any = true; }
-    });
-    return any ? total : null;
-  }
-  function priceMan(d) {
-    if (!d) return null;
-    return C.parseMan(isRentTrade(d) ? d.price : d.price);
-  }
-  // 계약 조건 안내(t8)의 지급 일정 총합계 — 가계약금은 계약금에 포함되므로 빼고 더한다
-  function payTotalMan(d, rent) {
-    var gy = C.parseMan(d && d.gyeyakAmount);
-    var ju = rent ? null : C.parseMan(d && d.jungAmount);
-    var ja = C.parseMan(d && d.janAmount);
-    if (gy == null && ju == null && ja == null) return null;
-    return (gy || 0) + (ju || 0) + (ja || 0);
-  }
   function schedKinds(d) {
     if (isRentTrade(d)) {
       return [{ v: '계약', l: '계약' }, { v: '중도금', l: '중도금' }, { v: '잔금', l: '잔금' }];
@@ -1094,6 +1222,19 @@
     schedKinds: schedKinds,
     schedKind: schedKind,
     isRentTrade: isRentTrade,
-    tradeOf: tradeOf
+    tradeOf: tradeOf,
+    // 공통 지급 일정 (약정금·가계약금·계약금·중도금·잔금)
+    payItems: payItems,
+    payItemOf: payItemOf,
+    payPartCount: payPartCount,
+    payPartAmount: payPartAmount,
+    payPartDate: payPartDate,
+    payItemSum: payItemSum,
+    payScheduleBase: payScheduleBase,
+    payJanTotal: payJanTotal,
+    payPartValue: payPartValue,
+    payScheduleMan: payScheduleMan,
+    payDepositMan: payDepositMan,
+    payLines: payLines
   };
 })(typeof window !== 'undefined' ? window : globalThis);
