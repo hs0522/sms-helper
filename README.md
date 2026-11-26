@@ -308,6 +308,7 @@ projects/sms-helper/
   .github/workflows-disabled/ GitHub Actions APK 빌드 워크플로우(권한 때문에 비활성 위치에 둠)
   tests/test_app.py          자동 테스트 180개
   tests/capture.py           스크린샷 캡처
+  tests/capture_v142.py      v1.4.2 정렬·환산·목록 버튼 검수 스크린샷
 ```
 
 > 2026-11-25에 `📋 매물 찾기`(엑셀·표·매물표 이미지)와 `📑 진행 거래`(D-day 보드·정산표) 탭을 걷어냈습니다.
