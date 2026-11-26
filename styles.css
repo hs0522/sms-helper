@@ -516,15 +516,30 @@ input, textarea, select { font-family: inherit; letter-spacing: inherit; }
 .unit-toggle.is-alt:hover { background: var(--accent-dark); }
 /* 거래유형과 금액은 한 줄 — 왼쪽 [매매][전세][월세], 오른쪽 금액 영역이 남는 폭을 모두 쓴다.
    월세는 오른쪽 영역을 정확히 반으로 나눠 보증금·월세 두 칸을 나란히 넣는다. */
-.prop-money { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 6px 8px; }
-.prop-money.is-monthly { align-items: center; }
+.prop-money { --cap-h: 15px; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 0 8px; }
+.prop-money.is-monthly { align-items: start; }
 /* 동·호수로 찾은 평형·타입·방향 — 매물 줄 아래 가는 한 줄 */
 .prop-type .inp { width: 100%; padding: 7px 10px; font-size: 12.2px; color: var(--label); background: var(--track); }
-.prop-money .seg.is-trade { grid-column: 1; flex: 0 0 auto; }
+.prop-money .seg.is-trade { grid-column: 1; flex: 0 0 auto; align-self: start; margin-top: var(--cap-h); }
 .prop-money .seg.is-trade .seg-btn { flex: 0 0 auto; padding: 6px 8px; font-size: 11.8px; }
-.prop-money > .money-field { grid-column: 2; min-width: 0; }
+.prop-money > .money-area { grid-column: 2; min-width: 0; display: flex; flex-direction: column; }
+/* 금액칸 위 이름표 줄 — 매매·전세·월세 모두 같은 높이(15px)를 차지해 버튼·입력칸 위치를 고정한다 */
+.money-caps { display: flex; align-items: flex-end; gap: 6px; height: var(--cap-h, 15px); min-width: 0; }
+.money-cap {
+  min-width: 0;
+  font-size: 10.5px;
+  line-height: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.money-caps.is-single .money-cap { flex: 0 0 auto; }
+.money-caps.is-pair .money-cap { flex: 1 1 0; }
+.prop-money .money-area > .money-field { grid-column: 2; min-width: 0; }
 /* 월세 — 보증금·월세 두 칸을 반씩 나란히, 각 칸 아래에 환산 줄 */
-.prop-money > .money-pair { grid-column: 2; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; align-items: start; min-width: 0; }
+.money-area > .money-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; align-items: start; min-width: 0; }
 .money-pair .money-line { display: flex; flex-direction: column; align-items: stretch; gap: 2px; min-width: 0; }
 .money-pair .money-field { min-width: 0; }
 .money-line { display: flex; align-items: center; gap: 6px; }
@@ -538,7 +553,7 @@ input, textarea, select { font-family: inherit; letter-spacing: inherit; }
 @media (max-width: 374px) {
   .prop-money.is-monthly { grid-template-columns: minmax(0, 1fr); }
   .prop-money.is-monthly .seg.is-trade { grid-column: 1; justify-self: start; }
-  .prop-money.is-monthly > .money-pair { grid-column: 1; }
+  .prop-money.is-monthly > .money-area { grid-column: 1; }
 }
 .add-btn { align-self: flex-start; margin-top: 8px; padding: 7px 12px; font-size: 12px; }
 .action-btn { width: 100%; border-style: dashed; color: var(--accent); border-color: #CFD2F8; background: #FBFCFF; }
@@ -602,7 +617,7 @@ input, textarea, select { font-family: inherit; letter-spacing: inherit; }
 .pay-label { font-size: 12.5px; font-weight: 700; color: var(--ink); }
 .pay-main { display: grid; grid-template-columns: minmax(0, 1fr) 132px; gap: 6px; align-items: start; }
 .pay-main .money-box .inp { padding: 9px 42px 9px 10px; font-size: 13px; }
-.pay-main .date-btn { align-self: start; }
+.pay-row .pay-main .date-btn { align-self: center; }
 .pay-extra { display: flex; flex-direction: column; gap: 5px; padding-top: 2px; }
 .pay-extra .field-label { font-size: 11px; color: var(--muted); }
 .pay-extra .inp { font-size: 12.8px; padding: 8px 10px; }
@@ -1052,12 +1067,13 @@ select.inp,
   .tab {
     width: 100%;
     height: 34px;
-    padding: 0 4px;
-    font-size: 11px;
+    padding: 0 2px;
+    font-size: 10.8px;
     line-height: 1.2;
-    white-space: normal;
+    white-space: nowrap;
+    overflow: visible;
     text-align: center;
-    word-break: keep-all;
+    letter-spacing: -0.03em;
   }
   .layout {
     height: auto;
@@ -1376,16 +1392,28 @@ select.inp,
 }
 .paytable-head, .pay-row {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
 }
 .paytable-head { padding-bottom: 5px; }
 .paytable-head span { font-size: 10px; font-weight: 700; color: var(--muted2); }
 .paytable-head .head-name { flex: 0 0 var(--pay-name, 86px); width: var(--pay-name, 86px); text-align: center; }
 .paytable-head .head-right { flex: 1 1 auto; }
 .pay-row { padding: 8px 0; border-top: 1px dashed var(--line-soft); }
-/* 왼쪽 — 항목 이름과 (+)(−), % 칸을 칸 안에서 가운데로 모은다 */
-.pay-name { display: flex; flex-direction: column; align-items: center; gap: 2px; flex: 0 0 var(--pay-name, 86px); width: var(--pay-name, 86px); min-width: 0; text-align: center; }
+/* 윗줄 — 항목 이름은 왼쪽 한 줄로(잘리지 않게), (+)(−)는 행 오른쪽 끝 위 */
+.pay-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+/* 본문 줄 — 왼쪽 칸(% 자리)과 [일정][금액]을 행 세로 가운데에 */
+.pay-body { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; }
+/* 왼쪽 — 항목 이름은 윗줄로 올렸고, 아래 칸에는 계약금·중도금의 % 만 남는다 */
+.pay-name { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; flex: 0 0 var(--pay-name, 86px); width: var(--pay-name, 86px); min-width: 0; text-align: left; }
 .pay-name-top { display: flex; align-items: center; justify-content: center; gap: 3px; width: 100%; min-width: 0; }
 .pay-steps { display: inline-flex; align-items: center; gap: 2px; flex: 0 0 auto; }
 .pay-step {
@@ -1424,7 +1452,7 @@ select.inp,
 .pay-right { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .pay-row .pay-main { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 6px; align-items: center; }
 .pay-row .pay-amount { min-width: 0; }
-.pay-name-text { font-size: 11.6px; font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.pay-name-text { font-size: 11.6px; font-weight: 700; color: var(--ink); text-align: left; white-space: nowrap; overflow: visible; text-overflow: clip; min-width: 0; }
 .pay-rate { display: inline-flex; align-items: center; gap: 1px; }
 .pay-rate-inp {
   width: 30px;
@@ -1471,19 +1499,15 @@ select.inp,
 .pay-total.is-bad .pay-total-note { color: var(--danger); }
 
 @media (max-width: 900px) {
-  /* 지급 일정 — 위줄은 라벨+일정, 아래줄은 퍼센트+금액.
-     왼쪽 열은 라벨·퍼센트 폭(76px)만 두고, 오른쪽 열(1fr)은 카드 오른쪽 끝까지 채운다.
-     (오른쪽을 200px로 묶어 두면 카드 오른쪽에 빈 여백이 남아 왼쪽으로 쏠려 보인다) */
+  /* 지급 일정 — 윗줄은 항목 이름 + 오른쪽 끝 (+)(−), 그 아래 줄은 % 자리와 [일정][금액].
+     왼쪽 열은 % 폭(56px)만 두고, 오른쪽 열(1fr)은 카드 오른쪽 끝까지 채운다. */
   .paytable-head { display: none; }
   .pay-row {
-    gap: 10px;
-    align-items: flex-start;
     padding: 10px 0;
+    gap: 2px;
   }
-  .paytable { --pay-name: 80px; }
-  .pay-row { gap: 8px; }
+  .paytable { --pay-name: 56px; }
   .pay-row .pay-main { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); }
-  .pay-name { gap: 2px; }
   .pay-name-text { font-size: 11.4px; }
   .pay-step { width: 15px; height: 15px; font-size: 11px; }
   .pay-row .money-box .inp { padding-right: 26px; }
@@ -1718,18 +1742,14 @@ select.inp:disabled { appearance: none; -webkit-appearance: none; background-ima
    ================================================================== */
 
 /* [매매][전세][월세] — 세 모드에서 버튼 크기·자리가 그대로 (월세만 금액칸이 두 칸)
-   보증금·월세 이름은 금액칸 위 빈자리에 띄워 올려 두 모드의 높이를 똑같이 맞춘다 */
-/* 매매·전세는 위에 이름표가 없으니 위 여백을 일반 폼 간격으로 줄인다 (월세만 이름표 자리 14px) */
-.prop-money { align-items: start; padding-top: 4px; }
-.prop-money.is-monthly { padding-top: 14px; }
-.prop-money .seg.is-trade { flex: 0 0 auto; width: 140px; align-self: start; margin-top: 3px; }
+   금액칸 위 이름표(매매가 / 보증금 / 보증금·월세)는 세 모드 모두 늘 같은 높이로 자리를 잡는다 */
+.prop-money { align-items: start; padding-top: 0; }
+.prop-money.is-monthly { padding-top: 0; }
+.prop-money .seg.is-trade { flex: 0 0 auto; width: 140px; align-self: start; margin-top: var(--cap-h, 15px); }
 .prop-money .seg.is-trade .seg-btn { flex: 1 1 0; min-width: 0; padding: 6px 3px; text-align: center; }
 .prop-money.is-monthly { align-items: start; }
 .money-pair .money-line { position: relative; display: block; }
 .money-pair .money-label {
-  position: absolute;
-  top: -14px;
-  left: 2px;
   flex: none;
   font-size: 10.5px;
   line-height: 14px;

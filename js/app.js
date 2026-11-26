@@ -992,10 +992,9 @@
         line.dataset.payItem = item.key;
         line.dataset.payIdx = String(i);
 
-        // 왼쪽 — 항목 이름과 (+)(−) 를 한 줄에, % 칸은 그 아래. 칸 안에서 가운데 정렬
-        var name = el('div', 'pay-name');
-        var top = el('div', 'pay-name-top');
-        top.appendChild(el('span', 'pay-name-text', label));
+        // 윗줄 — 항목 이름만 왼쪽에 두어 절대 잘리지 않게, (+)(−)는 행 오른쪽 끝 위에
+        var head = el('div', 'pay-head');
+        head.appendChild(el('span', 'pay-name-text', label));
         var steps = el('span', 'pay-steps');
         var add = el('button', 'pay-step is-add', '+');
         add.type = 'button';
@@ -1011,25 +1010,32 @@
         del.setAttribute('aria-label', label + ' 빼기');
         del.title = n > 1 ? '이 차수를 뺍니다' : '이 줄의 금액·일정을 지웁니다';
         steps.appendChild(del);
-        top.appendChild(steps);
-        name.appendChild(top);
-        if (item.rate) name.appendChild(rateBadge(t, data, item, i));
-        line.appendChild(name);
+        head.appendChild(steps);
+        line.appendChild(head);
 
-        // 오른쪽 — [일정][금액] 한 줄, 아래에 원단위·억 환산과 소계
+        // 본문 줄 — 왼쪽에는 % 칸만(계약금·중도금), 오른쪽은 [일정][금액] 한 줄. 세로 가운데 정렬
+        var body = el('div', 'pay-body');
+        var name = el('div', 'pay-name');
+        if (item.rate) name.appendChild(rateBadge(t, data, item, i));
+        body.appendChild(name);
+
         var right = el('div', 'pay-right');
         var main = el('div', 'pay-main');
         main.appendChild(dateButton('pay:' + item.key + ':' + i, T.payPartDate(data, item, i), '일정'));
         var amount = el('div', 'pay-amount');
-        amount.appendChild(payAmountField({ item: item, idx: i, man: man, auto: auto, bad: bad }));
-        main.appendChild(amount);
-        right.appendChild(main);
+        var amountField = payAmountField({ item: item, idx: i, man: man, auto: auto, bad: bad });
+        // 원단위·끊어읽기 환산은 금액칸 바로 아래에 붙인다
         var hint = el('div', 'money-hint pay-hint');
         hint.dataset.payHint = item.key + ':' + i;
         setHint(hint, (man == null || bad) ? '' : C.moneyHintLine(man));
-        right.appendChild(hint);
-        if (n > 1 && isLast) right.appendChild(paySubLine(item, T.payItemSum(data, item)));
-        line.appendChild(right);
+        amountField.appendChild(hint);
+        amount.appendChild(amountField);
+        main.appendChild(amount);
+        right.appendChild(main);
+        body.appendChild(right);
+        line.appendChild(body);
+        // 차수로 나뉜 항목의 소계 — 마지막 차수 줄 오른쪽 아래
+        if (n > 1 && isLast) line.appendChild(paySubLine(item, T.payItemSum(data, item)));
         box.appendChild(line);
       }
     });
@@ -1582,6 +1588,16 @@
     return wrap;
   }
 
+  // 금액칸 위 이름표 — 매매·전세·월세 어느 쪽이든 같은 자리를 늘 차지한다
+  // (이름표가 있을 때만 생기면 [매매][전세][월세] 버튼과 금액칸이 위아래로 흔들린다)
+  function moneyCaps(labels) {
+    var caps = el('div', 'money-caps' + (labels.length > 1 ? ' is-pair' : ' is-single'));
+    labels.forEach(function (l) {
+      caps.appendChild(el('span', 'money-cap', l));
+    });
+    return caps;
+  }
+
   // 매매 / 전세 / 월세 + 만 원 금액 (월세는 보증금·월세 두 칸)
   function propMoney(listId, idx, item) {
     var trade = item.trade === '전세' || item.trade === '월세' ? item.trade : '매매';
@@ -1598,22 +1614,19 @@
       seg.appendChild(b);
     });
     box.appendChild(seg);
+    var area = el('div', 'money-area');
     if (trade === '월세') {
+      area.appendChild(moneyCaps(['보증금', '월세']));
       var pair = el('div', 'money-pair');
-      pair.appendChild(propMoneyLine(listId, idx, 'deposit', '보증금', item.deposit));
-      pair.appendChild(propMoneyLine(listId, idx, 'rent', '월세', item.rent));
-      box.appendChild(pair);
+      pair.appendChild(propMoneyWrap(listId, idx, 'deposit', item.deposit));
+      pair.appendChild(propMoneyWrap(listId, idx, 'rent', item.rent));
+      area.appendChild(pair);
     } else {
-      box.appendChild(propMoneyWrap(listId, idx, 'amount', item.amount));
+      area.appendChild(moneyCaps([trade === '매매' ? '매매가' : '보증금']));
+      area.appendChild(propMoneyWrap(listId, idx, 'amount', item.amount));
     }
+    box.appendChild(area);
     return box;
-  }
-
-  function propMoneyLine(listId, idx, key, label, value) {
-    var line = el('div', 'money-line');
-    line.appendChild(el('span', 'money-label', label));
-    line.appendChild(propMoneyWrap(listId, idx, key, value));
-    return line;
   }
 
   function propMoneyWrap(listId, idx, key, value) {
@@ -1621,7 +1634,9 @@
   }
 
   /* 공통 금액박스 — [매매][전세][월세] + 금액 한 줄 (월세는 보증금·월세 두 칸)
-     매물칸·공동중개 요청·중개보수 계산기가 같은 모양을 쓴다. */
+     매물칸·공동중개 요청·중개보수 계산기가 같은 모양을 쓴다.
+     금액칸 위 이름표(매매가 / 보증금 / 보증금·월세)는 세 모드 모두 같은 높이로 늘 있어
+     거래유형을 바꿔도 버튼과 입력칸이 위아래로 움직이지 않는다. */
   function tradeMoneyBar(o) {
     var data = o.data || {};
     var bar = el('div', 'prop-money' + (o.trade === '월세' ? ' is-monthly' : ''));
@@ -1636,22 +1651,19 @@
       seg.appendChild(b);
     });
     bar.appendChild(seg);
+    var area = el('div', 'money-area');
     if (o.trade === '월세') {
+      area.appendChild(moneyCaps([o.depositLabel || '보증금', o.rentLabel || '월세']));
       var pair = el('div', 'money-pair');
-      pair.appendChild(tradeMoneyLine(o.depositId, o.depositLabel || '보증금', data[o.depositId], o.small !== false));
-      pair.appendChild(tradeMoneyLine(o.rentId, o.rentLabel || '월세', data[o.rentId], o.small !== false));
-      bar.appendChild(pair);
+      pair.appendChild(moneyField({ field: o.depositId, value: data[o.depositId], ph: '', small: o.small !== false }));
+      pair.appendChild(moneyField({ field: o.rentId, value: data[o.rentId], ph: '', small: o.small !== false }));
+      area.appendChild(pair);
     } else {
-      bar.appendChild(moneyField({ field: o.amountId, value: data[o.amountId], ph: '', small: o.small !== false }));
+      area.appendChild(moneyCaps([o.trade === '매매' ? '매매가' : '보증금']));
+      area.appendChild(moneyField({ field: o.amountId, value: data[o.amountId], ph: '', small: o.small !== false }));
     }
+    bar.appendChild(area);
     return bar;
-  }
-
-  function tradeMoneyLine(fieldId, label, value, small) {
-    var line = el('div', 'money-line');
-    line.appendChild(el('span', 'money-label', label));
-    line.appendChild(moneyField({ field: fieldId, value: value, ph: '', small: small !== false }));
-    return line;
   }
 
   function dealMoneyBar(data) {
