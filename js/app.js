@@ -20,7 +20,7 @@
   var editDirty = {};   // 본문을 직접 고친 뒤 입력값이 또 바뀐 템플릿 (메모리 전용)
   var rangeState = {};  // 시간대 추가 임시값
   // 약정·계약·잔금 쪽 서류에는 동·호수를 그대로 보여 준다 (단지·층으로 가리지 않음)
-  var PLAIN_PROP = { t8: 1, t9: 1, t10: 1, t13: 1, t15: 1 };
+  var PLAIN_PROP = { t8: 1, t10: 1 };
 
   /* ---------------- 저장소 ---------------- */
   var store = {
@@ -74,8 +74,13 @@
   function mergeContacts(saved) {
     var base = T.defaultContacts();
     var out = {};
+    // 2026-11-26 분야 이름을 짧게 바꿨다 — 예전 이름으로 저장한 연락처도 그대로 살린다
+    var alias = { '세무': '세무사', '이사업체': '이사' };
     T.VENDOR_CATS.forEach(function (cat) {
-      out[cat] = Array.isArray(saved[cat]) ? saved[cat] : (base[cat] || []);
+      var old = null;
+      Object.keys(alias).forEach(function (k) { if (alias[k] === cat) old = k; });
+      var list = Array.isArray(saved[cat]) ? saved[cat] : (old && Array.isArray(saved[old]) ? saved[old] : (base[cat] || []));
+      out[cat] = list;
     });
     return out;
   }
@@ -166,6 +171,7 @@
       // 기본값을 채우기 전에 예전 저장값부터 매물 줄 구조로 옮긴다
       migrateProps(t, store.data[t.id]);
       migrateTrades(t, store.data[t.id]);
+      migrateMerged(t, store.data[t.id]);
       var d = T.defaultData(t);
       for (var k in d) if (!(k in store.data[t.id])) store.data[t.id][k] = d[k];
     }
@@ -208,11 +214,57 @@
     migratePropMode(t, data);
   }
 
-  // 예전 "임대차" 하나짜리 거래 유형을 전세/월세로 나눈다 (t13 · t18)
+  // 예전 "임대차" 하나짜리 거래 유형을 전세/월세로 나눈다 (t10 · t18)
   function migrateTrades(t, data) {
-    if (!t || (t.id !== 't13' && t.id !== 't18') || data.trade !== '임대차') return;
+    if (!t || (t.id !== 't10' && t.id !== 't18') || data.trade !== '임대차') return;
     data.trade = C.parseMan(data.rent) != null ? '월세' : '전세';
     if (t.id === 't18' && (data.deposit == null || data.deposit === '') && data.amount != null) data.deposit = data.amount;
+  }
+
+  // 2026-11-26 통합으로 바뀐 저장값을 새 칸에 맞춰 옮긴다
+  function migrateMerged(t, data) {
+    if (!t || !data) return;
+    if (t.id === 't3') {
+      if (data.view == null && (data.ver === 'simple' || data.ver === 'detail')) data.view = data.ver;
+      if (data.who !== 'owner' && data.who !== 'coagent') data.who = 'owner';
+      if (data.view !== 'simple' && data.view !== 'detail') data.view = 'simple';
+      if (!data.prop || typeof data.prop !== 'object') data.prop = T.defaultProp();
+    }
+    if (t.id === 't17') {
+      if (data.target === 'owner') data.target = 'resident';
+      if (data.target !== 'resident' && data.target !== 'coagent' && data.target !== 'guest') data.target = 'resident';
+      if (!data.vpick || typeof data.vpick !== 'object') data.vpick = {};
+      if (data.vpick.owner != null && data.vpick.resident == null) data.vpick.resident = data.vpick.owner;
+      if (!Array.isArray(data.greets)) {
+        var legacy = String(data.greet == null ? '' : data.greet);
+        var map = { cold: 'weather', evening: 'evening', weekend: 'holiday', day: 'morning' };
+        data.greets = map[legacy] ? [map[legacy]] : [];
+        delete data.greet;
+      }
+    }
+    if (t.id === 't8') {
+      if (data.trade !== '전세' && data.trade !== '월세') data.trade = '매매';
+      if (data.kind !== '계약') data.kind = '약정';
+    }
+    if (t.id === 't10') {
+      var kinds = T.schedKinds(data).map(function (o) { return o.v; });
+      if (kinds.indexOf(data.kind) === -1) data.kind = kinds[0];
+    }
+    if (t.id === 't2' || t.id === 't18') {
+      if (!data.moveinMigrated) {
+        if (data.moveinMode == null) {
+          data.moveinMode = String(data.moveinText == null ? '' : data.moveinText).trim() ? '협의' : '고정';
+        }
+        // 예전 고정 날짜는 늘 보이는 시작일 칸으로 옮긴다 (한 번만)
+        if (data.moveinMode !== '기간' && data.movein && data.movein.date &&
+            (!data.moveinStart || !data.moveinStart.date)) {
+          data.moveinStart = Object.assign({}, data.movein);
+        }
+        data.moveinMigrated = true;
+      }
+      if (data.moveinMode == null) data.moveinMode = '고정';
+      if (data.moveinFix == null) data.moveinFix = '고정';
+    }
   }
 
   // 예전 특가 매물 홍보(단지·층 + 평형 + 동·호로 빠르게)를 매물 줄 하나로 옮긴다
@@ -306,6 +358,16 @@
     var hint = field && field.querySelector('.money-hint');
     setHint(hint, C.moneyHintLine(man));
     return man;
+  }
+
+  // 금액 칸에 친 원단위 금액을 쉼표로만 다듬는다 (중개보수 합계 칸)
+  function formatWonInput(inp) {
+    var caret = inp.selectionStart;
+    var before = String(inp.value).slice(0, caret).replace(/[^0-9]/g, '').length;
+    var d = C.digits(inp.value);
+    inp.value = d ? C.group(Number(d)) : '';
+    if (document.activeElement === inp) setCaretByDigits(inp, before);
+    return d ? Number(d) : '';
   }
 
   function toast(msg) {
@@ -463,7 +525,7 @@
 
     if (t.fixed || t.fields.length) { /* 인라인 안내는 아래에서 한번에 */ }
 
-    if (t.id === 't8' || t.id === 't13' || t.id === 't15') {
+    if (t.id === 't8') {
       // 금액 표시 형식 안내 (설정값)
       var hint = el('div', 'form-hint');
       var modeLabel = { won: '만원 단위', eokman: '끊어읽기' }[C.normMode(store.profile.amountMode)] || '전체';
@@ -600,17 +662,24 @@
   // 입력 중에는 잔금 칸·확인 줄만 다시 그린다(포커스 유지)
   function syncPayUI() {
     var t = tplById(store.current);
-    if (!t || (t.id !== 't8' && t.id !== 't13')) return;
+    if (!t) return;
+    var pf = payTableField(t);
+    var isSum = !!(pf && pf.sum);
+    if (t.id !== 't8' && !isSum) return;
     var data = dataOf(t);
-    var s = paySplitOf(t, data);
-    var man = s && s.ok ? s.janMan : null;
-    var inp = $('#fields [data-auto]');
-    if (inp) {
-      inp.value = man == null ? '' : C.group(man);
-      inp.placeholder = s && s.over ? '확인 필요' : '자동';
-      var field = inp.closest('.money-field');
-      var hint = field && field.querySelector('.money-hint');
-      setHint(hint, man == null ? '' : C.moneyHintLine(man));
+    if (!isSum) {
+      var s = paySplitOf(t, data);
+      var man = s && s.ok ? s.janMan : null;
+      var inp = $('#fields [data-auto]');
+      if (inp) {
+        inp.value = man == null ? '' : C.group(man);
+        inp.placeholder = s && s.over ? '확인 필요' : '자동';
+        var field = inp.closest('.money-field');
+        var hint = field && field.querySelector('.money-hint');
+        setHint(hint, man == null ? '' : C.moneyHintLine(man));
+      }
+      // 저장되는 값도 계산 결과로 맞춰 둔다 (음수·초과면 비운다)
+      data[t.id === 't8' ? 'janAmount' : 'jan'] = man == null ? '' : man;
     }
     // 비율(%) 배지도 금액에 맞춰 다시
     payRows(t).forEach(function (r) {
@@ -622,14 +691,29 @@
     if (old) old.replaceWith(payTotal(t, data));
     var oldCheck = $('#fields [data-autofill]');
     if (oldCheck) oldCheck.replaceWith(payCheck(t, data));
-    // 저장되는 값도 계산 결과로 맞춰 둔다 (음수·초과면 비운다)
-    data[t.id === 't8' ? 'janAmount' : 'jan'] = man == null ? '' : man;
   }
 
   /* ---------------- 지급 일정 표 (매물 스파이더 계약 팝업형) ---------------- */
   function payRows(t) {
     var f = (t.fields || []).filter(function (x) { return x.t === 'paytable'; })[0];
     return (f && f.rows) || [];
+  }
+
+  function payTableField(t) {
+    return (t.fields || []).filter(function (x) { return x.t === 'paytable'; })[0] || null;
+  }
+
+  // 하단 지급 일정의 금액을 그대로 더한 총합계 (거래금액 칸을 없앤 표)
+  function paySumMan(t, data) {
+    var f = payTableField(t);
+    if (!f || !f.sum) return null;
+    var total = 0, any = false;
+    (f.rows || []).forEach(function (r) {
+      if (r.showIf && !r.showIf(data)) return;
+      var m = C.parseMan(data[r.amountId]);
+      if (m != null) { total += m; any = true; }
+    });
+    return any ? total : null;
   }
 
   function payBaseMan(t, data) {
@@ -651,12 +735,14 @@
   // 달력 입력칸 — 값이 있든 없든 폭이 변하지 않게 늘 칸 폭 그대로(100%)로 그린다
   function dateTrigger(fieldId, value, emptyLabel, cls, opts) {
     opts = opts || {};
-    var db = el('button', 'date-btn' + (cls ? ' ' + cls : ''));
+    var db = el('button', 'date-btn' + (cls ? ' ' + cls : '') + (opts.off ? ' is-off' : ''));
     db.type = 'button';
     db.dataset.date = fieldId;
     db.dataset.emptyLabel = emptyLabel || '날짜';
     if (opts.dateOnly) db.dataset.dateOnly = '1';
     if (opts.clearTitle) db.dataset.clearTitle = opts.clearTitle;
+    if (opts.off) db.disabled = true;
+    if (opts.fix) db.dataset.fix = opts.fix;
     db.appendChild(dateIcon());
     db.appendChild(el('span', 'date-text'));
     setDateTriggerLabel(db, value);
@@ -667,7 +753,7 @@
   function setDateTriggerLabel(db, value) {
     if (!db) return;
     var dateOnly = db.dataset.dateOnly === '1';
-    var label = dateOnly ? C.compactDate(value) : C.compactDateTime(value);
+    var label = dateOnly ? C.compactDateDot(value) : C.compactDateTime(value);
     var text = db.querySelector('.date-text');
     if (text) {
       text.textContent = label || db.dataset.emptyLabel || '날짜';
@@ -705,8 +791,10 @@
     return dateTrigger(fieldId, value, emptyLabel, 'is-compact');
   }
 
-  /* 날짜 칸 — 협의 | 고정 | 기간 (매물 스파이더 방식)
-     모드를 바꿔도 칸 폭이 흘러가지 않게 본문은 늘 같은 자리·같은 폭으로 그린다. */
+  /* 날짜 칸 — 협의 | 고정 | 기간 (입주일·계약일)
+     위 선택과 상관없이 [시작일] ~ [종료일] 두 칸은 늘 같은 자리·같은 폭으로 보인다.
+     협의는 글자 칸을 두지 않고 문자에 '즉시입주(협의)'로 나가고,
+     고정은 시작일에서 날짜를 골라 달력 아래 「고정 / 선호」를 고른다. */
   function dateModeField(f, data) {
     var row = fieldRow(f.label);
     var mode = C.dateModeOf(data, f.id);
@@ -721,27 +809,17 @@
     });
     row.appendChild(seg);
     var body = el('div', 'date-mode-body');
-    if (mode === '협의') {
-      // 달력 대신 "협의" / "즉시" / "26.12 말"처럼 글자로 적는 칸
-      var ft = el('input', 'inp inp-date-free');
-      ft.type = 'text';
-      ft.autocomplete = 'off';
-      ft.placeholder = f.ph || '예: 협의 / 즉시 / 26.12 말';
-      ft.dataset.field = f.id + 'Text';
-      ft.dataset.dateField = f.id;
-      ft.value = data[f.id + 'Text'] == null ? '' : data[f.id + 'Text'];
-      body.appendChild(ft);
-    } else if (mode === '기간') {
-      var rg = el('div', 'date-range');
-      rg.appendChild(dateTrigger(f.id + 'Start', data[f.id + 'Start'], '시작일', null,
-        { dateOnly: true, clearTitle: '시작일 지우기' }));
-      rg.appendChild(el('span', 'range-tilde', '~'));
-      rg.appendChild(dateTrigger(f.id + 'End', data[f.id + 'End'], '종료일', null,
-        { dateOnly: true, clearTitle: '종료일 지우기' }));
-      body.appendChild(rg);
-    } else {
-      body.appendChild(dateTrigger(f.id, data[f.id], '날짜'));
-    }
+    var rg = el('div', 'date-range');
+    var startOpen = mode !== '협의';
+    var endOpen = mode === '기간';
+    var startBtn = dateTrigger(f.id + 'Start', data[f.id + 'Start'], '시작일', null,
+      { dateOnly: true, clearTitle: '시작일 지우기', off: !startOpen, fix: mode === '고정' ? f.id : null });
+    rg.appendChild(startBtn);
+    rg.appendChild(el('span', 'range-tilde', '~'));
+    var endBtn = dateTrigger(f.id + 'End', data[f.id + 'End'], '종료일', null,
+      { dateOnly: true, clearTitle: '종료일 지우기', off: !endOpen });
+    rg.appendChild(endBtn);
+    body.appendChild(rg);
     row.appendChild(body);
     return row;
   }
@@ -761,24 +839,29 @@
   }
 
   function payTotal(t, data) {
-    var s = paySplitOf(t, data);
-    var base = payBaseLabel(t, data);
     var box = el('div', 'pay-total');
     box.dataset.paytotal = '1';
     var man = null, note = '';
-    if (s && s.ok) {
-      // 금액이 정확히 맞으면 안내 글자를 두지 않는다 (맞지 않을 때만 빨간 경고)
-      man = s.baseMan;
-    } else if (s && s.over) {
-      man = s.paidMan;
-      note = '계약금·중도금이 ' + base + '보다 ' + C.formatWonPlain(s.overByMan * 10000) + ' 많습니다';
-      box.classList.add('is-bad');
-    } else if (s && s.negative) {
-      note = '음수 금액은 계산할 수 없습니다 · 지급액을 확인해 주세요';
-      box.classList.add('is-bad');
-    } else if (s) {
-      man = s.paidMan || null;
-      note = base + '을 넣으면 잔금이 자동으로 계산됩니다';
+    var f = payTableField(t);
+    if (f && f.sum) {
+      man = paySumMan(t, data);
+    } else {
+      var s = paySplitOf(t, data);
+      var base = payBaseLabel(t, data);
+      if (s && s.ok) {
+        // 금액이 정확히 맞으면 안내 글자를 두지 않는다 (맞지 않을 때만 빨간 경고)
+        man = s.baseMan;
+      } else if (s && s.over) {
+        man = s.paidMan;
+        note = '계약금·중도금이 ' + base + '보다 ' + C.formatWonPlain(s.overByMan * 10000) + ' 많습니다';
+        box.classList.add('is-bad');
+      } else if (s && s.negative) {
+        note = '음수 금액은 계산할 수 없습니다 · 지급액을 확인해 주세요';
+        box.classList.add('is-bad');
+      } else if (s) {
+        man = s.paidMan || null;
+        note = base + '을 넣으면 잔금이 자동으로 계산됩니다';
+      }
     }
     var line = el('div', 'pay-total-line');
     line.appendChild(el('span', 'pay-total-label', '총합계'));
@@ -896,25 +979,89 @@
         ai.dataset.field = f.id;
         ai.value = data[f.id] == null ? '' : data[f.id];
         row.appendChild(ai);
-        var parsed = C.accountParse(data[f.id]);
-        if (parsed) {
-          var pv = el('div', 'account-preview', '→ ' + parsed);
-          row.appendChild(pv);
-        }
         return row;
       }
 
       case 'seg': {
         row = fieldRow(f.label);
-        var seg = el('div', 'seg' + (f.wrap ? ' is-wrap' : ''));
-        f.options.forEach(function (o) {
+        var opts = typeof f.optionsFn === 'function' ? f.optionsFn(data) : f.options;
+        var seg = el('div', 'seg' + (f.wrap ? ' is-wrap' : '') + (f.row5 ? ' is-row5' : '') +
+          (f.grid ? (opts.length === 3 ? ' is-grid3' : ' is-grid4') : ''));
+        opts.forEach(function (o) {
           var b = el('button', 'seg-btn' + (data[f.id] === o.v ? ' is-active' : ''), o.l);
           b.type = 'button';
           b.dataset.seg = f.id;
           b.dataset.value = o.v;
           seg.appendChild(b);
         });
+        if (f.row5) {
+          var vb = el('button', 'seg-btn is-add', '+ 업체 추가');
+          vb.type = 'button';
+          vb.dataset.contactAdd = data.vendorCat || '대출';
+          seg.appendChild(vb);
+        }
         row.appendChild(seg);
+        return row;
+      }
+
+      // 버전처럼 두 쌍을 한 줄에 — [소유자][중개사] [간단][상세]
+      case 'segs': {
+        row = fieldRow(f.label);
+        var line = el('div', 'segs');
+        f.groups.forEach(function (g) {
+          if (g.showIf && !g.showIf(data)) return;
+          var gs = el('div', 'seg is-flex');
+          g.options.forEach(function (o) {
+            var b = el('button', 'seg-btn' + (data[g.id] === o.v ? ' is-active' : ''), o.l);
+            b.type = 'button';
+            b.dataset.seg = g.id;
+            b.dataset.value = o.v;
+            gs.appendChild(b);
+          });
+          line.appendChild(gs);
+        });
+        row.appendChild(line);
+        return row;
+      }
+
+      // 공통 금액란 — 거래 유형에 따라 매매가 / 보증금 / 보증금·월차임
+      case 'price': {
+        var ptrade = T.tradeOf(data);
+        var stack = el('div', 'field-stack');
+        var prow = fieldRow(ptrade === '매매' ? '매매가' : '보증금');
+        prow.appendChild(moneyWrap(t, { id: 'price', ph: '' }, data));
+        stack.appendChild(prow);
+        if (ptrade === '월세') {
+          var rrow = fieldRow('월차임');
+          rrow.appendChild(moneyWrap(t, { id: 'rent', ph: '' }, data));
+          stack.appendChild(rrow);
+        }
+        return stack;
+      }
+
+      // 임대차 만기 확인 — 상대방 버튼과 남은 기간을 한 줄에
+      case 'roleMonths': {
+        row = el('div', 'field is-role-months');
+        var rseg = el('div', 'seg is-small is-role');
+        [{ v: '임대인', l: '임대인' }, { v: '임차인', l: '임차인' }].forEach(function (o) {
+          var b = el('button', 'seg-btn' + (data.role === o.v ? ' is-active' : ''), o.l);
+          b.type = 'button';
+          b.dataset.seg = 'role';
+          b.dataset.value = o.v;
+          rseg.appendChild(b);
+        });
+        row.appendChild(rseg);
+        var nw = el('div', 'money-wrap is-months');
+        var ni = el('input', 'inp inp-money');
+        ni.type = 'text';
+        ni.inputMode = 'numeric';
+        ni.autocomplete = 'off';
+        ni.dataset.field = 'months';
+        ni.setAttribute('aria-label', '남은 기간');
+        ni.value = data.months == null ? '' : data.months;
+        nw.appendChild(ni);
+        nw.appendChild(el('span', 'money-unit', '개월'));
+        row.appendChild(nw);
         return row;
       }
 
@@ -944,33 +1091,39 @@
         return row;
       }
 
+      // 집보기 후 감사 인사 — [교체 2/7] [날씨][아침][저녁][연휴] 한 줄
       case 'variant': {
-        var vTarget = T.VARIANTS[data.target] ? data.target : 'owner';
+        var vTarget = T.VARIANTS[data.target] ? data.target : 'resident';
         var vList = T.VARIANTS[vTarget];
         var vIdx = T.variantIndex(data, vTarget) % vList.length;
         row = el('div', 'field is-variant');
-        var vHead = el('div', 'field-head');
-        vHead.appendChild(el('label', 'field-label', f.label || '문구'));
-        vHead.appendChild(el('span', 'field-hint variant-no', (vIdx + 1) + ' / ' + vList.length));
-        row.appendChild(vHead);
-        var vBtn = el('button', 'ghost action-btn has-ico');
+        var vLine = el('div', 'variant-row');
+        var vBtn = el('button', 'ghost action-btn has-ico is-swap');
         vBtn.type = 'button';
         vBtn.dataset.action = 'vary';
-        vBtn.innerHTML = iconSvg('refresh', 14) + '<span>문구 교체</span>';
-        row.appendChild(vBtn);
+        vBtn.innerHTML = iconSvg('refresh', 13) + '<span>교체</span><span class="variant-no">' +
+          (vIdx + 1) + ' / ' + vList.length + '</span>';
+        vLine.appendChild(vBtn);
+        var pickedG = T.greetList(data);
+        T.GREETINGS.forEach(function (g) {
+          var on = pickedG.indexOf(g.v) !== -1;
+          var gb = el('button', 'chip' + (on ? ' is-on' : ''), g.l);
+          gb.type = 'button';
+          gb.dataset.greet = g.v;
+          gb.setAttribute('aria-pressed', on ? 'true' : 'false');
+          vLine.appendChild(gb);
+        });
+        row.appendChild(vLine);
         return row;
       }
 
-      // 협력업체·상담사 — 저장된 연락처에서 체크해서 보낸다
+      // 협력업체·상담사 — 저장된 연락처를 고치고 체크해서 보낸다
       case 'contacts': {
         var cat = T.VENDOR_CATS.indexOf(data.vendorCat) !== -1 ? data.vendorCat : '대출';
         var all = (store.contacts && store.contacts[cat]) || [];
         var picked = T.selectedFor(data, cat);
-        row = fieldRow(f.label, { hintText: '체크한 상담사만 문자에 들어갑니다' });
+        row = fieldRow(f.label || '연락처');
         var listBox = el('div', 'contact-list');
-        if (!all.length) {
-          listBox.appendChild(el('div', 'contact-empty', '저장된 연락처가 없어요 · 아래에서 추가해 주세요'));
-        }
         all.forEach(function (c) {
           var on = picked.indexOf(c.id) !== -1;
           var item = el('div', 'contact' + (on ? ' is-on' : ''));
@@ -982,12 +1135,27 @@
           chk.setAttribute('aria-checked', on ? 'true' : 'false');
           chk.setAttribute('aria-label', c.name + ' 선택');
           item.appendChild(chk);
-          var info = el('div', 'contact-info');
-          info.dataset.contactPick = c.id;
-          info.dataset.cat = cat;
-          info.appendChild(el('div', 'contact-name', c.name));
-          info.appendChild(el('div', 'contact-phone', C.formatPhone(c.phone)));
-          item.appendChild(info);
+          var nameInp = el('input', 'inp contact-inp');
+          nameInp.type = 'text';
+          nameInp.autocomplete = 'off';
+          nameInp.placeholder = '신한대출 담당자';
+          nameInp.value = c.name || '';
+          nameInp.dataset.contactId = c.id;
+          nameInp.dataset.contactEdit = 'name';
+          nameInp.dataset.cat = cat;
+          nameInp.setAttribute('aria-label', '업체 담당자 이름');
+          item.appendChild(nameInp);
+          var phInp = el('input', 'inp contact-inp');
+          phInp.type = 'tel';
+          phInp.inputMode = 'tel';
+          phInp.autocomplete = 'off';
+          phInp.placeholder = '010-0000-0000';
+          phInp.value = C.formatPhone(c.phone);
+          phInp.dataset.contactId = c.id;
+          phInp.dataset.contactEdit = 'phone';
+          phInp.dataset.cat = cat;
+          phInp.setAttribute('aria-label', '업체 연락처');
+          item.appendChild(phInp);
           var del = el('button', 'icon-btn contact-del', '×');
           del.type = 'button';
           del.title = '이 연락처 지우기';
@@ -996,27 +1164,26 @@
           item.appendChild(del);
           listBox.appendChild(item);
         });
+        // 새 업체 한 줄 — ☑ + 이름 + 연락처 (반반)
+        var addRow = el('div', 'contact is-new');
+        addRow.appendChild(el('span', 'contact-check is-static', '✓'));
+        var nameInp2 = el('input', 'inp contact-inp');
+        nameInp2.type = 'text';
+        nameInp2.autocomplete = 'off';
+        nameInp2.placeholder = '신한대출 담당자';
+        nameInp2.dataset.contactNew = 'name';
+        nameInp2.setAttribute('aria-label', '새 업체 담당자 이름');
+        addRow.appendChild(nameInp2);
+        var phoneInp2 = el('input', 'inp contact-inp');
+        phoneInp2.type = 'tel';
+        phoneInp2.inputMode = 'tel';
+        phoneInp2.autocomplete = 'off';
+        phoneInp2.placeholder = '010-0000-0000';
+        phoneInp2.dataset.contactNew = 'phone';
+        phoneInp2.setAttribute('aria-label', '새 업체 연락처');
+        addRow.appendChild(phoneInp2);
+        listBox.appendChild(addRow);
         row.appendChild(listBox);
-
-        var addBox = el('div', 'contact-add');
-        var nameInp = el('input', 'inp');
-        nameInp.type = 'text';
-        nameInp.autocomplete = 'off';
-        nameInp.placeholder = '이름 (예: 신한 대출 담당자)';
-        nameInp.dataset.contactNew = 'name';
-        var phoneInp = el('input', 'inp');
-        phoneInp.type = 'tel';
-        phoneInp.inputMode = 'tel';
-        phoneInp.autocomplete = 'off';
-        phoneInp.placeholder = '010-0000-0000';
-        phoneInp.dataset.contactNew = 'phone';
-        addBox.appendChild(nameInp);
-        addBox.appendChild(phoneInp);
-        var addBtn = el('button', 'ghost add-btn', '+ 연락처 추가');
-        addBtn.type = 'button';
-        addBtn.dataset.contactAdd = cat;
-        addBox.appendChild(addBtn);
-        row.appendChild(addBox);
         return row;
       }
 
@@ -1049,6 +1216,15 @@
       case 'property': {
         row = fieldRow(f.label);
         if (!data[f.id] || typeof data[f.id] !== 'object') data[f.id] = T.defaultProp();
+        if (f.address) {
+          var addr = el('input', 'inp prop-address');
+          addr.type = 'text';
+          addr.autocomplete = 'off';
+          addr.placeholder = '서울시 마포구 아현동 777 외 3필지';
+          addr.dataset.field = 'address';
+          addr.value = data.address == null ? '' : data.address;
+          row.appendChild(addr);
+        }
         row.appendChild(propItem(f, data[f.id], null, 1, !!PLAIN_PROP[t.id]));
         return row;
       }
@@ -1059,10 +1235,16 @@
         list.forEach(function (item, idx) {
           row.appendChild(propItem(f, item, idx, list.length, !!PLAIN_PROP[t.id]));
         });
+        var bar = el('div', 'prop-bar');
         var add = el('button', 'ghost add-btn', '+ 매물 추가');
         add.type = 'button';
         add.dataset.addItem = f.id;
-        row.appendChild(add);
+        var minus = el('button', 'ghost add-btn is-minus', '- 선택 제거');
+        minus.type = 'button';
+        minus.dataset.pickRemove = f.id;
+        bar.appendChild(add);
+        bar.appendChild(minus);
+        row.appendChild(bar);
         return row;
       }
 
@@ -1132,19 +1314,27 @@
     }
   }
 
+  /* 매물 카드 — 단지·동·호 + 거래유형·금액. 오른쪽 ☑는 늘 보이고, 체크한 줄을 「- 선택 제거」로 뺀다 */
   function propItem(f, item, idx, count, plain) {
     var box = el('div', 'prop-item');
-    var top = el('div', 'prop-top' + (count > 1 ? ' is-removable' : ''));
+    box.dataset.propBox = f.id;
+    if (idx != null) box.dataset.propBoxIdx = idx;
+    var top = el('div', 'prop-top' + (f.t === 'props' ? '' : ' is-single'));
     top.appendChild(propInput(f, item, idx, 'complex', '단지명', 'is-complex', '예: 마포래미안푸르지오'));
     top.appendChild(propUnitField(f, item, idx, 'dong', plain));
     top.appendChild(propUnitField(f, item, idx, 'ho', plain));
-    if (count > 1) {
-      var rm = el('button', 'icon-btn', '×');
-      rm.type = 'button';
-      rm.title = '이 매물 빼기';
-      rm.dataset.removeItem = f.id;
-      rm.dataset.idx = idx;
-      top.appendChild(rm);
+    // 매물이 여럿인 목록에서만 ☑가 붙는다 (한 줄짜리 매물입력은 서지 않는다)
+    if (f.t === 'props') {
+      var on = !!item.picked;
+      var chk = el('button', 'prop-check' + (on ? ' is-on' : ''), on ? '✓' : '');
+      chk.type = 'button';
+      chk.dataset.propPick = f.id;
+      if (idx != null) chk.dataset.idx = idx;
+      chk.setAttribute('role', 'checkbox');
+      chk.setAttribute('aria-checked', on ? 'true' : 'false');
+      chk.setAttribute('aria-label', '이 매물 선택');
+      chk.title = '체크한 뒤 「- 선택 제거」를 누르면 이 매물이 빠집니다';
+      top.appendChild(chk);
     }
     box.appendChild(top);
     if (f.price) box.appendChild(propMoney(f.id, idx, item));
@@ -1275,15 +1465,15 @@
     return out;
   }
 
-  /* ---------------- 시간 휠 피커 (오전/오후 · 시 · 분 3열) ----------------
+  /* ---------------- 시간 휠 피커 (00시~23시 · 분 2열 · 24시간) ----------------
      네이티브 <select>는 아이폰 사파리에서 화면 전체를 덮는 목록으로 펼쳐진다.
-     그래서 세로 스크롤 스냅으로 돌아가는 3열 휠을 쓴다 — 손가락·마우스 휠·클릭 모두 되고,
+     그래서 세로 스크롤 스냅으로 돌아가는 2열 휠을 쓴다 — 손가락·마우스 휠·클릭 모두 되고,
      가운데 줄(강조 띠)에 온 값이 고른 값이다. 높이는 세 줄(120px). */
   var WHEEL_ROW = 40;     // 한 칸 높이 기본값 — 세 줄이면 120px (좁은 팝업은 36px 로 줄인다)
 
   function wheelHourItems() {
-    var out = [{ v: '', l: '없음' }];
-    for (var h = 1; h <= 12; h++) out.push({ v: String(h), l: h + '시' });
+    var out = [];
+    for (var h = 0; h < 24; h++) out.push({ v: String(h), l: (h < 10 ? '0' + h : String(h)) + '시' });
     return out;
   }
 
@@ -1297,7 +1487,7 @@
     col.dataset.wheelCol = kind;
     col.tabIndex = 0;
     col.setAttribute('role', 'listbox');
-    col.setAttribute('aria-label', kind === 'p' ? '오전 오후' : kind === 'h' ? '시' : '분');
+    col.setAttribute('aria-label', kind === 'h' ? '시' : '분');
     var track = el('div', 'wheel-track');
     var idx = 0;
     items.forEach(function (it, i) {
@@ -1332,7 +1522,7 @@
     return Math.max(0, Math.min(col.__items.length - 1, i));
   }
 
-  // 휠 피커 한 벌 — o = { key, value:{p:'am'|'pm', h:'', m:'15'}, row:36|40, onPick:function(v) }
+  // 휠 피커 한 벌 — o = { key, value:{h:'10', m:'00'}, row:36|40, onPick:function(v) }
   function wheelPicker(o) {
     o = o || {};
     var v = o.value || {};
@@ -1342,16 +1532,14 @@
     box.style.setProperty('--wrow', row + 'px');
     if (row !== WHEEL_ROW) box.classList.add('is-compact');
     var cols = {
-      p: wheelColumn('p', [{ v: 'am', l: '오전' }, { v: 'pm', l: '오후' }], v.p === 'pm' ? 'pm' : 'am'),
-      h: wheelColumn('h', wheelHourItems(), v.h == null ? '' : String(v.h)),
+      h: wheelColumn('h', wheelHourItems(), v.h == null || v.h === '' ? '10' : String(v.h)),
       m: wheelColumn('m', wheelMinItems(), v.m == null ? '0' : String(v.m))
     };
-    ['p', 'h', 'm'].forEach(function (k) { box.appendChild(cols[k]); });
+    ['h', 'm'].forEach(function (k) { box.appendChild(cols[k]); });
     box.appendChild(el('div', 'wheel-bar'));
 
     function read() {
       return {
-        p: cols.p.__items[cols.p.__last].v,
         h: cols.h.__items[cols.h.__last].v,
         m: cols.m.__items[cols.m.__last].v
       };
@@ -1406,9 +1594,10 @@
 
   // 방문 희망 시간의 시작·종료 칸 — 누르면 휠 피커가 열린다
   function timeChip(which, rs) {
-    var h = toHour24(rs[which + 'P'], rs[which + 'H']);
-    var label = h == null ? (which === 'start' ? '시작 시각' : '종료 시각') : C.slotClock(h, rs[which + 'M']);
-    var b = el('button', 'time-chip' + (h == null ? ' is-empty' : ''));
+    var hv = rs[which + 'H'];
+    var has = !(hv == null || hv === '');
+    var label = has ? C.slotClock(hv, rs[which + 'M']) : (which === 'start' ? '시작 시각' : '종료 시각');
+    var b = el('button', 'time-chip' + (has ? '' : ' is-empty'));
     b.type = 'button';
     b.dataset.timeChip = which;
     b.setAttribute('aria-label', which === 'start' ? '시작 시각 고르기' : '종료 시각 고르기');
@@ -1419,10 +1608,8 @@
 
   function rangeDefaults(rs) {
     if (rs.date === undefined) rs.date = null;
-    if (rs.startP === undefined) rs.startP = 'am';
     if (rs.startH === undefined) rs.startH = '';
     if (rs.startM === undefined) rs.startM = '0';
-    if (rs.endP === undefined) rs.endP = 'am';
     if (rs.endH === undefined) rs.endH = '';
     if (rs.endM === undefined) rs.endM = '0';
     return rs;
@@ -1455,11 +1642,11 @@
     return box;
   }
 
-  // 오전/오후 + 1~12시 → 24시간 (비어 있으면 null)
-  function toHour24(period, hour12) {
-    if (hour12 == null || hour12 === '') return null;
-    var h = Number(hour12) % 12;
-    return h + (period === 'pm' ? 12 : 0);
+  // 24시간 값 그대로 (비어 있으면 null)
+  function hourOf(v) {
+    if (v == null || v === '') return null;
+    var h = Number(v);
+    return isNaN(h) ? null : h;
   }
 
   /* ---------------- 중개보수 계산기 ---------------- */
@@ -1476,33 +1663,29 @@
     });
   }
 
-  function fillCalcResult(summary, res) {
-    var strip = summary.querySelector('.calc-result');
+  function fillCalcHint(summary, res, data) {
     var hint = summary.querySelector('.calc-hint');
-    if (!strip || !hint) return;
-    strip.innerHTML = '';
+    if (!hint) return;
     hint.innerHTML = '';
-    strip.classList.toggle('is-empty', !res.ok);
-    if (res.ok) {
-      strip.appendChild(el('div', 'calc-fee', C.formatWonPlain(res.total)));
-      // 계산식은 결과 박스 아래에 원단위 금액 표시(.money-hint)처럼 작고 연하게
-      var eq = ['중개보수(공급가액) ' + C.formatWonPlain(res.fee)];
-      eq.push(res.vatMode === 'none'
-        ? '부가세 별도'
-        : '부가세 ' + C.formatWonPlain(res.vat) + ' (' + (res.vatMode === '4' ? '간이 4%' : '일반 10%') + ')');
-      hint.appendChild(el('div', 'calc-hint-line', eq.join(' · ')));
-      var meta = [];
-      meta.push('상한 ' + res.capRatePct + '%');
-      meta.push(res.converted ? '환산 ' + C.formatWonPlain(res.amountWon) : (res.kindLabel || '주택') + ' ' + res.trade);
-      if (res.capped) meta.push('한도액 ' + C.formatWonPlain(res.capWon) + ' 적용');
-      hint.appendChild(el('div', 'calc-hint-line', meta.join(' · ')));
-      if (res.rateOver) {
-        hint.appendChild(el('div', 'calc-hint-line is-warn',
-          '상한요율 ' + res.capRatePct + '%를 넘어 요청하신 ' + C.rateLabel(res.requestedPct) + '% 대신 상한요율로 계산했어요'));
-      }
-    } else {
-      strip.appendChild(el('div', 'calc-fee', res.reason === '음수' ? '음수 금액은 계산할 수 없어요' : '금액을 입력해 주세요'));
-      hint.appendChild(el('div', 'calc-hint-line', res.reason === '음수' ? '금액을 다시 확인해 주세요' : '계산하면 중개보수가 바로 나옵니다'));
+    if (!res.ok) {
+      hint.appendChild(el('div', 'calc-hint-line', res.reason === '음수' ? '금액을 다시 확인해 주세요' : '금액을 입력해 주세요'));
+      return;
+    }
+    var m = C.feeBreakdown(res, C.wonOrNull(data && data.calcTotalWon));
+    // 계산식은 결과 칸 아래에 원단위 금액 표시(.money-hint)처럼 작고 연하게
+    var eq = ['중개보수(공급가액) ' + C.formatWonPlain(m.supply)];
+    eq.push(m.vatMode === 'none'
+      ? '부가세 별도'
+      : '부가세 ' + C.formatWonPlain(m.vat) + ' (' + (m.vatMode === '4' ? '간이 4%' : '일반 10%') + ')');
+    hint.appendChild(el('div', 'calc-hint-line', eq.join(' · ')));
+    var meta = [];
+    meta.push('상한 ' + res.capRatePct + '%');
+    meta.push(res.converted ? '환산 ' + C.formatWonPlain(res.amountWon) : (res.kindLabel || '주택') + ' ' + res.trade);
+    if (res.capped) meta.push('한도액 ' + C.formatWonPlain(res.capWon) + ' 적용');
+    hint.appendChild(el('div', 'calc-hint-line', meta.join(' · ')));
+    if (res.rateOver) {
+      hint.appendChild(el('div', 'calc-hint-line is-warn',
+        '상한요율 ' + res.capRatePct + '%를 넘어 요청하신 ' + C.rateLabel(res.requestedPct) + '% 대신 상한요율로 계산했어요'));
     }
   }
 
@@ -1513,9 +1696,33 @@
     var data = dataOf(t);
     var res = calcResultData(data);
     var summary = $('.calc-summary');
-    if (summary) fillCalcResult(summary, res);
+    if (summary) fillCalcHint(summary, res, data);
     var ri = $('[data-field="calcRate"]');
     if (ri) ri.placeholder = res.ok ? String(res.capRatePct) : '0.4';
+    // 합계 칸을 직접 고치지 않았으면 법정 보수로 따라온다
+    var ti = $('[data-field="calcTotalWon"]');
+    if (ti && document.activeElement !== ti && C.wonOrNull(data.calcTotalWon) == null) {
+      ti.value = res.ok ? C.group(res.total) : '';
+    }
+  }
+
+  // 중개보수 합계 칸 — 원 단위 금액을 직접 고칠 수 있다 (기본은 자동 계산값)
+  function calcTotalField(data, res) {
+    var field = el('div', 'money-field');
+    var box = el('div', 'money-box');
+    var inp = el('input', 'inp inp-won');
+    inp.type = 'text';
+    inp.inputMode = 'numeric';
+    inp.autocomplete = 'off';
+    inp.placeholder = '';
+    inp.dataset.field = 'calcTotalWon';
+    inp.setAttribute('aria-label', '중개보수 합계');
+    var custom = C.wonOrNull(data.calcTotalWon);
+    inp.value = custom != null ? C.group(custom) : (res.ok ? C.group(res.total) : '');
+    box.appendChild(inp);
+    box.appendChild(el('span', 'money-unit', '원'));
+    field.appendChild(box);
+    return field;
   }
 
   function renderCalc(data) {
@@ -1577,13 +1784,13 @@
       box.appendChild(aRow);
     }
 
-    // 계산 결과 + 적용 요율 — 같은 라벨 줄·같은 높이로 한 줄에 나란히, 계산식은 그 아래 작은 글씨로
+    // 중개보수 합계(직접 고칠 수 있는 금액칸) + 적용 요율 — 한 줄에 나란히, 계산식은 그 아래 작은 글씨로
     var res = calcResultData(data);
     var summary = el('div', 'calc-summary');
     var top = el('div', 'calc-top');
     var resultCell = el('div', 'calc-cell');
     resultCell.appendChild(el('span', 'calc-cell-label', '중개보수 합계'));
-    resultCell.appendChild(el('div', 'calc-result'));
+    resultCell.appendChild(calcTotalField(data, res));
     top.appendChild(resultCell);
 
     var rateCell = el('div', 'calc-cell is-rate');
@@ -1603,7 +1810,7 @@
     top.appendChild(rateCell);
     summary.appendChild(top);
     summary.appendChild(el('div', 'calc-hint'));
-    fillCalcResult(summary, res);
+    fillCalcHint(summary, res, data);
     box.appendChild(summary);
 
     // 부가세 — 고르지 않으면 간이 4%
@@ -1688,7 +1895,7 @@
   }
 
   /* ---------------- 달력 ---------------- */
-  var cal = { open: false, fieldId: null, y: 0, m: 0, anchor: null, rangeMode: false, dateOnly: false };
+  var cal = { open: false, fieldId: null, y: 0, m: 0, anchor: null, rangeMode: false, dateOnly: false, fixId: null };
 
   function openCal(anchor, fieldId) {
     var t = tplById(store.current);
@@ -1710,6 +1917,7 @@
     cal.m = d ? d.m : now.getMonth() + 1;
     cal.anchor = anchor;
     cal.dateOnly = !!(anchor && anchor.dataset && anchor.dataset.dateOnly === '1');
+    cal.fixId = (anchor && anchor.dataset && anchor.dataset.fix) ? anchor.dataset.fix : null;
     cal.open = true;
     renderCal();
     var pop = $('#calpop');
@@ -1730,6 +1938,12 @@
     var t = tplById(store.current);
     if (!t) return;
     var rs = rangeDefaults(rangeState[t.id] = rangeState[t.id] || {});
+    // 처음 열면 10:00 에서 시작한다 (초기화하면 빈칸으로 돌아간다)
+    if (rs[which + 'H'] == null || rs[which + 'H'] === '') {
+      rs[which + 'H'] = '10';
+      rs[which + 'M'] = '0';
+      refreshTimeChip(which);
+    }
     var pop = $('#wheelpop');
     var box = anchor && anchor.getBoundingClientRect ? anchor.getBoundingClientRect() : { width: 140 };
     // 누른 칸 폭 그대로 — 크게 뜨지 않고 그 칸이 위아래로 펼쳐지는 느낌
@@ -1740,10 +1954,9 @@
     pop.appendChild(wheelPicker({
       key: 'range-' + which,
       row: 36,
-      value: { p: rs[which + 'P'], h: rs[which + 'H'], m: rs[which + 'M'] },
+      value: { h: rs[which + 'H'], m: rs[which + 'M'] },
       onPick: function (v) {
         var live = rangeState[t.id];
-        live[which + 'P'] = v.p;
         live[which + 'H'] = v.h;
         live[which + 'M'] = v.m;
         refreshTimeChip(which);
@@ -1777,12 +1990,12 @@
   function refreshTimeChip(which) {
     var t = tplById(store.current);
     var rs = rangeState[t.id] || {};
-    var h = toHour24(rs[which + 'P'], rs[which + 'H']);
-    var label = h == null ? (which === 'start' ? '시작 시각' : '종료 시각') : C.slotClock(h, rs[which + 'M']);
+    var has = !(rs[which + 'H'] == null || rs[which + 'H'] === '');
+    var label = has ? C.slotClock(rs[which + 'H'], rs[which + 'M']) : (which === 'start' ? '시작 시각' : '종료 시각');
     $$('#fields [data-time-chip="' + which + '"]').forEach(function (b) {
       var txt = b.querySelector('.time-chip-text');
       if (txt) txt.textContent = label;
-      b.classList.toggle('is-empty', h == null);
+      b.classList.toggle('is-empty', !has);
     });
   }
 
@@ -1859,18 +2072,14 @@
     pop.appendChild(grid);
 
     if (!cal.rangeMode && !cal.dateOnly) {
-      // 시간도 3열 휠 피커로 — 오전/오후 · 시(선택안함 포함) · 분(5분 단위)
+      // 시간도 휠 피커로 — 00시~23시 · 분(5분 단위), 처음에는 10:00 에서 시작
       var cur = (val && typeof val === 'object') ? val : { hour: null, min: 0 };
-      var hour = cur.hour == null ? null : Number(cur.hour);
-      var p = hour == null ? (new Date().getHours() < 12 ? 'am' : 'pm') : (hour < 12 ? 'am' : 'pm');
-      var h12 = hour == null ? '' : String(hour % 12 === 0 ? 12 : hour % 12);
       var time = el('div', 'cal-time');
       time.appendChild(wheelPicker({
         key: 'cal',
-        value: { p: p, h: h12, m: String(Number(cur.min || 0)) },
+        value: { h: cur.hour == null ? '10' : String(Number(cur.hour)), m: String(Number(cur.min || 0)) },
         onPick: function (v) {
-          var h = v.h === '' ? null : (Number(v.h) % 12) + (v.p === 'pm' ? 12 : 0);
-          setCalDateTime(cal.fieldId, { hour: h, min: Number(v.m) || 0 });
+          setCalDateTime(cal.fieldId, { hour: Number(v.h), min: Number(v.m) || 0 });
           refreshDateTrigger(cal.fieldId);
           renderPreview();
         }
@@ -1881,6 +2090,19 @@
     }
 
     var foot = el('div', 'cal-foot');
+    // 입주일 고정 — 날짜를 고른 뒤 이 날짜가 「고정」인지 「선호」인지 고른다
+    if (cal.fixId) {
+      var curData = dataOf(tplById(store.current));
+      var fixBox = el('div', 'cal-fix');
+      ['고정', '선호'].forEach(function (v) {
+        var on = (curData[cal.fixId + 'Fix'] || '고정') === v;
+        var fb = el('button', 'seg-btn' + (on ? ' is-active' : ''), v);
+        fb.type = 'button';
+        fb.dataset.calFix = v;
+        fixBox.appendChild(fb);
+      });
+      foot.appendChild(fixBox);
+    }
     var reset = el('button', 'ghost cal-reset', '초기화');
     reset.type = 'button';
     reset.dataset.calReset = '1';
@@ -2483,6 +2705,21 @@
         save();
         return;
       }
+      if (t.dataset.contactEdit) {
+        // 저장된 업체 연락처를 그 자리에서 고친다
+        var ce = t.dataset.contactEdit;
+        var cid = t.dataset.contactId;
+        var ccat = t.dataset.cat;
+        var list2 = store.contacts[ccat] || [];
+        for (var ci = 0; ci < list2.length; ci++) {
+          if (list2[ci].id !== cid) continue;
+          list2[ci][ce] = t.value;
+          break;
+        }
+        save();
+        updatePreviewOnly();
+        return;
+      }
       if (t.dataset.prop) {
         var pid = t.dataset.prop;
         var pitem = t.dataset.idx != null
@@ -2511,6 +2748,13 @@
       }
       if (t.dataset.field) {
         var v = t.value;
+        if (t.classList.contains('inp-won')) {
+          data[t.dataset.field] = formatWonInput(t);
+          markEdited();
+          updatePreviewOnly();
+          save();
+          return;
+        }
         if (t.classList.contains('inp-money')) {
           var man = formatMoneyInput(t);
           data[t.dataset.field] = man == null ? '' : man;
@@ -2524,11 +2768,6 @@
           var rowBox = t.parentNode;
           var presets = rowBox ? rowBox.querySelectorAll('[data-seg]') : [];
           for (var pi = 0; pi < presets.length; pi++) presets[pi].classList.remove('is-active');
-        }
-        if (t.parentNode.classList.contains('field') && t.parentNode.querySelector('.account-preview')) {
-          var pv = t.parentNode.querySelector('.account-preview');
-          var parsed = C.accountParse(v);
-          pv.textContent = parsed ? '→ ' + parsed : '';
         }
         markEdited();
         syncPayUI();
@@ -2603,10 +2842,63 @@
         var val = segBtn.dataset.value;
         data[key] = val;
         if (key === 'calcKind' && val === 'presale') data.calcTrade = '매매';
-        if (key === 'calcKind' || key === 'calcTrade' || key === 'calcOffice') data.calcRate = '';
+        if (key === 'calcKind' || key === 'calcTrade' || key === 'calcOffice') data.calcTotalWon = '';
+        // 거래 유형을 바꾸면 없는 일정·약정은 계약으로 내린다 (매매만 약정이 있다)
+        if (key === 'trade') {
+          if (t.id === 't8') data.kind = val === '매매' ? (data.kind === '약정' ? '약정' : '계약') : '계약';
+          if (t.id === 't10') {
+            var okKinds = T.schedKinds(data).map(function (o) { return o.v; });
+            if (okKinds.indexOf(data.kind) === -1) data.kind = okKinds[0];
+          }
+        }
         save();
         renderForm();
         renderPreview();
+        return;
+      }
+      // 매물 ☑ 고르기 · - 선택 제거
+      var pick = e.target.closest('[data-prop-pick]');
+      if (pick) {
+        var tp2 = tplById(store.current);
+        var dp2 = dataOf(tp2);
+        var lid = pick.dataset.propPick;
+        var itemP = pick.dataset.idx != null
+          ? (dp2[lid] || [])[Number(pick.dataset.idx)]
+          : dp2[lid];
+        if (!itemP) return;
+        itemP.picked = !itemP.picked;
+        save();
+        renderForm();
+        return;
+      }
+      var prm = e.target.closest('[data-pick-remove]');
+      if (prm) { removePickedProps(prm.dataset.pickRemove); return; }
+      // 날짜 칸 고정 · 선호
+      var cf = e.target.closest('[data-cal-fix]');
+      if (cf) {
+        var tf = tplById(store.current);
+        var df = dataOf(tf);
+        df[cal.fixId + 'Fix'] = cf.dataset.calFix;
+        save();
+        renderCal();
+        renderPreview();
+        return;
+      }
+      // 안부 인사 칩 (날씨·아침·저녁·연휴) — 다시 누르면 해제
+      var gr = e.target.closest('[data-greet]');
+      if (gr) {
+        var tg = tplById(store.current);
+        var dg = dataOf(tg);
+        var cur2 = T.greetList(dg);
+        var gv = gr.dataset.greet;
+        var gi = cur2.indexOf(gv);
+        if (gi === -1) cur2.push(gv);
+        else cur2.splice(gi, 1);
+        dg.greets = T.GREET_KEYS.filter(function (k) { return cur2.indexOf(k) !== -1; });
+        markEdited();
+        save();
+        renderForm();
+        updatePreviewOnly();
         return;
       }
       var tg = e.target.closest('[data-toggle]');
@@ -2670,14 +2962,20 @@
       if (modeBtn) {
         var tm = tplById(store.current);
         var dm = dataOf(tm);
-        dm[modeBtn.dataset.dateMode + 'Mode'] = modeBtn.dataset.value;
+        var mid = modeBtn.dataset.dateMode;
+        var to = modeBtn.dataset.value;
+        var before = C.dateModeOf(dm, mid);
+        dm[mid + 'Mode'] = to;
+        // 고정 → 기간으로 바꾸면 고정 날짜를 시작일로 가져간다 (칸은 늘 그대로 보인다)
+        if (before === '고정' && to === '기간' && dm[mid + 'Start'] && !dm[mid + 'Start'].date && dm[mid] && dm[mid].date) {
+          dm[mid + 'Start'] = Object.assign({}, dm[mid]);
+        }
+        if (before === '기간' && to === '고정' && dm[mid] && !dm[mid].date && dm[mid + 'Start'] && dm[mid + 'Start'].date) {
+          dm[mid] = Object.assign({}, dm[mid + 'Start']);
+        }
         save();
         renderForm();
         renderPreview();
-        if (modeBtn.dataset.value === '협의') {
-          var fin = $('#fields [data-field="' + modeBtn.dataset.dateMode + 'Text"]');
-          if (fin) { try { fin.focus({ preventScroll: true }); } catch (e2) { fin.focus(); } }
-        }
         return;
       }
       var act = e.target.closest('[data-action]');
@@ -2706,8 +3004,8 @@
         var rs = rangeState[t7.id] || {};
         if (!rs.date) { toast('날짜를 먼저 골라 주세요'); return; }
         if (!rs.startH && rs.endH) { toast('시작 시각을 먼저 골라 주세요'); return; }
-        var s24 = toHour24(rs.startP, rs.startH);
-        var e24 = toHour24(rs.endP, rs.endH);
+        var s24 = hourOf(rs.startH);
+        var e24 = hourOf(rs.endH);
         var line = C.formatVisitLine(rs.date, s24, rs.startM, e24, rs.endM);
         var cur = String(d7[rangeSave.dataset.rangeSave] || '');
         d7[rangeSave.dataset.rangeSave] = (cur ? cur.replace(/\s+$/, '') + '\n' : '') + line;
@@ -2742,8 +3040,7 @@
         return;
       }
       var dayBtn = e.target.closest('[data-cal-day]');
-      if (dayBtn) {
-        var dateStr = cal.y + '-' + String(cal.m).padStart(2, '0') + '-' + String(dayBtn.dataset.calDay).padStart(2, '0');
+      if (dayBtn) {        var dateStr = cal.y + '-' + String(cal.m).padStart(2, '0') + '-' + String(dayBtn.dataset.calDay).padStart(2, '0');
         if (cal.rangeMode) {
           var t = tplById(store.current);
           rangeState[t.id] = rangeState[t.id] || {};
@@ -2757,6 +3054,17 @@
           renderForm();
           renderPreview();
         }
+        return;
+      }
+      // 날짜 칸 고정 · 선호
+      var fixBtn = e.target.closest('[data-cal-fix]');
+      if (fixBtn) {
+        var tf2 = tplById(store.current);
+        var df2 = dataOf(tf2);
+        if (cal.fixId) df2[cal.fixId + 'Fix'] = fixBtn.dataset.calFix;
+        save();
+        renderCal();
+        renderPreview();
         return;
       }
       if (e.target.closest('[data-cal-reset]')) {
@@ -2794,11 +3102,10 @@
       var t = tplById(store.current);
       var rs = rangeDefaults(rangeState[t.id] = rangeState[t.id] || {});
       var which = rb.dataset.wheelReset;
-      rs[which + 'P'] = 'am';
       rs[which + 'H'] = '';
       rs[which + 'M'] = '0';
       refreshTimeChip(which);
-      openTimeWheel(timePop.anchor, which);
+      closeTimeWheel();
     });
 
     // 상단/하단 버튼
@@ -2982,7 +3289,7 @@
       if (C.parseMan(item.deposit) && !C.parseMan(item.rent)) msg = '월세를 함께 넣어 주세요';
       else if (!C.parseMan(item.deposit) && C.parseMan(item.rent)) msg = '보증금을 함께 넣어 주세요';
     }
-    if (!msg && item.dongMode !== 'complex' && ((item.dong && !item.ho) || (!item.dong && item.ho))) msg = '동과 호수를 함께 넣으면 표기가 정확해요';
+    if (!msg && item.dongMode !== 'complex' && ((item.dong && !item.ho) || (!item.dong && item.ho))) msg = '';
     hintFor(box, 'prop', msg);
   }
 
@@ -3019,6 +3326,27 @@
   }
 
   /* ---------------- 매물 한 줄 빼기 (되돌리기 포함) ---------------- */
+  // ☑ 체크한 매물을 한 번에 빼기
+  function removePickedProps(listId) {
+    var t = tplById(store.current);
+    var d = dataOf(t);
+    var list = d[listId] || [];
+    var picked = list.filter(function (p) { return p && p.picked; });
+    if (!picked.length) { toast('제거할 매물을 체크해 주세요'); return; }
+    var snap = JSON.parse(JSON.stringify(list));
+    d[listId] = list.filter(function (p) { return !(p && p.picked); });
+    save();
+    renderForm();
+    renderPreview();
+    showSnack('매물 ' + picked.length + '개를 뺐어요', function () {
+      var d2 = dataOf(t);
+      d2[listId] = snap;
+      save();
+      renderForm();
+      renderPreview();
+    });
+  }
+
   function removePropRow(listId, idx) {
     var t = tplById(store.current);
     var d = dataOf(t);
@@ -3309,9 +3637,14 @@
     if (when) {
       var dateField = cur.fields.filter(function (f) { return f.t === 'date'; })[0];
       if (dateField) {
-        d[dateField.id] = when;
-        // 협의·기간으로 열려 있었어도 달력 날짜를 받았으면 고정으로 보여 준다
-        if (dateField.mode3 || dateField.freeText) d[dateField.id + 'Mode'] = '고정';
+        if (dateField.mode3 || dateField.freeText) {
+          // 입주일은 늘 보이는 시작일 칸에 넣고 고정으로 보여 준다
+          d[dateField.id + 'Start'] = { date: when.date, hour: null, min: 0 };
+          d[dateField.id + 'Mode'] = '고정';
+          d[dateField.id + 'Fix'] = '고정';
+        } else {
+          d[dateField.id] = when;
+        }
       }
     }
 
@@ -3349,7 +3682,6 @@
   lastContent = SYNC.contentKey(store);
   bind();
   bindLongPress();
-  bindSwipe();
   applyUrlParams();
   renderAll();
   refreshSyncUi();

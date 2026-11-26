@@ -341,6 +341,29 @@
     return s;
   }
 
+  /* 중개보수 안내문의 금액 줄 — 기본은 법정 보수 계산값,
+     합계 칸에 직접 적은 금액(customWon)이 있으면 그 금액을 합계로 쓰고
+     공급가액·부가세만 부가세율대로 나눈다 (적용 요율은 법정 요율 그대로 표시). */
+  function wonOrNull(v) {
+    if (v == null || String(v).trim() === '') return null;
+    var d = digits(v);
+    if (!d) return null;
+    return parseInt(d, 10);
+  }
+
+  function feeBreakdown(r, customWon) {
+    var vatMode = (r && r.vatMode) || 'none';
+    if (!r || !r.ok) return { supply: 0, vat: 0, total: 0, vatMode: vatMode, custom: false };
+    var custom = wonOrNull(customWon);
+    if (custom == null) return { supply: r.fee, vat: r.vat, total: r.total, vatMode: vatMode, custom: false };
+    var total = custom;
+    if (!total) return { supply: 0, vat: 0, total: 0, vatMode: vatMode, custom: true };
+    if (vatMode === 'none') return { supply: total, vat: 0, total: total, vatMode: 'none', custom: true };
+    var rate = vatMode === '10' ? 0.1 : 0.04;
+    var supply = Math.round(total / (1 + rate));
+    return { supply: supply, vat: total - supply, total: total, vatMode: vatMode, custom: true };
+  }
+
   /* ---------- 매물 노출 (단지명 + 동/단지 + 호/층) ----------
      매물 줄마다 동 칸의 배지로 '동 ↔ 단지', 호 칸의 배지로 '호 ↔ 층'을 고른다.
      단지로 가려도 뒤의 호수·층은 그대로 붙는다 (2단지 1203호 / 2단지 12층).
@@ -473,17 +496,14 @@
 
   function hasTime(v) { return v && v.hour != null && v.hour !== ''; }
 
-  // 14:30 -> "오후 2시 30분"
+  // 14:30 -> "14:30" (앱 어디서나 24시간 표기 — 휠 피커도 00시~23시)
   function formatTime(hour, min) {
     if (hour == null || hour === '') return '';
     var h = Number(hour);
-    var p = h < 12 ? '오전' : '오후';
-    var h12 = h % 12 === 0 ? 12 : h % 12;
-    var mm = Number(min || 0);
-    return p + ' ' + h12 + '시' + (mm ? ' ' + mm + '분' : '');
+    return pad2(h) + ':' + pad2(Number(min || 0));
   }
 
-  // "2026년 11월 28일 토요일 오전 11시 30분"
+  // "2026년 11월 28일 토요일 14:30"
   function formatDateTime(v) {
     var d = parseDateValue(v);
     if (!d) return '';
@@ -492,7 +512,7 @@
     return head + (t ? ' ' + t : '');
   }
 
-  // "2026년 11월 28일 토요일 오전 10시 ~ 오후 12시"
+  // "2026년 11월 28일 토요일 10:00 ~ 12:00"
   function formatDateTimeRange(start, end) {
     var a = formatDateTime(start);
     if (!a) return '';
@@ -500,13 +520,10 @@
     return a + (t ? ' ~ ' + t : '');
   }
 
-  // 방문 희망 시간 한 줄 — "오후 2:15" (분은 5분 단위)
+  // 방문 희망 시간 한 줄 — "14:15" (분은 5분 단위)
   function slotClock(hour, min) {
     if (hour == null || hour === '') return '';
-    var h = Number(hour);
-    var p = h < 12 ? '오전' : '오후';
-    var h12 = h % 12 === 0 ? 12 : h % 12;
-    return p + ' ' + h12 + ':' + pad2(Number(min || 0));
+    return pad2(Number(hour)) + ':' + pad2(Number(min || 0));
   }
 
   // 방문 희망 시간 줄 — "11월 26일 (목) 오후 2:15" / "11월 26일 (목) 오후 2:15 ~ 오후 3:30"
@@ -539,11 +556,7 @@
     var s = shortDate(v, now);
     if (!s) return '';
     if (!hasTime(v)) return s;
-    var h = Number(v.hour);
-    var m = Number(v.min || 0);
-    var p = h < 12 ? '오전' : '오후';
-    var h12 = h % 12 === 0 ? 12 : h % 12;
-    return s + ' ' + p + ' ' + h12 + '시' + (m ? m + '분' : '');
+    return s + ' ' + formatTime(v.hour, v.min);
   }
 
   // 전화번호를 010-0000-0000 꼴로 (이미 하이픈이 있으면 그대로)
@@ -565,6 +578,13 @@
     return d.y + '.' + pad2(d.m) + '.' + pad2(d.d);
   }
 
+  // 날짜 칸에 보이는 요일 포함 표기: "2026.11.28 (토)"
+  function compactDateDot(v) {
+    var d = parseDateValue(v);
+    if (!d) return '';
+    return d.y + '.' + pad2(d.m) + '.' + pad2(d.d) + ' (' + weekdayOf(d.y, d.m, d.d) + ')';
+  }
+
   // 기간 표기: "2026.12.01 ~ 2026.12.31"
   function formatDateRange(start, end) {
     var a = compactDate(start);
@@ -573,7 +593,14 @@
     return a + ' ~ ' + b;
   }
 
-  /* 날짜 칸의 세 가지 방식 — 협의(글자) · 고정(하루) · 기간(시작~종료)
+  // 입주일·계약일 표기: "26.11.30 (월)"
+  function shortDotDate(v) {
+    var d = parseDateValue(v);
+    if (!d) return '';
+    return String(d.y).slice(2) + '.' + pad2(d.m) + '.' + pad2(d.d) + ' (' + weekdayOf(d.y, d.m, d.d) + ')';
+  }
+
+  /* 날짜 칸의 세 가지 방식 — 협의(즉시입주) · 고정(하루 · 고정/선호) · 기간(시작~종료)
      예전 저장값(글자만 있거나 날짜만 있는 경우)도 그대로 읽는다. */
   function dateModeOf(data, id) {
     if (!data) return '고정';
@@ -585,22 +612,30 @@
   }
 
   // 날짜 칸(협의·고정·기간)을 문자에 넣을 한 줄로
+  //   협의 → "즉시입주(협의)" · 고정 → "26.11.30 (월) 고정" / "26.11.30 (월) 선호"
+  //   기간 → "26.11.30 (월) ~ 26.12.31 (목)"
   function dateFieldText(data, id) {
     if (!data) return '';
     var mode = dateModeOf(data, id);
-    if (mode === '협의') return String(data[id + 'Text'] == null ? '' : data[id + 'Text']).trim();
-    if (mode === '기간') return formatDateRange(data[id + 'Start'], data[id + 'End']);
-    return formatDateTime(data[id]);
+    if (mode === '협의') return '즉시입주(협의)';
+    if (mode === '기간') {
+      var a = shortDotDate(data[id + 'Start']);
+      var b = shortDotDate(data[id + 'End']);
+      if (!a) return '';
+      return a + (b ? ' ~ ' + b : '');
+    }
+    var d = shortDotDate(data[id + 'Start'] || data[id]);
+    if (!d) return '';
+    return d + ' ' + (data[id + 'Fix'] === '선호' ? '선호' : '고정');
   }
 
-  // 입력칸에 보이는 짧은 표기: "2026.11.28 (토) 오후 2:30"
+  // 입력칸에 보이는 짧은 표기: "2026.11.28 (토) 14:30"
   function compactDateTime(v) {
     var d = parseDateValue(v);
     if (!d) return '';
     var head = d.y + '.' + pad2(d.m) + '.' + pad2(d.d) + ' (' + weekdayOf(d.y, d.m, d.d) + ')';
     if (!hasTime(v)) return head;
-    var h = Number(v.hour);
-    return head + ' ' + (h < 12 ? '오전' : '오후') + ' ' + (h % 12 === 0 ? 12 : h % 12) + ':' + pad2(v.min || 0);
+    return head + ' ' + formatTime(v.hour, v.min);
   }
 
   var API = {
@@ -621,6 +656,8 @@
     feeTableFor: feeTableFor,
     paymentSplit: paymentSplit,
     rateLabel: rateLabel,
+    feeBreakdown: feeBreakdown,
+    wonOrNull: wonOrNull,
     propertyLabel: propertyLabel,
     isMaraepuComplex: isMaraepuComplex,
     maraepuUnit: maraepuUnit,
@@ -634,6 +671,8 @@
     formatVisitLine: formatVisitLine,
     compactDateTime: compactDateTime,
     compactDate: compactDate,
+    compactDateDot: compactDateDot,
+    shortDotDate: shortDotDate,
     formatDateRange: formatDateRange,
     dateModeOf: dateModeOf,
     dateFieldText: dateFieldText,

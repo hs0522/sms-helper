@@ -377,6 +377,17 @@ input, textarea, select { font-family: inherit; letter-spacing: inherit; }
 .seg.is-grid3 { display: grid; grid-template-columns: repeat(3, 1fr); }
 .seg.is-grid4 { display: grid; grid-template-columns: repeat(4, 1fr); }
 .seg.is-grid4 .seg-btn { padding: 8px 4px; font-size: 12px; }
+.seg.is-grid3 .seg-btn { padding: 8px 4px; }
+/* 두 쌍을 한 줄에 — [소유자][중개사] [간단][상세] */
+.segs { display: flex; gap: 6px; }
+.segs .seg { flex: 1 1 0; min-width: 0; gap: 4px; }
+.segs .seg-btn { padding: 8px 2px; font-size: 12px; }
+/* 분야 버튼 — 한 줄에 5개 */
+.seg.is-row5 { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; }
+.seg.is-row5 .seg-btn { padding: 8px 2px; font-size: 11.8px; }
+.seg.is-row5 .seg-btn.is-add { color: var(--accent); border-style: dashed; border-color: #CFD2F8; background: #FBFCFF; font-size: 11px; }
+/* 금액란 두 줄(보증금 · 월차임) 묶음 */
+.field-stack { display: flex; flex-direction: column; gap: 12px; }
 
 .money-wrap { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .money-wrap .inp { flex: 1 1 auto; min-width: 0; text-align: left; font-variant-numeric: tabular-nums; font-weight: 600; }
@@ -425,9 +436,36 @@ input, textarea, select { font-family: inherit; letter-spacing: inherit; }
 
 .prop-item { display: flex; flex-direction: column; gap: 6px; }
 .prop-item + .prop-item { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line-soft); }
-.prop-top { display: grid; grid-template-columns: minmax(0, 1fr) 78px 84px; gap: 6px; align-items: center; }
-.prop-top.is-removable { grid-template-columns: minmax(0, 1fr) 78px 84px 26px; }
+.prop-top { display: grid; grid-template-columns: minmax(0, 1fr) 78px 84px 26px; gap: 6px; align-items: center; }
+/* 한 줄짜리 매물칸(매물 접수·집보기 문의·물건지)은 ☑ 없이 세 칸 */
+.prop-top.is-single { grid-template-columns: minmax(0, 1fr) 78px 84px; }
 .prop-top .inp { padding: 9px 10px; font-size: 12.8px; }
+
+/* 매물 카드 오른쪽 ☑ — 매물이 하나여도 늘 보인다 (크기 흔들림 없음) */
+.prop-check {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border: 1.5px solid #D2D5E2;
+  border-radius: 7px;
+  background: #fff;
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+.prop-check:hover { border-color: var(--accent); }
+.prop-check.is-on { background: var(--accent); border-color: var(--accent); }
+/* + 매물 추가 · - 선택 제거 */
+.prop-bar { display: flex; gap: 6px; margin-top: 8px; }
+.prop-bar .add-btn { margin-top: 0; }
+.prop-bar .add-btn.is-minus { color: var(--muted); border-color: var(--line); }
+.prop-bar .add-btn.is-minus:hover { color: var(--danger); border-color: #F0C9C9; background: #FFF8F8; }
 
 /* 동·호 칸 — 입력칸 안쪽 오른쪽에 단위 배지(동/단지 · 호/층)가 붙는다 */
 .unit-field { position: relative; min-width: 0; }
@@ -519,10 +557,11 @@ input, textarea, select { font-family: inherit; letter-spacing: inherit; }
 .date-range {
   position: relative;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 18px;
   align-items: center;
 }
+.date-range .date-btn { min-width: 0; }
 .date-range .range-tilde {
   position: absolute;
   left: 50%;
@@ -851,14 +890,14 @@ select.inp,
   --wrow: 40px;
   position: relative;
   display: grid;
-  grid-template-columns: 0.86fr 1.06fr 1.06fr;
+  grid-template-columns: 1fr 1fr;
   height: calc(var(--wrow) * 3);
   width: 100%;
   border-radius: 12px;
   background: #fff;
   overflow: hidden;
 }
-.wheel.is-compact { grid-template-columns: 1fr 1fr 1fr; border-radius: 10px; }
+.wheel.is-compact { grid-template-columns: 1fr 1fr; border-radius: 10px; }
 .wheel-bar {
   position: absolute;
   left: 3px;
@@ -953,8 +992,8 @@ select.inp,
   .topbar { gap: 12px; }
   .brand h1 { font-size: 15px; }
   /* 입력 폼이 좁아지는 만큼 단지명 칸을 살린다 */
-  .prop-top { grid-template-columns: minmax(0, 1fr) 72px 78px; }
-  .prop-top.is-removable { grid-template-columns: minmax(0, 1fr) 72px 78px 24px; }
+  .prop-top { grid-template-columns: minmax(0, 1fr) 72px 78px 24px; }
+  .prop-top.is-single { grid-template-columns: minmax(0, 1fr) 72px 78px; }
   .unit-field .inp { padding-right: 34px; }
 }
 
@@ -1010,11 +1049,10 @@ select.inp,
   .preview-foot .char-count { font-size: 11.5px; }
   .card-title { font-size: 15px; }
   .fields { gap: 12px; }
-  .prop-top { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px; }
+  .prop-top { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 26px; gap: 6px; }
   .prop-top .is-complex { grid-column: 1 / -1; }
-  .prop-top.is-removable { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 26px; }
-  .prop-top.is-removable .is-complex { grid-column: 1 / -1; }
-  .prop-top.is-removable .icon-btn { grid-column: 3; grid-row: 2; }
+  .prop-top .prop-check { grid-column: 3; grid-row: 2; }
+  .prop-top.is-single { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .mobile-bar {
     display: flex;
     gap: 8px;
@@ -1526,3 +1564,79 @@ select.inp:disabled {
 }
 .inp:disabled::placeholder { color: var(--muted2); }
 select.inp:disabled { appearance: none; -webkit-appearance: none; background-image: none; }
+
+/* ==================================================================
+   2026-11-26 v1.2.0 — 공통 매물 카드 · 24시간 휠 · 한 줄 버전
+   ================================================================== */
+
+/* 집보기 후 감사 인사 — [교체 2/7][날씨][아침][저녁][연휴] 한 줄 */
+.field.is-variant { gap: 0; }
+.variant-row { display: flex; align-items: center; gap: 5px; }
+.variant-row .action-btn.is-swap {
+  width: auto;
+  flex: 0 0 auto;
+  padding: 7px 9px;
+  font-size: 11.5px;
+  gap: 4px;
+  border-style: solid;
+  border-color: var(--line);
+  background: #fff;
+  color: var(--label);
+}
+.variant-row .action-btn.is-swap:hover { border-color: var(--accent); color: var(--accent); }
+.variant-row .variant-no { font-size: 10px; font-weight: 700; }
+.chip {
+  flex: 1 1 0;
+  min-width: 0;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--label);
+  border-radius: 999px;
+  padding: 7px 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .14s, color .14s, border-color .14s;
+}
+.chip:hover { border-color: #D2D5E2; color: var(--ink); }
+.chip.is-on { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* 임대차 만기 확인 — 상대방 + 남은 기간 한 줄 */
+.field.is-role-months { flex-direction: row; align-items: center; gap: 8px; }
+.field.is-role-months .seg.is-role { flex: 1 1 auto; }
+.money-wrap.is-months { flex: 0 0 86px; position: relative; }
+.money-wrap.is-months .inp { width: 100%; padding: 9px 28px 9px 10px; text-align: right; }
+.money-wrap.is-months .money-unit { position: absolute; right: 8px; }
+
+/* 달력 칸 — 협의일 때 잠근 칸 */
+.date-btn.is-off { color: #C2C5D0; background: #F7F8FC; cursor: default; }
+.date-btn.is-off .date-ico { color: #C9CCD8; }
+.date-btn.is-off:hover { border-color: var(--line); background: #F7F8FC; }
+
+/* 달력 아래 고정 / 선호 */
+.cal-fix { display: flex; gap: 4px; margin-right: auto; }
+.cal-fix .seg-btn { padding: 5px 10px; font-size: 11px; }
+
+/* 중개보수 합계 — 원 단위로 직접 고칠 수 있는 칸 */
+.money-box .inp.inp-won { padding-right: 28px; }
+.calc-cell .money-field .money-box .inp { height: 44px; font-size: 15px; font-weight: 700; }
+.calc-cell .money-field .money-hint { min-height: 14px; }
+
+/* 업체 연락처 — ☑ + 이름 + 연락처 반반 */
+.contact { gap: 6px; padding: 7px 8px; }
+.contact-inp { flex: 1 1 0; min-width: 0; padding: 7px 8px; font-size: 12.2px; }
+.contact.is-new { border-style: dashed; background: #FCFCFE; }
+.contact.is-new .contact-inp { background: #fff; }
+.contact-check.is-static { cursor: default; opacity: .45; }
+.contact-del { width: 20px; height: 20px; }
+.contact-list { max-height: 152px; }
+
+@media (max-width: 900px) {
+  .segs .seg-btn { padding: 8px 2px; font-size: 12.5px; }
+  .variant-row { gap: 4px; }
+  .variant-row .action-btn.is-swap { padding: 7px 7px; font-size: 11.5px; }
+  .chip { font-size: 12px; padding: 7px 2px; }
+  .seg.is-row5 { gap: 4px; }
+  .seg.is-row5 .seg-btn { font-size: 12px; }
+}
