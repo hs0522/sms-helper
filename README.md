@@ -42,6 +42,20 @@ python3 -m http.server 8000
 - 안드로이드 설치 파일: https://github.com/hs0522/sms-helper/releases/download/v1.4.9/Maraepu-SMS-Helper-v1.4.9.apk
 - 릴리즈 페이지: https://github.com/hs0522/sms-helper/releases/tag/v1.4.9
 
+### 윈도우 미니 위젯(.exe)
+
+필라테스 계산기와 같은 방식의 **항상 위 고정 미니 위젯**입니다. 웹 앱(v1.4.9)을 그대로 안에 넣고, 위에서 드래그 이동 · `📌 항상 위` · `—` 최소화 · `×` 닫기 · 새 버전(`widget-v*`)일 때만 뜨는 `업데이트` 버튼을 더합니다. 기본 420×760(최소 380×620), 마지막 위치·크기를 기억합니다.
+
+```bash
+python desktop/prepare_www.py                # 웹 앱 사본 + 상단 바 주입(desktop/www)
+python -m PyInstaller --noconfirm --clean desktop/build.spec
+ISCC.exe desktop\installer.iss               # dist/installer/MaraepuSmsHelper-Setup.exe
+```
+
+- 코드·빌드 설정: `desktop/` (자세한 설명은 `desktop/README.md`)
+- GitHub Actions: `ci/windows-widget.yml` — `widget-v*` 태그를 푸시하면 `MaraepuSmsHelper-Setup.exe`와 `MaraepuSmsHelper-Windows.zip`을 그 태그의 Release에 올립니다. `.github/workflows/` 푸시 권한이 없어 저장소에는 `ci/`에 두었고, GitHub 웹에서 한 번 복사해 넣으면 동작합니다.
+- 위젯 안의 내 정보·문구·연락처는 `%APPDATA%\MaraepuSmsHelper\webview`에 저장됩니다(창 위치는 같은 폴더의 `state.json`).
+
 ### 안드로이드 앱(.apk)
 
 - 웹 화면 전체(HTML·CSS·JS·폰트)를 앱 안에 넣은 **WebView 껍데기**입니다 — 인터넷 없이도 열립니다.
@@ -305,6 +319,8 @@ projects/sms-helper/
   manifest.webmanifest       홈 화면 추가(PWA) — standalone · 인디고 테마
   sw.js                      오프라인 캐시(Service Worker · 상대경로)
   android/                   안드로이드 WebView 래퍼 (MainActivity · build.gradle · keystore)
+  desktop/                   윈도우 미니 위젯 (widget.py · build.spec · installer.iss · web/ · tests/)
+  ci/windows-widget.yml      윈도우 위젯 빌드 워크플로우(권한 때문에 ci/에 둠 — .github/workflows로 복사)
   .github/workflows-disabled/ GitHub Actions APK 빌드 워크플로우(권한 때문에 비활성 위치에 둠)
   tests/test_app.py          자동 테스트 189개
   tests/capture.py           스크린샷 캡처

@@ -1,0 +1,104 @@
+/* 마래푸 문자 도우미 — 윈도우 미니 위젯 상단 바
+   웹 앱(index.html/styles.css)은 건드리지 않고, 위젯에서만 이 파일을 더한다. */
+
+:root { --wbar-h: 40px; }
+
+html body {
+  /* 상단 바 높이만큼 화면을 내려 바가 내용을 가리지 않게 한다 */
+  padding-top: var(--wbar-h) !important;
+}
+
+#wbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--wbar-h);
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px 0 10px;
+  background: rgba(255, 255, 255, .97);
+  backdrop-filter: saturate(180%) blur(12px);
+  border-bottom: 1px solid var(--line, #E5E7EB);
+  box-shadow: 0 1px 6px rgba(17, 18, 28, .05);
+  -webkit-user-select: none;
+  user-select: none;
+  font-size: 12px;
+  color: var(--ink, #17181C);
+}
+
+.wbar-drag {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  -webkit-app-region: drag;
+  cursor: default;
+}
+.wbar-mark { display: inline-flex; color: var(--accent, #5B5FE9); }
+.wbar-mark svg { display: block; }
+.wbar-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wbar-web {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--muted2, #A7AAB5);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.wbar-btn,
+.wbar-update {
+  -webkit-app-region: no-drag;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted, #8A8D99);
+  height: 24px;
+  border-radius: 8px;
+  padding: 0 8px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 22px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .12s, color .12s, border-color .12s;
+}
+.wbar-btn:hover { background: #EDEFF5; color: var(--ink, #17181C); }
+.wbar-btn.is-close:hover { background: #FDECEE; color: var(--danger, #D14343); }
+.wbar-pin.is-on {
+  background: var(--tint, #EEF0FF);
+  border-color: #DCE0FB;
+  color: var(--accent-dark, #4F46E5);
+}
+.wbar-update {
+  background: var(--tint, #EEF0FF);
+  border-color: #D9DCFB;
+  color: var(--accent-dark, #4F46E5);
+  margin-right: 2px;
+}
+.wbar-update:hover { background: #E5E6FD; }
+
+/* 모달·목록 시트가 상단 바를 덮지 않게 */
+.modal, .sheet { top: var(--wbar-h); }
+
+/* 폰 레이아웃의 sticky 상단 바가 위젯 바 밑에 붙게 (스크롤해도 가리지 않음) */
+@media (max-width: 900px) {
+  .topbar { top: var(--wbar-h) !important; }
+}
+
+/* 좁은 창(최소 380)에서 핀 글자는 숨기고 📌 만 남긴다 */
+@media (max-width: 399px) {
+  #wbtn-pin { padding: 0 5px; }
+  #wbtn-pin .pin-label { display: none; }
+}
