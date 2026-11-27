@@ -594,8 +594,8 @@ class AppTest(unittest.TestCase):
         # 섹션 머리말은 ■, 아직 넣지 않은 자리는 소괄호로 보인다
         self.pick('t8')
         body = self.text()
-        self.assertIn('■ 계약 구성', body)
-        self.assertIn('■ 특약', body)
+        self.assertIn('■ 계약금액 및 지급 일정', body)
+        self.assertIn('■ 특약사항', body)
         self.assertIn('(계좌번호)', body)
         self.pick_with('t10', {'trade': '매매', 'kind': '가계약'})
         body = self.text()
@@ -604,8 +604,8 @@ class AppTest(unittest.TestCase):
         self.assertIn('(가계약 일시)', body)
         self.pick('t12')
         body = self.text()
-        self.assertIn('■ 온라인 제출 방법', body)
-        self.assertIn('■ 준비하실 증빙서류', body)
+        self.assertIn('■ 온라인 제출 절차', body)
+        self.assertIn('■ 주요 증빙자료 예시', body)
         self.pick_with('t10', {'trade': '매매', 'kind': '잔금'})
         body = self.text()
         self.assertIn('■ 금액 세부사항', body)
@@ -617,9 +617,10 @@ class AppTest(unittest.TestCase):
         self.assertIn('(입금 계좌)', body)
 
     def test_first_greeting_keeps_owner_signature(self):
+        # 1번도 공통 하단 서명을 그대로 붙인다 (2차 수정본)
         self.pick('t1')
         body = self.text()
-        self.assertTrue(body.endswith('마래푸중앙부동산 대표 황호선 드림\n010-4585-7365 / 02-312-7365'), body)
+        self.assertTrue(body.endswith('마래푸중앙부동산 드림\n010-4585-7365 / 02-312-7365'), body)
 
     def test_only_sms_screen_exists(self):
         # 매물 찾기 · 진행 거래 탭은 없어졌다
@@ -664,18 +665,18 @@ class AppTest(unittest.TestCase):
         self.assertNotIn('등기권리증', body)
 
         self.pick('t11')
-        self.assertIn('매도인과 매수인에게', self.text())
+        self.assertIn('매도인·매수인에게', self.text())
         self.page.click('#fields [data-seg="trade"][data-value="임대차"]')
         self.wait(80)
-        self.assertIn('임대인과 임차인에게', self.text())
-        self.assertIn('임대차계약신고', self.text())
+        self.assertIn('임대인·임차인에게', self.text())
+        self.assertIn('확정일자 신청', self.text())
 
         self.pick('t12')
-        self.assertIn('공동명의이므로 두 분 각각', self.text())
+        self.assertIn('공동명의인 경우 명의자별로 각각 작성하시고', self.text())
         self.page.click('#fields [data-seg="owner"][data-value="단독"]')
         self.wait(80)
-        self.assertNotIn('공동명의이므로', self.text())
-        self.assertIn('조달하실 금액과 자금 출처', self.text())
+        self.assertNotIn('공동명의인 경우', self.text())
+        self.assertIn('자금조달 항목별 금액과 출처', self.text())
 
     def test_reservation_status_switch(self):
         self.pick('t5')
@@ -694,18 +695,18 @@ class AppTest(unittest.TestCase):
         self.page.fill('#fields [data-prop="items"][data-idx="0"][data-key="ho"]', '1103')
         self.page.fill('#fields [data-prop="items"][data-idx="0"][data-money="amount"]', '230000')
         self.wait(120)
-        self.assertIn('마포래미안푸르지오 208동 1103호 (매매 23억)', self.text())
+        self.assertIn('마포래미안푸르지오 208동 1103호 / 매매 23억', self.text())
         # 호 칸 배지 — 호 ↔ 층
         self.assertEqual(self.page.inner_text('#fields [data-prop-unit="ho"]'), '호')
         self.page.click('#fields [data-prop-unit="ho"]')
         self.wait(80)
-        self.assertIn('마포래미안푸르지오 208동 11층 (매매 23억)', self.text())
+        self.assertIn('마포래미안푸르지오 208동 11층 / 매매 23억', self.text())
         self.assertEqual(self.page.inner_text('#fields [data-prop-unit="ho"]'), '층')
         # 동 칸 배지 — 동 ↔ 단지: 호수 칸·호 배지는 그대로 살아 있고 층·호수가 함께 나간다
         self.page.click('#fields [data-prop-unit="dong"]')
         self.wait(80)
         body = self.text()
-        self.assertIn('마포래미안푸르지오 2단지 11층 (매매 23억)', body)
+        self.assertIn('마포래미안푸르지오 2단지 11층 / 매매 23억', body)
         self.assertEqual(self.page.inner_text('#fields [data-prop-unit="dong"]'), '단지')
         ho_inp = '#fields [data-prop="items"][data-idx="0"][data-key="ho"]'
         self.assertFalse(self.page.eval_on_selector(ho_inp, 'e => e.disabled'), '단지일 때도 호수 칸은 살아 있다')
@@ -714,17 +715,17 @@ class AppTest(unittest.TestCase):
         self.page.click('#fields [data-prop-unit="ho"]')
         self.wait(80)
         self.assertEqual(self.page.inner_text('#fields [data-prop-unit="ho"]'), '호')
-        self.assertIn('마포래미안푸르지오 2단지 1103호 (매매 23억)', self.text())
+        self.assertIn('마포래미안푸르지오 2단지 1103호 / 매매 23억', self.text())
         # 단지 상태에서 호수 칸을 직접 고칠 수 있고, 비우면 단지까지만 나간다
         self.page.fill(ho_inp, '1203')
         self.wait(120)
-        self.assertIn('마포래미안푸르지오 2단지 1203호 (매매 23억)', self.text())
+        self.assertIn('마포래미안푸르지오 2단지 1203호 / 매매 23억', self.text())
         self.page.click('#fields [data-prop-unit="ho"]')
         self.wait(80)
-        self.assertIn('마포래미안푸르지오 2단지 12층 (매매 23억)', self.text())
+        self.assertIn('마포래미안푸르지오 2단지 12층 / 매매 23억', self.text())
         self.page.fill(ho_inp, '')
         self.wait(120)
-        self.assertIn('마포래미안푸르지오 2단지 (매매 23억)', self.text())
+        self.assertIn('마포래미안푸르지오 2단지 / 매매 23억', self.text())
         self.assertNotIn('2단지 12층', self.text())
         self.page.fill(ho_inp, '1103')
         self.wait(120)
@@ -818,14 +819,14 @@ class AppTest(unittest.TestCase):
         self.wait(120)
         self.assertEqual(self.page.input_value(amount), '230,000')
         self.assertIn('(23억)', self.page.inner_text('#fields'))
-        self.assertIn('마포래미안푸르지오 208동 208호 (매매 23억)', self.text())
+        self.assertIn('마포래미안푸르지오 208동 208호 / 매매 23억', self.text())
 
         self.page.click('#fields [data-prop-trade="items"][data-idx="0"][data-value="전세"]')
         self.wait(120)
-        self.assertIn('(전세 23억)', self.text())
+        self.assertIn('/ 전세 23억', self.text())
         self.page.fill(amount, '115000')
         self.wait(120)
-        self.assertIn('마포래미안푸르지오 208동 208호 (전세 11억 5천만)', self.text())
+        self.assertIn('마포래미안푸르지오 208동 208호 / 전세 11억 5천만', self.text())
 
         self.page.click('#fields [data-prop-trade="items"][data-idx="0"][data-value="월세"]')
         self.wait(120)
@@ -834,7 +835,7 @@ class AppTest(unittest.TestCase):
         self.page.fill('#fields [data-money="rent"]', '300')
         self.wait(150)
         body = self.text()
-        self.assertIn('마포래미안푸르지오 208동 208호 (보증금 1억 / 월세 300만 원)', body)
+        self.assertIn('마포래미안푸르지오 208동 208호 / 보증금 1억 / 월세 300만 원', body)
 
     def test_legacy_price_migrated_on_load(self):
         ctx, page = self.page_with_state({
@@ -842,7 +843,7 @@ class AppTest(unittest.TestCase):
             'data': {'t7': {'mode': 'ho', 'items': [
                 {'complex': '마포래미안푸르지오', 'dong': '208', 'ho': '208', 'price': '매매 23억'}]}}
         })
-        self.assertIn('마포래미안푸르지오 208동 208호 (매매 23억)', page.input_value('#preview'))
+        self.assertIn('마포래미안푸르지오 208동 208호 / 매매 23억', page.input_value('#preview'))
         self.assertEqual(page.input_value('#fields [data-money="amount"]'), '230,000')
         ctx.close()
 
@@ -855,8 +856,8 @@ class AppTest(unittest.TestCase):
                                      'trade': '전세', 'amount': '115000'}}}
         })
         body = page.input_value('#preview')
-        self.assertIn('전세 손님이 계셔서', body)
-        self.assertIn('* 매물 : 마포래미안푸르지오 304동 1103호 (전세 11억 5천만)', body)
+        self.assertIn('전세 손님께서 집보기를 희망하셔서', body)
+        self.assertIn('- 매물 : 마포래미안푸르지오 304동 1103호 / 전세 11억 5천만', body)
         self.assertEqual(page.inner_text('#fields [data-seg="view"][data-value="detail"]').strip(), '상세')
         ctx.close()
 
@@ -976,8 +977,8 @@ class AppTest(unittest.TestCase):
         self.page.fill('#fields [data-prop="items"][data-idx="1"][data-money="amount"]', '90000')
         self.wait(100)
         body = self.text()
-        self.assertIn('(매매 23억)', body)
-        self.assertIn('(전세 9억)', body)
+        self.assertIn('/ 매매 23억', body)
+        self.assertIn('/ 전세 9억', body)
         # × 대신 늘 보이는 ☑ — 체크한 매물만 「- 선택 제거」로 한 번에 뺀다
         self.assertEqual(len(self.page.query_selector_all('#fields .prop-item .icon-btn')), 0, '카드 안 × 버튼은 없다')
         self.assertEqual(len(self.page.query_selector_all('#fields .prop-check')), 2, '매물마다 ☑가 보인다')
@@ -989,7 +990,7 @@ class AppTest(unittest.TestCase):
         self.wait(80)
         self.page.click('#fields [data-pick-remove="items"]')
         self.wait(100)
-        self.assertNotIn('(전세 9억)', self.text())
+        self.assertNotIn('/ 전세 9억', self.text())
         self.assertEqual(len(self.page.query_selector_all('#fields .prop-item')), 1)
 
     def test_money_input_formats_and_hint(self):
@@ -1000,7 +1001,7 @@ class AppTest(unittest.TestCase):
         self.wait(150)
         self.assertEqual(self.page.input_value('#fields [data-money="amount"]'), '237,000')
         self.assertIn('(23억 7천만)', self.page.inner_text('#fields'))
-        self.assertIn('* 거래조건 : 매매 23억 7천만', self.text())
+        self.assertIn('- 거래조건 : 매매 23억 7천만', self.text())
 
 
     def test_t8_percent_sets_amount(self):
@@ -1014,10 +1015,10 @@ class AppTest(unittest.TestCase):
         # 잔금은 저절로 — 76,000 − 7,600 − 19,000
         self.assertEqual(self.page.input_value('#fields [data-pay-amt="jan"][data-pay-idx="0"]'), '49,400')
         body = self.text()
-        self.assertIn('* 매매가 : 760,000,000원', body)
-        self.assertIn('* 계약금 10% : 76,000,000원', body)
-        self.assertIn('* 중도금 25% : 190,000,000원', body)
-        self.assertIn('* 잔금 : 494,000,000원', body)
+        self.assertIn('- 매매대금 : 760,000,000원 (7억 6천만 원)', body)
+        self.assertIn('- 계약금 10% : 76,000,000원 (7,600만 원)', body)
+        self.assertIn('- 중도금 25% : 190,000,000원 (1억 9천만 원)', body)
+        self.assertIn('- 잔금 : 494,000,000원 (4억 9,400만 원)', body)
         # 매매가를 바꾸면 잔금이 다시 계산된다
         self.page.fill('#fields [data-field="price"]', '80000')
         self.wait(200)
@@ -1147,9 +1148,9 @@ class AppTest(unittest.TestCase):
         self.page.click('#btn-settings-save')
         self.wait(150)
         body = self.text()
-        self.assertIn('* 우리은행 1002-762-106047 황호선', body)
+        self.assertIn('- 입금계좌 : 우리은행 1002-762-106047 황호선', body)
         line = [l for l in body.split('\n') if '우리은행' in l][0]
-        self.assertEqual(line, '* 우리은행 1002-762-106047 황호선')
+        self.assertEqual(line, '- 입금계좌 : 우리은행 1002-762-106047 황호선')
 
     def test_money_input_spider_style(self):
         # 매물 스파이더식 — 숫자는 왼쪽, '만원'은 칸 안 오른쪽, 아래 줄에 원단위·억 환산
@@ -1279,15 +1280,15 @@ class AppTest(unittest.TestCase):
         self.page.fill('#fields [data-prop="prop"][data-money="amount"]', '230000')
         self.wait(180)
         body = self.text()
-        self.assertIn('* 마포래미안푸르지오 208동 1103호', body)
-        self.assertIn('* 거래조건 : 매매 23억', body)
+        self.assertIn('- 매물 : 마포래미안푸르지오 208동 1103호', body)
+        self.assertIn('- 거래조건 : 매매 23억', body)
         # 월세는 보증금·월차임이 한 줄로 조합된다
         self.page.click('#fields [data-prop-trade="prop"][data-value="월세"]')
         self.wait(150)
         self.page.fill('#fields [data-money="deposit"]', '10000')
         self.page.fill('#fields [data-money="rent"]', '350')
         self.wait(180)
-        self.assertIn('* 거래조건 : 보증금 1억 / 월세 350만 원', self.text())
+        self.assertIn('- 거래조건 : 보증금 1억 / 월세 350만 원', self.text())
 
     def test_movein_date_modes(self):
         # 입주일 — 협의(즉시입주) · 고정(시작일 + 고정/선호) · 기간(시작~종료) 세 갈래 (t2 · t18)
@@ -1653,10 +1654,10 @@ class AppTest(unittest.TestCase):
         self.assertIn('중개보수(공급가액) 16,100,000원', summary)
         self.assertIn('부가세 644,000원 (간이 4%)', summary)
         self.assertIn('상한 0.7%', summary)
-        self.assertIn('* 중개보수 요율 : 0.7%', self.text())
-        self.assertIn('* 중개보수(공급가액) : 16,100,000원', self.text())
-        self.assertIn('* 부가세 : 644,000원 (간이과세 4%)', self.text())
-        self.assertIn('* 합계 : 16,744,000원', self.text())
+        self.assertIn('- 적용 요율 : 0.7%', self.text())
+        self.assertIn('- 중개보수 (공급가액) : 16,100,000원', self.text())
+        self.assertIn('- 부가가치세 : 644,000원 (간이과세 4%)', self.text())
+        self.assertIn('- 합계 : 16,744,000원', self.text())
         self.assertNotIn('중개수수료', self.text())
 
         # 결과 박스와 적용 요율이 한 줄, 같은 라벨 줄·같은 칸 높이, 계산식은 그 아래 원단위 금액 표시처럼 작고 연한 글씨
@@ -1701,8 +1702,8 @@ class AppTest(unittest.TestCase):
         self.page.click('#fields [data-seg="calcVat"][data-value="10"]')
         self.wait(150)
         self.assertEqual(self.page.input_value('#fields [data-field="calcTotalWon"]'), '17,710,000')
-        self.assertIn('* 부가세 : 1,610,000원 (일반과세 10%)', self.text())
-        self.assertIn('* 합계 : 17,710,000원', self.text())
+        self.assertIn('- 부가가치세 : 1,610,000원 (일반과세 10%)', self.text())
+        self.assertIn('- 합계 : 17,710,000원', self.text())
         self.assertIn('부가세 1,610,000원 (일반 10%)', self.page.inner_text('.calc-hint'))
         self.page.click('#fields [data-seg="calcVat"][data-value="none"]')
         self.wait(120)
@@ -1711,7 +1712,7 @@ class AppTest(unittest.TestCase):
         self.page.fill('#fields [data-field="calcRate"]', '0.6')
         self.wait(200)
         self.assertIn('13,800,000원', self.text())
-        self.assertIn('중개보수 요율 : 0.6%', self.text())
+        self.assertIn('적용 요율 : 0.6%', self.text())
         self.page.fill('#fields [data-field="calcRate"]', '')
         self.page.click('#fields [data-seg="calcTrade"][data-value="월세"]')
         self.wait(150)
@@ -1720,7 +1721,7 @@ class AppTest(unittest.TestCase):
         self.page.fill('#fields [data-field="calcRent"]', '50')
         self.wait(250)
         self.assertEqual(self.page.input_value('#fields [data-field="calcTotalWon"]'), '450,000')
-        self.assertIn('* 거래금액 : 보증금 100,000,000원 / 월차임 500,000원 (환산 150,000,000원)', self.text())
+        self.assertIn('- 거래금액 : 보증금 100,000,000원 / 월차임 500,000원 (환산 150,000,000원)', self.text())
 
     def test_fee_calculator_presale_only_sale(self):
         self.pick('t14')
@@ -1769,15 +1770,15 @@ class AppTest(unittest.TestCase):
         self.page.click('#fields [data-range-save="times"]')
         self.wait(150)
         body = self.text()
-        self.assertIn('* 12월 5일 (토) 14:15', body)
-        self.assertNotIn('* 12월 5일 (토) 14:15 ~', body)
+        self.assertIn('- 방문 희망 시간 : 12월 5일 (토) 14:15', body)
+        self.assertNotIn('14:15 ~', body)
 
         # ② 시작·끝을 모두 넣고 저장 → 범위가 다음 줄에 붙는다
         self.range_time('end', None, '15', '30')
         self.page.click('#fields [data-range-save="times"]')
         self.wait(150)
         body = self.text()
-        self.assertIn('* 12월 5일 (토) 14:15\n* 12월 5일 (토) 14:15 ~ 15:30', body)
+        self.assertIn('- 방문 희망 시간 : 12월 5일 (토) 14:15 / 12월 5일 (토) 14:15 ~ 15:30', body)
         self.assertNotIn('마포래미안푸르지오', body)
 
         # ③ 시각을 비우고 저장 → 날짜 한 줄 (시각 칸의 초기화는 그 시각만 지운다)
@@ -1789,7 +1790,7 @@ class AppTest(unittest.TestCase):
         self.assertEqual(self.page.inner_text('#fields [data-time-chip="start"]').strip(), '시작 시각')
         self.page.click('#fields [data-range-save="times"]')
         self.wait(150)
-        self.assertIn('* 12월 5일 (토)\n', self.text())
+        self.assertIn('/ 12월 5일 (토)\n', self.text())
 
         # ④ 날짜 없이 저장하면 안내하고 본문은 그대로
         self.page.click('#fields [data-clear-date="times__range"]')
@@ -2110,15 +2111,15 @@ class AppTest(unittest.TestCase):
 
     def test_parking_toggle(self):
         self.pick('t5')
-        self.assertIn('주차가 필요하신 경우', self.text())
+        self.assertIn('주차가 필요하시면', self.text())
         self.page.click('#fields [data-toggle="parking"]')
         self.wait(120)
         body = self.text()
-        self.assertNotIn('주차가 필요하신 경우', body)
-        self.assertIn('감사합니다!', body)
+        self.assertNotIn('주차가 필요하시면', body)
+        self.assertIn('약속된 일정에 뵙겠습니다.', body)
         self.page.click('#fields [data-toggle="detail"]')
         self.wait(120)
-        self.assertNotIn('* 매물 :', self.text())
+        self.assertNotIn('- 매물 :', self.text())
 
 
     def test_amount_display_mode_setting(self):
@@ -2188,7 +2189,7 @@ class AppTest(unittest.TestCase):
         self.assertIn('신한은행 110-123-456789 황호선', self.page.inner_text('#set-account-preview'))
         self.page.click('#btn-settings-save')
         self.wait(150)
-        self.assertIn('* 신한은행 110-123-456789 황호선', self.text())
+        self.assertIn('- 입금계좌 : 신한은행 110-123-456789 황호선', self.text())
 
     def test_mobile_stage_tab_opens_sheet_and_switches_text(self):
         # 폰(390×844)에서 상단 카테고리 탭을 누르면 그 카테고리 첫 문자로 넘어가고
@@ -2825,10 +2826,10 @@ class AppTest(unittest.TestCase):
     def test_t16_myeongdan_danji_and_trade(self):
         self.pick('t16')
         body = self.text()
-        self.assertIn('마포래미안푸르지오 1단지의 마래푸중앙부동산입니다', body)
-        self.assertIn('현재 매수를 알아보는 손님이 있어', body)
-        self.assertIn('매도 계획이 확정되셨다면', body)
-        self.assertIn('매수 손님을 잘 끌어낼 수 있습니다', body)
+        self.assertIn('마포래미안푸르지오 1단지 내 마래푸중앙부동산입니다.', body)
+        self.assertIn('현재 매수를 희망하시는 손님이 계셔서 연락드립니다.', body)
+        self.assertIn('혹시 매도 계획이 있으시거나 고려 중이시라면', body)
+        self.assertIn('단지 특성과 거래 상황을 살펴 손님께 성실히 안내하겠습니다.', body)
         # 서명은 늘 맨 아래에 들어간다
         self.assertTrue(body.endswith('마래푸중앙부동산 드림\n010-4585-7365 / 02-312-7365'), body)
         self.assertEqual(len(self.page.query_selector_all('#fields [data-toggle="signature"]')), 0)
@@ -2841,13 +2842,13 @@ class AppTest(unittest.TestCase):
         self.page.click('#fields [data-seg="trade"][data-value="전세"]')
         self.wait(120)
         body = self.text()
-        self.assertIn('현재 전세를 알아보는 손님이', body)
-        self.assertIn('임대 계획이 확정되셨다면', body)
-        self.assertIn('전세 손님을 잘 끌어낼 수 있습니다', body)
+        self.assertIn('현재 전세를 희망하시는 손님이 계셔서', body)
+        self.assertIn('혹시 전세 임대 계획이 있으시거나', body)
+        self.assertIn('조건에 맞는 손님과 좋은 거래로 이어질 수 있도록 노력하겠습니다.', body)
 
         # 종별을 바꿔도 서명은 그대로 맨 아래에 있다
         body = self.text()
-        self.assertIn('전세 손님을 잘 끌어낼 수 있습니다', body)
+        self.assertIn('조건에 맞는 손님과 좋은 거래로 이어질 수 있도록 노력하겠습니다.', body)
         self.assertIn('010-4585-7365', body)
         self.assertTrue(body.endswith('010-4585-7365 / 02-312-7365'))
 
@@ -2855,8 +2856,8 @@ class AppTest(unittest.TestCase):
         # 집보기 문의 — [소유자][중개사] [간단][상세] 네 조합
         self.pick('t3')
         body = self.text()
-        self.assertIn('매수 손님이 있어서 연락드렸습니다', body)
-        self.assertIn('(방문 일시)에 손님 모시고 방문드릴 수 있을까요?', body)
+        self.assertIn('매수 손님이 계셔서 집보기 가능 여부를 여쭙습니다.', body)
+        self.assertIn('- 희망 일시 : (방문 일시)', body)
         self.assertEqual(len(self.page.query_selector_all('#fields [data-field="times"]')), 0)
         self.assertEqual(self.js("""() => [...document.querySelectorAll('#fields .segs .seg-btn')]
             .map(b => b.textContent.trim())"""), ['소유자', '중개사', '간단', '상세'], '버전 네 칸')
@@ -2869,13 +2870,13 @@ class AppTest(unittest.TestCase):
         self.pick_time('#calpop', None, '9', '30')
         self.page.click('#calpop [data-cal-close]')
         body = self.text()
-        self.assertIn('11월 26일 (목) 09:30에 손님 모시고 방문드릴 수 있을까요?', body)
+        self.assertIn('- 희망 일시 : 11월 26일 (목) 09:30', body)
         self.assertNotIn('(방문 일시)', body)
 
         # 매물 카드의 거래 유형으로 전세 / 월세 손님
         self.page.click('#fields [data-prop-trade="prop"][data-value="월세"]')
         self.wait(120)
-        self.assertIn('월세 손님이 있어서', self.text())
+        self.assertIn('월세 손님이 계셔서', self.text())
 
         # 상세 버전으로 바꾸면 날짜칸·시간칸·초기화/저장만 있는 방문 희망 시간이 나온다
         self.page.click('#fields [data-seg="view"][data-value="detail"]')
@@ -2883,8 +2884,8 @@ class AppTest(unittest.TestCase):
         self.assertIsNotNone(self.page.query_selector('#fields .time-box [data-date="times__range"]'))
         self.assertEqual(self.js("() => document.querySelectorAll('#fields .time-box textarea').length"), 0)
         body = self.text()
-        self.assertIn('집을 보시고자 하는 월세 손님이 계셔서', body)
-        self.assertIn('* (방문 희망 시간)', body)
+        self.assertIn('월세 손님께서 집보기를 희망하셔서', body)
+        self.assertIn('- 방문 희망 시간 : (방문 희망 시간)', body)
 
         # 중개사 버전 — 공동중개로 여쭙는 문구
         self.page.click('#fields [data-seg="view"][data-value="simple"]')
@@ -2894,11 +2895,11 @@ class AppTest(unittest.TestCase):
         body = self.text()
         self.assertIn('사장님, 안녕하세요', body)
         self.assertIn('공동중개 및 집보기 가능 여부', body)
-        self.assertIn('11월 26일 (목) 09:30에 손님 모시고', body)
+        self.assertIn('- 희망 일시 : 11월 26일 (목) 09:30', body)
         # 다시 소유자로 돌아와도 고른 일시는 남아 있다
         self.page.click('#fields [data-seg="who"][data-value="owner"]')
         self.wait(120)
-        self.assertIn('11월 26일 (목) 09:30에 손님 모시고', self.text())
+        self.assertIn('- 희망 일시 : 11월 26일 (목) 09:30', self.text())
 
     def test_t17_thanks_variants(self):
         counts = self.js("""() => Object.keys(SMSTemplates.VARIANTS).map(k => SMSTemplates.VARIANTS[k].length)""")
@@ -2939,29 +2940,29 @@ class AppTest(unittest.TestCase):
         self.assertIn('교체', self.page.inner_text('#fields .variant-row .action-btn'))
         self.page.click('#fields [data-greet="weather"]')
         self.wait(120)
-        self.assertIn('쌀쌀한 날씨에 감기 조심하세요', self.text())
+        self.assertIn('날씨가 제법 쌀쌀하네요. 감기 조심하시고 따뜻한 하루 보내세요!', self.text())
         # 다른 칩을 누르면 앞의 것은 풀리고 하나만 남는다 (주말/연휴/명절 문구는 섞이지 않는다)
         self.page.click('#fields [data-greet="weekend"]')
         self.wait(120)
         body = self.text()
         self.assertIn('즐거운 주말 보내세요', body)
-        self.assertNotIn('쌀쌀한 날씨에 감기 조심하세요', body)
+        self.assertNotIn('날씨가 제법 쌀쌀하네요. 감기 조심하시고 따뜻한 하루 보내세요!', body)
         self.assertEqual(self.js("""() => [...document.querySelectorAll('#fields .variant-row .chip.is-on')]
             .map(b => b.textContent.trim())"""), ['주말'])
         self.page.click('#fields [data-greet="holiday"]')
         self.wait(120)
         body = self.text()
-        self.assertIn('즐거운 연휴 보내세요', body)
+        self.assertIn('모처럼의 연휴, 여유롭고 즐거운 시간 보내세요!', body)
         self.assertNotIn('즐거운 주말 보내세요', body)
         self.page.click('#fields [data-greet="holiday2"]')
         self.wait(120)
         body = self.text()
-        self.assertIn('풍성한 명절 보내세요', body)
+        self.assertIn('가족분들과 함께 웃음 가득하고 따뜻한 명절 보내세요!', body)
         self.assertNotIn('즐거운 연휴 보내세요', body)
         # 고른 칩을 다시 누르면 해제
         self.page.click('#fields [data-greet="holiday2"]')
         self.wait(120)
-        self.assertNotIn('풍성한 명절 보내세요', self.text())
+        self.assertNotIn('가족분들과 함께 웃음 가득하고 따뜻한 명절 보내세요!', self.text())
         # 문구를 돌려도 서명은 늘 맨 아래에 붙고 토글은 없다
         self.assertEqual(len(self.page.query_selector_all('#fields [data-toggle="signature"]')), 0)
         self.assertTrue(self.text().endswith('마래푸중앙부동산 드림\n010-4585-7365 / 02-312-7365'))
@@ -2969,12 +2970,12 @@ class AppTest(unittest.TestCase):
     def test_t18_coagent_decline_amounts(self):
         self.pick('t18')
         body = self.text()
-        self.assertIn('매수 의사 확실한 손님이라 조심스레 여쭤봤어요', body)
-        self.assertIn('매매 (금액)까지', body)
+        self.assertIn('매수 의사가 분명한 손님이 계셔서 조건에 맞는 매물 문의드립니다.', body)
+        self.assertIn('- 매매 희망금액 : (금액)까지', body)
         self.assertIn('염리초 보내고 싶은 학부모입니다', body)
         self.page.fill('#fields [data-field="amount"]', '90000')
         self.wait(150)
-        self.assertIn('매매 9억까지', self.text())
+        self.assertIn('- 매매 희망금액 : 9억까지', self.text())
         self.assertIn('(9억)', self.page.inner_text('#fields'))
         # 거래유형·금액·입주일이 공통 금액박스 하나에 들어 있고, 평형 칸은 없다
         self.assertEqual(len(self.page.query_selector_all('#fields [data-field="area"]')), 0,
@@ -2985,19 +2986,19 @@ class AppTest(unittest.TestCase):
         # 입주 — 협의를 고르면 입력칸 없이 '즉시입주(협의)'로 나간다
         self.page.click('#fields [data-date-mode="movein"][data-value="협의"]')
         self.wait(150)
-        self.assertIn('입주 즉시입주(협의)', self.text())
+        self.assertIn('- 입주 : 즉시입주(협의)', self.text())
 
         # 전세 — 보증금 한 칸
         self.page.click('#fields [data-seg="trade"][data-value="전세"]')
         self.wait(150)
         body = self.text()
-        self.assertIn('요즘 임대매물 귀한데, 염치없이 전화드렸어요', body)
-        self.assertIn('보증금 9억까지', body, '매매에서 적은 금액을 그대로 쓴다')
+        self.assertIn('전세 매물을 찾는 손님이 계셔서 문의드립니다.', body)
+        self.assertIn('- 전세 보증금 : 9억까지', body, '매매에서 적은 금액을 그대로 쓴다')
         self.assertEqual(len(self.page.query_selector_all('#fields [data-field="rent"]')), 0,
                          '전세에는 월차임 칸이 없다')
         self.page.fill('#fields [data-field="amount"]', '70000')
         self.wait(150)
-        self.assertIn('보증금 7억까지', self.text())
+        self.assertIn('- 전세 보증금 : 7억까지', self.text())
 
         # 월세 — 보증금 + 월차임 두 칸
         self.page.click('#fields [data-seg="trade"][data-value="월세"]')
@@ -3006,7 +3007,7 @@ class AppTest(unittest.TestCase):
         self.page.fill('#fields [data-field="deposit"]', '10000')
         self.page.fill('#fields [data-field="rent"]', '250')
         self.wait(200)
-        self.assertIn('보증금 1억 / 월세 250만 원까지', self.text())
+        self.assertIn('- 보증금 : 1억\n- 월세 : 250만 원까지', self.text())
         self.assertEqual(len(self.page.query_selector_all('#fields [data-field="area"]')), 0,
                          '임대 조건에는 평형 칸이 없다')
 
@@ -3029,8 +3030,8 @@ class AppTest(unittest.TestCase):
         t19_fields = self.js("() => [...document.querySelectorAll('#fields [data-key]')].map(e => e.dataset.key)")
         self.assertEqual(t7_fields, t19_fields, '매물 칸 구성이 같다')
         self.assertEqual(t19_fields, ['complex', 'dong', 'ho'], '단지·동·호 세 칸만')
-        self.assertIn('🔑(매물)\n🔑최저가 조율 가능합니다', self.text())
-        self.assertIn('마포래미안푸르지오 매매 특가 소식 전해드립니다!', self.text())
+        self.assertIn('🔑 매물 : (매물)\n🔑 거래조건 : (가격)\n✔️ 특징 : 최저가 조율 가능합니다', self.text())
+        self.assertIn('마포래미안푸르지오 매매 특가 매물 안내드립니다.', self.text())
 
         # 동·호수를 넣어도 평형·타입·방향 줄이 붙지 않는다 (마래푸밖에 없는 정보)
         dong = '#fields [data-prop="items"][data-idx="0"][data-key="dong"]'
@@ -3041,19 +3042,19 @@ class AppTest(unittest.TestCase):
         self.page.fill('#fields [data-prop="items"][data-idx="0"][data-money="amount"]', '210000')
         self.wait(200)
         body = self.text()
-        self.assertIn('🔑마포래미안푸르지오 205동 1203호', body)
+        self.assertIn('🔑 매물 : 마포래미안푸르지오 205동 1203호', body)
         self.assertNotIn('34평', body)
         self.assertNotIn('동향', body)
         self.assertNotIn('84E', body)
-        self.assertIn('🔑매매 21억으로 최저가 조율 가능합니다', body)
+        self.assertIn('🔑 거래조건 : 매매 21억\n✔️ 특징 : 최저가 조율 가능합니다', body)
 
         # [단지]로 가려도 호수 칸·배지는 살아 있고, 동·호만 따라온다
         self.page.click('#fields [data-prop-unit="dong"]')
         self.wait(150)
-        self.assertIn('🔑마포래미안푸르지오 2단지 1203호', self.text())
+        self.assertIn('🔑 매물 : 마포래미안푸르지오 2단지 1203호', self.text())
         self.page.click('#fields [data-prop-unit="ho"]')
         self.wait(150)
-        self.assertIn('🔑마포래미안푸르지오 2단지 12층', self.text())
+        self.assertIn('🔑 매물 : 마포래미안푸르지오 2단지 12층', self.text())
 
         # 강조 문구 · 거래 유형은 매물 줄에서 고른다
         self.page.fill('#fields [data-field="emphasis"]', '급매로 조율 가능합니다')
@@ -3061,8 +3062,8 @@ class AppTest(unittest.TestCase):
         self.page.fill('#fields [data-prop="items"][data-idx="0"][data-money="amount"]', '115000')
         self.wait(200)
         body = self.text()
-        self.assertIn('마포래미안푸르지오 전세 특가 소식 전해드립니다!', body)
-        self.assertIn('🔑전세 11억 5천만으로 급매로 조율 가능합니다', body)
+        self.assertIn('마포래미안푸르지오 전세 특가 매물 안내드립니다.', body)
+        self.assertIn('🔑 거래조건 : 전세 11억 5천만\n✔️ 특징 : 급매로 조율 가능합니다', body)
 
 
     def test_t19_promo_other_complex_has_no_type_info(self):
@@ -3095,75 +3096,102 @@ class AppTest(unittest.TestCase):
 
 
     def test_t20_vendor_contacts(self):
-        # 협력업체 연락처는 코드에 넣지 않는다 — 화면에서 한 번 추가해 두고 쓴다
+        # 2차 수정본: 협력업체 44명이 기본으로 들어 있고, 고른 사람만 문자에 들어간다
         self.pick('t20')
         body = self.text()
-        self.assertIn('마포구 일대를 잘 아는 대출 상담사분들입니다', body)
-        self.assertIn('이름 : 상담사 이름\n연락처 : 전화번호', body)   # 저장된 연락처가 없을 때
+        self.assertIn('부동산 대출 상담을 받아보실 수 있는 상담사를 소개드립니다.', body)
+        self.assertIn('마래푸중앙부동산 소개로 연락하셨다고 말씀해 주시면 됩니다.', body)
+        # 기본 명단 — 대출 33 · 세무사 1 · 법무사 1 · 인테리어 2 · 입주청소 5 · 이사 2 = 44명
+        defaults = self.js("() => Object.entries(SMSTemplates.DEFAULT_CONTACTS).map(([k, v]) => [k, v.length])")
+        self.assertEqual(defaults, [['대출', 33], ['세무사', 1], ['법무사', 1], ['인테리어', 2], ['입주청소', 5], ['이사', 2]])
+        names = self.js("""() => [...document.querySelectorAll('#fields .contact-list .contact:not(.is-new) input[data-contact-edit=\\"name\\"]')].map(e => e.value)""")
+        self.assertEqual(len(names), 33, '대출 33명이 화면에 다 보인다')
+        for want in ('국민 대출 김동준', '신한 대출 안종미', '삼성생명 대출 박재영'):
+            self.assertIn(want, names)
+        # 아무도 고르지 않으면 이름·연락처 자리만 남는다
+        self.assertIn('- 이름 : (상담사/업체 이름)\n- 연락처 : (전화번호)', body)
 
-        # 두 명을 추가하면 바로 문자에 들어간다
-        for name, phone in (('신한 대출 안종미', '01047572152'), ('하나 대출 김효원', '01052415262')):
-            self.page.fill('#fields [data-contact-new="name"]', name)
-            self.page.fill('#fields [data-contact-new="phone"]', phone)
-            self.page.click('#fields [data-contact-add]')
-            self.wait(150)
+        # 한 명을 고르면 그 사람만 문자에 들어간다
+        idx = names.index('신한 대출 안종미')
+        rows = self.page.query_selector_all('#fields .contact-list .contact:not(.is-new)')
+        rows[idx].query_selector('.contact-check').click()
+        self.wait(150)
         body = self.text()
-        self.assertIn('이름 : 신한 대출 안종미\n연락처 : 010-4757-2152', body)
-        self.assertIn('이름 : 하나 대출 김효원\n연락처 : 010-5241-5262', body)
+        self.assertIn('- 이름 : 신한 대출 안종미\n- 연락처 : 010-4757-2152', body)
+        self.assertNotIn('국민 대출 김동준', body)
 
-        # 한 명 빼기 — 체크를 끄면 문자에서 빠진다 (체크 버튼과 이름 영역 둘 다 고를 수 있다)
-        picks = self.page.query_selector_all('#fields .contact-list .contact:not(.is-new)')
-        self.assertEqual(len(picks), 2)
-        picks[1].query_selector('.contact-check').click()
-        self.wait(120)
-        body = self.text()
-        self.assertIn('안종미', body)
-        self.assertNotIn('김효원', body)
-        # 다시 넣기
-        self.page.query_selector_all('#fields .contact-list .contact:not(.is-new)')[1].query_selector('.contact-check').click()
-        self.wait(120)
-        self.assertIn('김효원', self.text())
-
-        # 분야를 바꾸면 도입 문구가 바뀐다
+        # 분야를 바꾸면 도입 문구·명단이 바뀐다
         self.page.click('#fields [data-seg="vendorCat"][data-value="법무사"]')
         self.wait(120)
         body = self.text()
-        self.assertIn('등기 업무를 도와드리는 법무사입니다', body)
-        self.assertIn('이름 : 상담사 이름\n연락처 : 전화번호', body)   # 저장된 연락처가 없을 때
+        self.assertIn('소유권이전등기, 근저당권 말소 등 등기 업무를 상담받아 보실 수 있는 법무사를 소개드립니다.', body)
+        self.assertEqual(len(self.page.query_selector_all('#fields .contact-list .contact:not(.is-new)')), 1)
 
-        # 새 연락처 추가
-        self.page.fill('#fields [data-contact-new="name"]', '박법무 법무사')
+        # 업체(인테리어·입주청소·이사)는 '업체명'으로 나간다
+        self.page.click('#fields [data-seg="vendorCat"][data-value="이사"]')
+        self.wait(150)
+        self.page.query_selector_all('#fields .contact-list .contact:not(.is-new)')[0].query_selector('.contact-check').click()
+        self.wait(150)
+        body = self.text()
+        self.assertIn('- 업체명 : 소원아빠 이사\n- 연락처 : 010-9248-4484', body)
+
+        # 새 연락처 추가 → 바로 문자에 들어가고, 새로 고쳐도 남아 있다
+        self.page.fill('#fields [data-contact-new="name"]', '박이사 이사')
         self.page.fill('#fields [data-contact-new="phone"]', '01098765432')
         self.page.click('#fields [data-contact-add]')
         self.wait(200)
         body = self.text()
-        self.assertIn('이름 : 박법무 법무사\n연락처 : 010-9876-5432', body)
+        self.assertIn('- 업체명 : 박이사 이사\n- 연락처 : 010-9876-5432', body)
         self.assertIn('연락처를 추가했어요', self.page.inner_text('#toast'))
-
-        # 새로 고쳐도 남아 있다
         self.wait(400)
         self.page.reload(wait_until='networkidle')
         self.wait(250)
         self.assertEqual(self.page.inner_text('#form-title'), '전문가·협력업체 소개')
         body = self.text()
-        self.assertIn('박법무 법무사', body)
-        self.assertIn('등기 업무를 도와드리는 법무사입니다', body)
+        self.assertIn('박이사 이사', body)
+        # 다시 불러와도 기본 명단이 겹쳐 들어가지 않는다
+        contacts = self.js("() => JSON.parse(localStorage.getItem('smshelper.v1')).contacts")
+        self.assertEqual(len(contacts['이사']), 3, '기본 2 + 추가 1')
+        self.assertEqual(len(contacts['대출']), 33, '기본 33명 그대로')
 
-        # 지우면 문자에서도 빠지고 되돌리기 된다
-        self.page.click('#fields [data-contact-del]')
+        # 지우면 문자에서도 빠지고 되돌리기 된다 (★ 즐겨찾기는 위로 올라가므로 이름으로 찾는다)
+        rows = self.page.query_selector_all('#fields .contact-list .contact:not(.is-new)')
+        target = [r for r in rows if r.query_selector('input[data-contact-edit="name"]').input_value() == '박이사 이사'][0]
+        target.query_selector('[data-contact-del]').click()
         self.wait(150)
-        self.assertNotIn('박법무 법무사', self.text())
+        self.assertNotIn('박이사 이사', self.text())
         self.assertIn('연락처를 지웠어요', self.page.inner_text('#snackbar'))
         self.page.click('#snackbar-undo')
         self.wait(250)
-        self.assertIn('박법무 법무사', self.text())
+        self.assertIn('박이사 이사', self.text())
 
-        # 대출 목록은 그대로 (분야별로 따로 저장)
+        # 분야별로 따로 저장된다
         self.page.click('#fields [data-seg="vendorCat"][data-value="대출"]')
         self.wait(150)
         contacts = self.js("() => JSON.parse(localStorage.getItem('smshelper.v1')).contacts")
-        self.assertEqual(len(contacts['대출']), 2)
+        self.assertEqual(len(contacts['대출']), 33)
         self.assertEqual(len(contacts['법무사']), 1)
+
+    def test_t20_default_contacts_seed_into_saved_empty_list(self):
+        # 예전 버전에서 빈 연락처가 저장돼 있어도 기본 44명이 빠짐없이 보인다
+        ctx, page = self.page_with_state({
+            'stars': [], 'texts': {}, 'current': 't20', 'stage': 'all',
+            'contacts': {'대출': [], '세무사': [], '법무사': [], '인테리어': [], '입주청소': [], '이사': []},
+            'data': {'t20': {'mode': 'ho', 'vendorCat': '대출', 'vendorSel': {}}}
+        })
+        names = page.evaluate("""() => [...document.querySelectorAll('#fields .contact-list .contact:not(.is-new) input[data-contact-edit=\\"name\\"]')].map(e => e.value)""")
+        self.assertEqual(len(names), 33, '빈 저장값이어도 기본 대출 33명이 보인다')
+        saved = page.evaluate("() => JSON.parse(localStorage.getItem('smshelper.v1'))")
+        self.assertEqual(len(saved['contacts']['대출']), 33)
+        self.assertEqual(saved.get('contactsSeed'), 'v1.4.3')
+        # 한 번 합친 뒤에는 지운 사람이 다시 살아나지 않는다 (합침 표시가 남아 있으므로)
+        first = page.query_selector_all('#fields .contact-list .contact:not(.is-new)')[0]
+        first.query_selector('[data-contact-del]').click()
+        page.wait_for_timeout(300)
+        left = page.evaluate("() => JSON.parse(localStorage.getItem('smshelper.v1')).contacts['대출'].length")
+        self.assertEqual(left, 32, '지운 사람은 저장값에서 빠진다')
+        self.assertEqual(page.evaluate("() => JSON.parse(localStorage.getItem('smshelper.v1')).contactsSeed"), 'v1.4.3')
+        ctx.close()
 
     def test_vendor_contact_list_scrolls_at_three_items(self):
         # 보낼 상담사 목록은 3개 높이에서 단독으로 스크롤된다
@@ -3184,7 +3212,7 @@ class AppTest(unittest.TestCase):
                    overflow: getComputedStyle(l).overflowY,
                    lastBelow: last.bottom > lb.bottom - 1, scrollTop: l.scrollTop };
         }""")
-        self.assertEqual(info['count'], 5, '저장된 4개 + 새 업체 한 줄')
+        self.assertEqual(info['count'], 6, '기본 1 + 추가 4 + 새 업체 한 줄')
         self.assertEqual(info['overflow'], 'auto')
         self.assertGreater(info['scroll'], info['client'] + 20, '업체가 4개면 넘쳐야 한다')
         three = info['itemH'] * 3 + 12  # 항목 3개 + 간격 2번
@@ -3228,7 +3256,7 @@ class AppTest(unittest.TestCase):
         self.wait(150)
         self.assertIn('전화번호를 확인해 주세요', self.page.inner_text('#toast'))
         contacts = self.js("() => JSON.parse(localStorage.getItem('smshelper.v1')).contacts")
-        self.assertEqual(len(contacts.get('대출') or []), 0, '잘못된 입력은 저장되지 않는다')
+        self.assertEqual(len(contacts.get('대출') or []), 33, '잘못된 입력은 저장되지 않고 기본 33명 그대로다')
 
     # ============================================================== URL로 값 넘기기
     def open_with_query(self, query):
@@ -3242,7 +3270,7 @@ class AppTest(unittest.TestCase):
         q = 'template=t7&complex=' + quote('마포래미안푸르지오') + '&dong=208&ho=1103&dealType=전세&price=11.5억'
         ctx, page = self.open_with_query(q)
         body = page.input_value('#preview')
-        self.assertIn('마포래미안푸르지오 208동 1103호 (전세 11억 5천만)', body)
+        self.assertIn('마포래미안푸르지오 208동 1103호 / 전세 11억 5천만', body)
         self.assertEqual(page.input_value('#fields [data-money="amount"]'), '115,000')
         # 넘긴 주소는 지워서 새로 고쳐도 입력값이 덮이지 않는다
         self.assertNotIn('?', page.url)
@@ -3254,26 +3282,26 @@ class AppTest(unittest.TestCase):
     def test_url_params_monthly_and_won_price(self):
         q = 'template=t4&dong=304&ho=201&dealType=월세&deposit=10000&monthly=350'
         ctx, page = self.open_with_query(q)
-        self.assertIn('(보증금 1억 / 월세 350만 원)', page.input_value('#preview'))
+        self.assertIn('/ 보증금 1억 / 월세 350만 원', page.input_value('#preview'))
         ctx.close()
 
         q2 = 'template=t7&dong=404&ho=2503&price=2300000000'   # 원 단위로 넘어와도 만 원으로
         ctx2, page2 = self.open_with_query(q2)
-        self.assertIn('(매매 23억)', page2.input_value('#preview'))
+        self.assertIn('/ 매매 23억', page2.input_value('#preview'))
         ctx2.close()
 
     def test_url_params_visit_date_and_number_template(self):
         ctx, page = self.open_with_query('template=3&visitDate=2026-11-26T09:30')
         body = page.input_value('#preview')
-        self.assertIn('매수 손님이 있어서 연락드렸습니다', body)
-        self.assertIn('09:30에 손님 모시고', body)
+        self.assertIn('매수 손님이 계셔서 집보기 가능 여부를 여쭙습니다.', body)
+        self.assertIn('- 희망 일시 : 11월 26일 (목) 09:30', body)
         ctx.close()
 
     def test_url_params_without_property_does_not_add_blank_row(self):
         # 값이 하나도 없으면 빈 매물 줄을 만들지 않는다 (집보기 일정 안내의 매물 블록은 늘 한 줄)
         ctx, page = self.open_with_query('template=t5')
         self.assertEqual(page.query_selector_all('#fields .prop-item').__len__(), 1)
-        self.assertNotIn('(매물)', page.input_value('#preview').replace('* 매물 : (매물) (가격)', ''))
+        self.assertNotIn('(매물)', page.input_value('#preview').replace('- 매물 : (매물) / (가격)', ''))
         ctx.close()
 
     # ============================================================== 수정요청서(2026-11-25) 회귀
@@ -3453,9 +3481,9 @@ class AppTest(unittest.TestCase):
         self.assertIn('(6억 7,500만원)', total)
         self.assertEqual(self.page.input_value('#fields [data-pay-amt="jan"][data-pay-idx="0"]'), '43,875')
         body = self.text()
-        self.assertIn('* 약정금 : 10,000,000원', body)
-        self.assertIn('* 가계약금 : 30,000,000원', body)
-        self.assertIn('* 잔금 : 438,750,000원', body)
+        self.assertIn('- 약정금 : 10,000,000원', body)
+        self.assertIn('- 가계약금 : 30,000,000원', body)
+        self.assertIn('- 잔금 : 438,750,000원', body)
         # 중도금을 비우면 잔금이 늘어난다
         self.page.fill('#fields [data-pay-amt="jung"][data-pay-idx="0"]', '')
         self.wait(200)
@@ -3517,7 +3545,7 @@ class AppTest(unittest.TestCase):
         self.assertEqual(self.page.input_value('#fields [data-pay-rate="jung"][data-pay-idx="0"]'), '25')
         self.pay_rate('gyeyak', 20)
         self.assertEqual(self.page.input_value('#fields [data-pay-amt="gyeyak"][data-pay-idx="0"]'), '13,500')
-        self.assertIn('* 계약금 20% : 135,000,000원', self.text())
+        self.assertIn('- 계약금 20% : 135,000,000원', self.text())
         self.assertEqual(self.page.query_selector_all('#fields .pay-total-note'), [], '맞을 때는 안내 글자 없음')
 
 
@@ -3726,18 +3754,18 @@ class AppTest(unittest.TestCase):
         self.pay_fill('jung', 51250)
         self.assertIn('6억 7,500만', self.page.inner_text('.pay-total'))
         body = self.text()
-        self.assertIn('* 계약금 10% : 67,500,000원', body)
-        self.assertIn('* 중도금 75.9% : 512,500,000원', body)
-        self.assertIn('* 잔금 : 95,000,000원', body)
-        self.assertIn('* 합계 : 675,000,000원', body)
+        self.assertIn('- 계약금 : 67,500,000원', body)
+        self.assertIn('- 중도금 : 512,500,000원', body)
+        self.assertIn('- 잔금 : 95,000,000원', body)
+        self.assertIn('- 합계 : 675,000,000원', body)
         # 약정금·가계약금은 합계에서 빼고 따로 적는다
         self.pay_fill('yakjeong', 3000)
         self.pay_fill('jeong', 5000)
         self.wait(200)
         body = self.text()
-        self.assertIn('* 약정금 : 30,000,000원', body)
-        self.assertIn('* 가계약금 : 50,000,000원', body)
-        self.assertIn('* 합계 : 675,000,000원', body)
+        self.assertIn('- 약정금 : 30,000,000원', body)
+        self.assertIn('- 가계약금 : 50,000,000원', body)
+        self.assertIn('- 합계 : 675,000,000원', body)
         # 전세 — 보증금(매물칸) + 같은 다섯 항목
         self.page.click('#fields [data-prop-trade="prop"][data-value="전세"]')
         self.wait(150)
@@ -3745,7 +3773,7 @@ class AppTest(unittest.TestCase):
         self.page.fill('#fields [data-money="amount"]', '10000')
         self.wait(250)
         body = self.text()
-        self.assertIn('* 보증금 : 100,000,000원', body)
+        self.assertIn('- 보증금 : 100,000,000원', body)
         self.assertNotIn('월차임', body)
         # 월세 — 보증금 + 월차임이 함께 나간다
         self.page.click('#fields [data-prop-trade="prop"][data-value="월세"]')
@@ -3754,7 +3782,8 @@ class AppTest(unittest.TestCase):
         self.page.fill('#fields [data-money="rent"]', '50')
         self.wait(300)
         body = self.text()
-        self.assertIn('* 보증금 : 100,000,000원 (1억 원) / 월차임 : 500,000원 (50만 원)', body)
+        self.assertIn('- 보증금 : 100,000,000원 (1억 원)', body)
+        self.assertIn('- 월차임 : 500,000원 (50만 원)', body)
 
 
     def test_t8_autofill_uses_split(self):
@@ -3769,17 +3798,16 @@ class AppTest(unittest.TestCase):
         total = self.page.inner_text('.pay-total')
         self.assertIn('675,000,000원', total)
         body = self.text()
-        self.assertIn('* 매매가 : 675,000,000원', body)
-        self.assertIn('* 가계약금 : 30,000,000원', body)
-        self.assertIn('가계약금 30,000,000원은 계약금에 포함되므로, 계약일에는 계약금 67,500,000원 중 '
-                      '가계약금을 제외한 37,500,000원을 입금합니다.', body)
+        self.assertIn('- 매매대금 : 675,000,000원', body)
+        self.assertIn('- 가계약금 : 30,000,000원', body)
+        self.assertIn('기지급한 가계약금 30,000,000원은 계약금에 포함하며, 계약일에는 계약금 총액 67,500,000원 중 차액 37,500,000원을 지급합니다.', body)
         self.assertIn('계약금 10% : 67,500,000원', body)
         # 계약일에 실제로 입금하는 금액은 계약금 − 가계약금
-        self.assertIn('아래 계좌로 37,500,000원', body)
+        self.assertIn('동의 여부를 회신해 주시기 바랍니다.', body)
         # 약정금이 있으면 계약일에 전액 반환받는다는 안내가 붙는다
         self.pay_fill('yakjeong', 1000)
         self.wait(200)
-        self.assertIn('약정금 10,000,000원은 계약일에 전액 반환받고, 계약금 67,500,000원 전액을 입금합니다.',
+        self.assertIn('기지급한 약정금 10,000,000원은 계약일에 전액 반환받고, 계약금 67,500,000원은 약정금을 차감하지 않고 전액 입금합니다.',
                       self.text())
 
     def test_fee_rate_brackets_and_boundaries(self):
@@ -3814,12 +3842,12 @@ class AppTest(unittest.TestCase):
         self.page.fill('#fields [data-field="calcRate"]', '0.9')
         self.wait(200)
         self.assertIn('상한요율 0.7%', self.page.inner_text('.calc-summary'))
-        self.assertIn('중개보수 요율 : 0.7%', self.text())
+        self.assertIn('적용 요율 : 0.7%', self.text())
         self.assertIn('상한요율로 계산했습니다', self.text())
         # 상한 이내 협의 요율은 그대로
         self.page.fill('#fields [data-field="calcRate"]', '0.5')
         self.wait(200)
-        self.assertIn('중개보수 요율 : 0.5%', self.text())
+        self.assertIn('적용 요율 : 0.5%', self.text())
         self.assertNotIn('상한요율로 계산했습니다', self.text())
 
     def test_fee_vat_breakdown_and_bad_input(self):
@@ -3842,8 +3870,8 @@ class AppTest(unittest.TestCase):
         self.page.click('#fields [data-seg="calcVat"][data-value="4"]')
         self.wait(200)
         self.assertEqual(self.page.input_value('#fields [data-field="calcTotalWon"]'), '832,000')
-        self.assertIn('* 부가세 : 32,000원 (간이과세 4%)', self.text())
-        self.assertIn('* 합계 : 832,000원', self.text())
+        self.assertIn('- 부가가치세 : 32,000원 (간이과세 4%)', self.text())
+        self.assertIn('- 합계 : 832,000원', self.text())
 
     def test_fee_officetel_85_split(self):
         small = self.fee(kind='officetel', trade='매매', amountMan=30000)
@@ -4680,25 +4708,25 @@ class AppTest(unittest.TestCase):
 
     # ============================================================== 버전 · 배포 파일
 
-    def test_24_version_bumped_to_1_4_2(self):
+    def test_24_version_bumped_to_1_4_3(self):
         # 서비스 워커 · 화면 캐시 주소 · 안드로이드 빌드 번호가 모두 같은 버전을 가리킨다
         with open(os.path.join(ROOT, 'sw.js'), encoding='utf-8') as f:
             sw = f.read()
         m = re.search(r"var VERSION = '(v\d+\.\d+\.\d+)';", sw)
         self.assertIsNotNone(m, 'sw.js에 VERSION이 있다')
         ver = m.group(1)
-        self.assertEqual(ver, 'v1.4.2')
+        self.assertEqual(ver, 'v1.4.3')
         self.assertIn("'js/sync.js'", sw)
         # 새 파일(동호수 타입표)도 오프라인 캐시에 들어간다
         self.assertIn("'js/maraepu-types.js'", sw)
         with open(os.path.join(ROOT, 'index.html'), encoding='utf-8') as f:
             html = f.read()
         for f_ in ('icons', 'maraepu-types', 'core', 'templates', 'sync', 'app'):
-            self.assertIn(f'js/{f_}.js?v=1.4.2', html)
-        self.assertIn('styles.css?v=1.4.2', html)
+            self.assertIn(f'js/{f_}.js?v=1.4.3', html)
+        self.assertIn('styles.css?v=1.4.3', html)
         gradle = open(os.path.join(ROOT, 'android/app/build.gradle'), encoding='utf-8').read()
-        self.assertIn('versionCode 17', gradle)
-        self.assertIn("versionName '1.4.2'", gradle)
+        self.assertIn('versionCode 18', gradle)
+        self.assertIn("versionName '1.4.3'", gradle)
 
     def test_t8_deal_combos_and_labels(self):
         # 계약 조건 안내 — [매매][전세][월세] | [가계약][계약], 다섯 버튼이 한 줄·같은 크기
@@ -4731,13 +4759,13 @@ class AppTest(unittest.TestCase):
                          '매매가 입력칸이 있어야 잔금을 계산한다')
         self.assertIn('매매가', self.page.inner_text('#fields'))
         body = self.text()
-        self.assertIn('매매 가계약 주요내용', body)
-        self.assertIn('* 입금계좌 :', body)
-        self.assertIn('* 물건지 : 서울시 마포구 아현동 777 외 3필지', body)
+        self.assertIn('매매 가계약 주요 내용', body)
+        self.assertIn('- 입금계좌 :', body)
+        self.assertIn('- 물건지 : 서울시 마포구 아현동 777 외 3필지', body)
         self.page.click('#fields [data-seg="kind"][data-value="계약"]')
         self.wait(120)
         body = self.text()
-        self.assertIn('매매계약 주요내용', body)
+        self.assertIn('매매계약 주요 내용', body)
         self.assertNotIn('가계약금 :', body)
         # 물건지 아래 주소·단지명·동/호수는 줄 간격이 균일하다
         gaps = self.js("""() => {
@@ -4758,11 +4786,11 @@ class AppTest(unittest.TestCase):
                 self.assertEqual(len(self.page.query_selector_all('#fields [data-field="rent"]')), 1 if m == '월세' else 0)
                 self.page.click('#fields [data-seg="kind"][data-value="계약"]')
                 self.wait(150)
-                self.assertIn('%s계약 주요내용' % m, self.text())
+                self.assertIn('%s 계약 주요 내용' % m, self.text())
                 self.page.click('#fields [data-seg="kind"][data-value="가계약"]')
                 self.wait(150)
-                self.assertIn('%s 가계약 주요내용' % m, self.text())
-                self.assertIn('* 가계약금 :', self.text())
+                self.assertIn('%s 가계약 주요 내용' % m, self.text())
+                self.assertIn('- 가계약금 :', self.text())
 
     def test_t14_total_edit_keeps_legal_rate(self):
         # 중개보수 합계를 직접 고치면 문자에는 그 금액, 적용 요율은 법정 요율 그대로
@@ -4771,18 +4799,18 @@ class AppTest(unittest.TestCase):
         self.wait(200)
         auto = self.page.input_value('#fields [data-field="calcTotalWon"]')
         self.assertEqual(auto, '3,161,600')
-        self.assertIn('* 합계 : 3,161,600원', self.text())
+        self.assertIn('- 합계 : 3,161,600원', self.text())
         self.page.fill('#fields [data-field="calcTotalWon"]', '2500000')
         self.wait(200)
         body = self.text()
-        self.assertIn('* 중개보수 요율 : 0.4%', body, '적용 요율은 법정 요율 그대로')
-        self.assertIn('* 합계 : 2,500,000원', body)
-        self.assertIn('* 중개보수(공급가액) : 2,403,846원', body)
-        self.assertIn('* 부가세 : 96,154원 (간이과세 4%)', body)
+        self.assertIn('- 적용 요율 : 0.4%', body, '적용 요율은 법정 요율 그대로')
+        self.assertIn('- 합계 : 2,500,000원', body)
+        self.assertIn('- 중개보수 (공급가액) : 2,403,846원', body)
+        self.assertIn('- 부가가치세 : 96,154원 (간이과세 4%)', body)
         # 다시 비우면 자동 계산으로 돌아온다
         self.page.fill('#fields [data-field="calcTotalWon"]', '')
         self.wait(200)
-        self.assertIn('* 합계 : 3,161,600원', self.text())
+        self.assertIn('- 합계 : 3,161,600원', self.text())
         # 안내문 두 줄은 사라졌다
         fields = self.page.inner_text('#fields')
         self.assertNotIn('계산하면 중개보수가 바로 나옵니다', fields)
@@ -4792,14 +4820,13 @@ class AppTest(unittest.TestCase):
         # 임대인에게 보내면 '임차인분과는', 임차인에게 보내면 '임대인분과는'
         self.pick('t15')
         body = self.text()
-        self.assertIn('임차인분과는 이야기', body)
-        self.assertIn('임차인분과 일정 및 조건 조율', body)
-        self.assertNotIn('임대인분과는', body)
+        self.assertIn('임차인분과 미리 협의하신 내용이 있으실지', body)
+        self.assertIn('퇴거 예정이시면 일정과 필요한 사항을 확인해', body)
+        self.assertNotIn('임대인분과', body)
         self.page.click('#fields [data-seg="role"][data-value="임차인"]')
         self.wait(120)
         body = self.text()
-        self.assertIn('임대인분과는 이야기', body)
-        self.assertIn('임대인분과 일정 및 조건 조율', body)
+        self.assertIn('임대인분과 미리 협의하신 내용이 있으실지', body)
         # 상대방 버튼과 남은 기간이 한 줄
         geo = self.js("""() => {
           const s = document.querySelector('#fields .seg.is-role').getBoundingClientRect();
@@ -4890,21 +4917,29 @@ class AppTest(unittest.TestCase):
         self.wait(200)
         self.assertTrue(self.page.is_visible('#vendor-list .modal-card'))
         self.assertIn('대출', self.page.inner_text('#vendor-list-body'), '지금 고른 분야의 목록')
-        # 목록에서 세 곳을 추가하고 두 곳만 ★ → 연락처에는 ★한 두 곳만, 체크는 풀린 채
+        # 기본 명단(대출 33명) 위에 세 곳을 더하고 두 곳을 지운다
+        before = self.page.query_selector_all('#vendor-list .contact:not(.is-new)').__len__()
+        self.assertEqual(before, 33, '기본 대출 33명이 목록에 다 보인다')
         for n, ph in (('A상담사', '010-1111-2222'), ('B상담사', '010-3333-4444'), ('C상담사', '010-5555-6666')):
             self.page.fill('#vendor-list [data-vl-new="name"]', n)
             self.page.fill('#vendor-list [data-vl-new="phone"]', ph)
             self.page.click('#vendor-list [data-vl-add]')
             self.wait(180)
-        self.assertEqual(self.page.query_selector_all('#vendor-list .contact:not(.is-new)').__len__(), 3)
+        self.assertEqual(self.page.query_selector_all('#vendor-list .contact:not(.is-new)').__len__(), before + 3)
         self.page.click('#vendor-list [data-vl-del]')
         self.wait(250)
         self.page.click('#vendor-list [data-vl-del]')
         self.wait(250)
-        self.assertEqual(self.page.query_selector_all('#vendor-list .contact:not(.is-new)').__len__(), 1)
-        self.page.click('#vendor-list [data-vl-fav]')
+        self.assertEqual(self.page.query_selector_all('#vendor-list .contact:not(.is-new)').__len__(), before + 1)
+        # 추가한 곳은 ★ 켜진 채 — 껐다 켜도 그대로 센다
+        self.assertEqual(self.page.query_selector_all('#vendor-list .contact-star.is-on').__len__(), 3)
+        last_star = self.page.locator('#vendor-list .contact:not(.is-new) .contact-star').last
+        last_star.click()
         self.wait(200)
-        self.assertEqual(self.page.query_selector_all('#vendor-list .contact-star.is-on').__len__(), 0)
+        self.assertEqual(self.page.query_selector_all('#vendor-list .contact-star.is-on').__len__(), 2)
+        last_star.click()
+        self.wait(200)
+        self.assertEqual(self.page.query_selector_all('#vendor-list .contact-star.is-on').__len__(), 3)
         # 목록에서 지운 것은 연락처에도 바로 반영
         self.page.click('#btn-vendor-list-done')
         self.wait(200)
@@ -4927,7 +4962,9 @@ class AppTest(unittest.TestCase):
             rows = page.evaluate("""() => [...document.querySelectorAll('#fields .contact-list .contact:not(.is-new)')].map(c => ({
                 name: c.querySelector('.contact-inp').value,
                 checked: c.querySelector('.contact-check').classList.contains('is-on')}))""")
-            self.assertEqual([r['name'] for r in rows], ['신한 김과장', '국민 이대리'])
+            names = [r['name'] for r in rows]
+            self.assertEqual(names[:3], ['신한 김과장', '국민 이대리', '우리 박주임'], '★ 즐겨찾기가 위로')
+            self.assertEqual(len(names), 36, '기본 33명도 함께 보인다 (숨기지 않는다)')
             self.assertTrue(all(not r['checked'] for r in rows), '기본은 체크 해제')
             # 체크하면 문자에 들어간다
             page.query_selector('#fields .contact-list .contact-check').click()
@@ -4953,7 +4990,7 @@ class AppTest(unittest.TestCase):
         self.page.fill('#fields [data-field="deposit"]', '10000')
         self.page.fill('#fields [data-field="rent"]', '250')
         self.wait(200)
-        self.assertIn('보증금 1억 / 월세 250만 원까지', self.text())
+        self.assertIn('- 보증금 : 1억\n- 월세 : 250만 원까지', self.text())
 
     # ============================================================== v1.4.0 피드백(8장) 회귀
     def test_v140_common_schedule_parts_add_remove_subtotal(self):
@@ -4981,8 +5018,8 @@ class AppTest(unittest.TestCase):
         # 잔금은 중도금 합계를 뺀 나머지
         self.assertEqual(self.page.input_value('#fields [data-pay-amt="jan"][data-pay-idx="0"]'), '39,900')
         body = self.text()
-        self.assertIn('* 중도금 1차 25% : 190,000,000원', body)
-        self.assertIn('* 중도금 2차 12.5% : 95,000,000원', body)
+        self.assertIn('- 중도금 1차 25% : 190,000,000원', body)
+        self.assertIn('- 중도금 2차 12.5% : 95,000,000원', body)
         # (−) 는 그 차수만 뺀다
         self.pay_del('jung', idx=1)
         self.assertEqual(len([r for r in self.pay_rows() if r['item'] == 'jung']), 1)
@@ -5014,9 +5051,8 @@ class AppTest(unittest.TestCase):
         self.assertIn('760,000,000원', self.page.inner_text('.pay-total'), '약정금·가계약금은 총합계에 안 들어간다')
         body = self.text()
         # 계약일 안내 — 약정금 전액 반환 + 계약금 전액 / 가계약금 제외한 나머지
-        self.assertIn('약정금 10,000,000원은 계약일에 전액 반환받고, 계약금 76,000,000원 전액을 입금합니다.', body)
-        self.assertIn('가계약금 30,000,000원은 계약금에 포함되므로, 계약일에는 계약금 76,000,000원 중 '
-                      '가계약금을 제외한 46,000,000원을 입금합니다.', body)
+        self.assertIn('기지급한 약정금 10,000,000원은 계약일에 전액 반환받고, 계약금 76,000,000원은 약정금을 차감하지 않고 전액 입금합니다.', body)
+        self.assertIn('기지급한 가계약금 30,000,000원은 계약금에 포함하며, 계약일에는 계약금 총액 76,000,000원 중 차액 46,000,000원을 지급합니다.', body)
         self.assertNotIn('[', body)
         self.assertNotIn(']', body)
 
@@ -5076,7 +5112,7 @@ class AppTest(unittest.TestCase):
         self.page.fill('#fields [data-field="mortgageHolder"]', '카카오뱅크')
         self.page.fill('#fields [data-field="mortgageAmount"]', '12000')
         self.wait(200)
-        self.assertIn('채권최고액 1건 금 120,000,000원 (1억 2천만 원) (카카오뱅크)', self.text())
+        self.assertIn('등기사항전부증명서상 카카오뱅크를 채권자로 하는 채권최고액 120,000,000원 (1억 2천만 원)의 근저당권 1건이 설정된 상태이며', self.text())
 
     def test_v140_stage_tabs_uniform(self):
         # 상단 카테고리 탭 — 다섯 개가 같은 폭·높이·글자 크기로 한 줄에 다 보인다
@@ -5548,6 +5584,395 @@ class AppTest(unittest.TestCase):
     def _v142_open(self, page, tid, w):
         page.evaluate("t => SMSApp.openTemplate(t, {})", tid)
         page.wait_for_timeout(220)
+
+
+    # ============================================================== v1.4.3 전수 검증
+    def build_body(self, tid, patch, ctx_extra=None):
+        return self.js("""a => {
+            const T = window.SMSTemplates;
+            const t = T.TEMPLATES.find(x => x.id === a[0]);
+            const d = Object.assign(T.defaultData(t), a[1] || {});
+            const ctx = Object.assign({ office: '마래푸중앙부동산', phones: '010-4585-7365 / 02-312-7365',
+                feeAccount: '우리은행 1002-762-106047 황호선', amountMode: 'won_eokman',
+                contacts: T.defaultContacts() }, a[2] || {});
+            return t.build(d, ctx);
+        }""", [tid, patch, ctx_extra or {}])
+
+    def test_v143_all_branches_fill_variables(self):
+        # 17종 전 분기 — 넣은 값이 2차 수정본 문구 속에 그대로 들어가고, 빠진 자리·대괄호가 없다
+        S = '마래푸중앙부동산 드림\n010-4585-7365 / 02-312-7365'
+        prop = {'complex': '마포래미안푸르지오', 'dong': '404', 'ho': '1903',
+                'trade': '매매', 'amount': '247000', 'deposit': '', 'rent': '', 'price': ''}
+        rent_prop = {'complex': '마포래미안푸르지오', 'dong': '208', 'ho': '1203',
+                     'trade': '전세', 'amount': '115000', 'deposit': '115000', 'rent': '', 'price': ''}
+        wolse_prop = {'complex': '마포래미안푸르지오', 'dong': '101', 'ho': '302',
+                      'trade': '월세', 'amount': '', 'deposit': '10000', 'rent': '300', 'price': ''}
+        day = lambda y, m, d: {'date': '%s-%02d-%02d' % (y, m, d)}
+        cases = [
+            # (id, patch, 반드시 있어야 할 문구, 있으면 안 되는 문구)
+            ('t1', {}, ['바쁘신 중에 통화해 주셔서 감사합니다.', '성심껏 도와드리겠습니다.', S], []),
+            ('t2', {'prop': prop, 'moveinMode': '협의', 'option': '시스템에어컨, 올수리'},
+             ['- 매물 : 마포래미안푸르지오 404동 1903호', '- 거래조건 : 매매 24억 7천만',
+              '- 입주 : 즉시입주(협의)', '- 옵션 : 시스템에어컨, 올수리', S],
+             ['(매물)', '(금액)', '(입주)', '(옵션)']),
+            ('t2', {'prop': prop, 'moveinMode': '고정', 'moveinStart': day(2026, 12, 1), 'moveinFix': '선호'},
+             ['- 입주 : 26.12.01 (화) 선호'], ['(입주)']),
+            ('t2', {'prop': prop, 'moveinMode': '기간', 'moveinStart': day(2026, 12, 1), 'moveinEnd': day(2026, 12, 31)},
+             ['- 입주 : 26.12.01 (화) ~ 26.12.31 (목)'], ['(입주)']),
+            ('t16', {'trade': '매매'}, ['마포래미안푸르지오 1단지 내 마래푸중앙부동산입니다.', '현재 매수를 희망하시는 손님이',
+                                       '매도 의향이 있으시면', S], []),
+            ('t16', {'trade': '전세'}, ['현재 전세를 희망하시는 손님이', '혹시 전세 임대 계획이 있으시거나', '임대 의향이 있으시면'], []),
+            ('t16', {'trade': '월세'}, ['현재 월세를 희망하시는 손님이', '혹시 월세 임대 계획이 있으시거나', '임대 의향이 있으시면'], []),
+            ('t18', {'trade': '매매', 'amount': '90000', 'area': '34', 'guestNote': '염리초 학부모'},
+             ['- 매매 희망금액 : 9억까지', '- 희망 평형 : 34평', '- 고객 참고사항 : 염리초 학부모', S],
+             ['(금액)', '(평형)', '(고객 특징)']),
+            ('t18', {'trade': '전세', 'amount': '70000', 'moveinMode': '협의'},
+             ['- 전세 보증금 : 7억까지', '- 입주 : 즉시입주(협의)'], ['(금액)', '(입주)']),
+            ('t18', {'trade': '월세', 'deposit': '10000', 'rent': '250'},
+             ['- 보증금 : 1억', '- 월세 : 250만 원까지'], ['(금액)원']),
+            ('t19', {'items': [prop, rent_prop], 'emphasis': '급매 조율 가능'},
+             ['🔑 매물 : 마포래미안푸르지오 404동 1903호', '🔑 거래조건 : 매매 24억 7천만',
+              '✔️ 특징 : 급매 조율 가능', S], ['(매물)', '(가격)', '(강조 문구)']),
+            ('t3', {'who': 'owner', 'view': 'simple', 'prop': rent_prop,
+                    'when': dict(day(2026, 11, 28), hour=10, min=0)},
+             ['전세 손님이 계셔서 집보기 가능 여부를 여쭙습니다.',
+              '- 매물 : 마포래미안푸르지오 208동 1203호 / 전세 11억 5천만',
+              '- 희망 일시 : 11월 28일 (토) 10:00'], ['(방문 일시)', '(매물)']),
+            ('t3', {'who': 'coagent', 'view': 'simple', 'prop': prop,
+                    'when': dict(day(2026, 11, 28), hour=14, min=30)},
+             ['사장님, 안녕하세요. 😊', '공동중개 및 집보기 가능 여부 여쭙습니다.',
+              '- 희망 일시 : 11월 28일 (토) 14:30'], ['(방문 일시)']),
+            ('t3', {'who': 'owner', 'view': 'detail', 'prop': prop, 'times': '11월 28일 (토) 10:00\n11월 29일 (일) 14:00'},
+             ['매수 손님께서 집보기를 희망하셔서 방문 일정을 여쭙습니다.',
+              '- 방문 희망 시간 : 11월 28일 (토) 10:00 / 11월 29일 (일) 14:00',
+              '최대한 맞춰 조율하겠습니다.'], ['(방문 희망 시간)']),
+            ('t3', {'who': 'coagent', 'view': 'detail', 'prop': prop, 'times': '11월 28일 (토) 10:00'},
+             ['공동중개 및 집보기 일정을 문의드립니다.', '감사합니다, 사장님.'], ['(방문 희망 시간)']),
+            ('t5', {'status': 'confirmed', 'detail': True, 'parking': True,
+                    'when': dict(day(2026, 11, 28), hour=10, min=0), 'items': [prop]},
+             ['- 방문 일시 : 2026년 11월 28일 토요일 10:00',
+              '- 매물 : 마포래미안푸르지오 404동 1903호 / 매매 24억 7천만',
+              '주차가 필요하시면 미리 말씀해 주시기 바랍니다.', '약속된 일정에 뵙겠습니다.'], ['(방문 일시)', '(가격)']),
+            ('t5', {'status': 'confirmed', 'detail': False, 'parking': False, 'when': dict(day(2026, 11, 28))},
+             ['약속된 일정에 뵙겠습니다.'], ['- 매물 :', '주차가 필요하시면']),
+            ('t5', {'status': 'pending', 'items': [rent_prop]},
+             ['아래 매물의 집보기 일정을 현재 조율 중입니다.',
+              '- 매물 : 마포래미안푸르지오 208동 1203호 / 전세 11억 5천만'], ['(매물)']),
+            ('t6', {}, ['🚘 주차 장소 안내드립니다.', '- 주차 장소 : 아현장로교회',
+                        '- 주소 : 서울 마포구 마포대로 197-1', S], []),
+            ('t7', {'items': [prop, rent_prop]},
+             ['- 매물 : 마포래미안푸르지오 404동 1903호 / 매매 24억 7천만',
+              '- 매물 : 마포래미안푸르지오 208동 1203호 / 전세 11억 5천만', S], ['(가격)']),
+            ('t8', {'trade': '매매', 'kind': '가계약', 'price': '247000',
+                    'account': '국민 123456-01-234567 홍길동', 'prop': prop,
+                    'yakjeongAmount': '1000', 'yakjeongDate': day(2026, 11, 27),
+                    'jeongAmount': '3000', 'jeongDate': day(2026, 11, 28),
+                    'gyeyakAmount': '24700', 'gyeyakDate': day(2026, 12, 5),
+                    'jungAmount': '61750', 'jungDate': day(2027, 1, 10),
+                    'janDate': day(2027, 2, 20), 'permit': True, 'mortgage': True,
+                    'mortgageHolder': '주식회사 카카오뱅크', 'mortgageAmount': '12000'},
+             ['아래 부동산의 매매 가계약 주요 내용을 안내드립니다.',
+              '- 물건지 : 서울시 마포구 아현동 777 외 3필지 마포래미안푸르지오 404동 1903호',
+              '- 입금계좌 : 국민은행 123456-01-234567 홍길동',
+              '■ 계약금액 및 지급 일정', '- 매매대금 : 2,470,000,000원',
+              '- 약정금 : 10,000,000원', '- 가계약금 : 30,000,000원',
+              '- 계약금 10% : 247,000,000원', '- 중도금 25% : 617,500,000원',
+              '- 잔금 : 1,605,500,000원',
+              '계약금 지급 일정은 토지거래허가 진행 상황에 따라 쌍방이 협의하여 조정할 수 있습니다.',
+              '기지급한 약정금 10,000,000원은 계약일에 전액 반환받고',
+              '기지급한 가계약금 30,000,000원은 계약금에 포함하며',
+              '■ 특약사항', '1. 본 부동산은 토지거래허가구역에 소재하므로',
+              '4. 가계약 성립 후 정당한 사유 없이',
+              '등기사항전부증명서상 주식회사 카카오뱅크를 채권자로 하는 채권최고액 120,000,000원',
+              '위 내용에 동의하시는 경우 매도인께서는 입금계좌를 회신해 주시기 바랍니다.', S],
+             ['[', ']']),
+            ('t8', {'trade': '매매', 'kind': '계약', 'price': '247000', 'mortgage': True,
+                    'mortgageHolder': '카카오뱅크', 'mortgageAmount': '12000'},
+             ['아래 부동산의 매매계약 주요 내용을 안내드립니다.', '1. 계약 해제 시 계약금의 귀속 및 배액배상',
+              '잔금일에 잔금 지급과 소유권이전등기 절차를 진행하며'], ['[', ']']),
+            ('t8', {'trade': '전세', 'kind': '계약', 'price': '115000', 'rent': '',
+                    'gyeyakAmount': '11500', 'gyeyakDate': day(2026, 12, 5), 'janDate': day(2026, 12, 20)},
+             ['아래 부동산의 전세 계약 주요 내용을 안내드립니다.', '- 보증금 : 1,150,000,000원',
+              '- 계약금 10% : 115,000,000원', '- 잔금 : 1,035,000,000원',
+              '임대인은 임차인이 주택을 인도받은 후 전입신고 및 확정일자 부여 절차를 진행할 수 있도록 협조합니다.',
+              '위 내용 확인 후 동의 여부를 회신해 주시면 감사하겠습니다.'], ['[', ']', '월차임']),
+            ('t8', {'trade': '월세', 'kind': '가계약', 'price': '10000', 'rent': '300',
+                    'jeongAmount': '1000', 'jeongDate': day(2026, 12, 1)},
+             ['아래 부동산의 월세 가계약 주요 내용을 안내드립니다.', '- 보증금 : 100,000,000원',
+              '- 월차임 : 3,000,000원', '위 내용에 동의하시는 경우 임대인께서는 입금계좌를 회신해 주시기 바랍니다.'],
+             ['[', ']']),
+            ('t10', {'prop': prop, 'kind': '가계약', 'when': dict(day(2026, 11, 28), hour=10, min=0)},
+             ['마포래미안푸르지오 404동 1903호 가계약서 작성 일정과 준비사항을 안내드립니다.',
+              '- 일시 : 2026년 11월 28일 토요일 10:00', '■ 매도인 준비사항', '■ 매수인 준비사항',
+              '5. 가계약금', 'OTP와 1일 이체한도를 미리 확인해 주시기 바랍니다.',
+              '공동명의 취득 시 각 명의자별 준비서류', S], ['(가계약 일시)']),
+            ('t10', {'prop': prop, 'kind': '계약', 'jeongyakReturn': True, 'when': dict(day(2026, 12, 5))},
+             ['매매계약 일정과 준비사항을 안내드립니다.', '3. 등기권리증\n4. 가계약금 반환 준비',
+              '■ 매수인 준비사항'], ['[', ']']),
+            ('t10', {'prop': rent_prop, 'trade': '전세', 'kind': '계약', 'priority': True, 'when': dict(day(2026, 12, 5))},
+             ['임대차계약 일정과 준비사항을 안내드립니다.', '1. 확정일자 부여현황 (주민센터)',
+              '기존 임대차계약서 등 선순위 임차인의 보증금과 임대차 기간을 확인할 수 있는 자료도 준비 부탁드립니다.',
+              '■ 임차인 준비사항'], ['[', ']']),
+            ('t10', {'prop': prop, 'trade': '매매', 'kind': '잔금', 'docs': True, 'when': dict(day(2027, 2, 20)),
+                    'gyeyak': '24700', 'gyeyakDate': day(2026, 12, 5), 'jung': '61750',
+                    'jan': '160550', 'account': '국민 123456-01-234567 홍길동'},
+             ['잔금 일정 및 입금 내역을 안내드립니다.', '■ 금액 세부사항',
+              '- 계약금 : 247,000,000원', '- 중도금 : 617,500,000원', '- 잔금 : 1,605,500,000원',
+              '- 합계 : 2,470,000,000원', '- 입금계좌 : 국민은행 123456-01-234567 홍길동',
+              '■ 매도인 준비사항', '2. 부동산 매도용 인감증명서 1통', '■ 매수인 준비사항',
+              '※ 잔금 이체한도와 자금 준비 상황을 사전에 확인해 주시기 바랍니다.'], ['[', ']']),
+            ('t10', {'prop': wolse_prop, 'trade': '월세', 'kind': '중도금', 'registry': True},
+             ['중도금 일정 및 입금 내역을 안내드립니다.', '- 보증금 : 100,000,000원',
+              '- 월차임 : 3,000,000원', '당일 입금 전 등기사항전부증명서를 다시 발급하여'], ['[', ']']),
+            ('t11', {'trade': '매매'}, ['전자계약 진행 절차를 안내드립니다.', '매도인·매수인에게 문자 또는 카카오톡',
+                                      '매매계약서를 확인하고 전자서명해 주시기 바랍니다.', '6. 계약 완료 후', S], []),
+            ('t11', {'trade': '임대차'}, ['임대인·임차인에게 문자 또는 카카오톡', '임대차계약서를 확인하고 전자서명'], []),
+            ('t12', {'owner': '공동'}, ['공동명의인 경우 명의자별로 각각 작성하시고', '■ 온라인 제출 절차',
+                                      '■ 주요 증빙자료 예시', '- 가족 등으로부터 차입 : 차용증 등',
+                                      '두 분 모두 제출하신 후 완료 여부를 알려주시면 감사하겠습니다.', S], ['[', ']']),
+            ('t12', {'owner': '단독'}, ['자금조달 항목별 금액과 출처를 작성하시고',
+                                      '제출하신 후 완료 여부를 알려주시면 감사하겠습니다.'], ['공동명의인 경우']),
+            ('t15', {'role': '임대인', 'months': 2}, ['임대차계약 만기까지 약 2개월 남아 있어',
+                                                    '임차인분과 미리 협의하신 내용이 있으실지',
+                                                    '- 퇴거 예정이시면', '- 연장 예정이시면', S], ['임대인분과']),
+            ('t15', {'role': '임차인', 'months': 5}, ['약 5개월 남아 있어', '임대인분과 미리 협의하신 내용이 있으실지'],
+             ['임차인분과']),
+        ]
+        for tid, patch, want, forbid in cases:
+            with self.subTest(tpl=tid, patch=str(patch)[:40]):
+                body = self.build_body(tid, patch)
+                for w in want:
+                    self.assertIn(w, body, f'{tid} — {w!r} 가 없다')
+                for f in forbid:
+                    self.assertNotIn(f, body, f'{tid} — {f!r} 가 남아 있다')
+
+    def test_v143_thanks_all_variants_and_greetings(self):
+        # 10번 — 거주자·공동중개·고객 7종 × 안부 6종 전부 문구가 그대로 나오고 서명이 붙는다
+        S = '마래푸중앙부동산 드림\n010-4585-7365 / 02-312-7365'
+        bad = self.js("""() => {
+            const T = window.SMSTemplates, out = [];
+            const ctx = { office: '마래푸중앙부동산', phones: '010-4585-7365 / 02-312-7365',
+                          feeAccount: '', amountMode: 'won_eokman', contacts: T.defaultContacts() };
+            const t = T.TEMPLATES.find(x => x.id === 't17');
+            ['resident', 'coagent', 'guest'].forEach(target => {
+              T.VARIANTS[target].forEach((text, i) => {
+                T.GREETINGS.forEach(g => {
+                  const d = T.defaultData(t);
+                  d.target = target;
+                  d.vpick = { resident: i, coagent: i, guest: i };
+                  d.greets = [g.v];
+                  const body = t.build(d, ctx);
+                  if (body.indexOf(text) === -1) out.push(target + '/' + i + ' 문구');
+                  if (body.indexOf(g.text) === -1) out.push(target + '/' + i + '/' + g.v + ' 안부');
+                  if (!body.endsWith('마래푸중앙부동산 드림\\n010-4585-7365 / 02-312-7365')) out.push(target + '/' + i + ' 서명');
+                  if (body.indexOf('[') !== -1 || body.indexOf(']') !== -1) out.push(target + '/' + i + ' 대괄호');
+                });
+              });
+            });
+            return out;
+        }""")
+        self.assertEqual(bad, [])
+        body = self.build_body('t17', {'target': 'coagent', 'vpick': {'coagent': 4}, 'greets': ['weekend']})
+        self.assertIn('오늘 함께해 주셔서 감사드립니다, 사장님.', body)
+        self.assertIn('즐거운 주말 보내세요!', body)
+        self.assertIn(S, body)
+
+    def test_v143_vendor_all_categories_with_contacts(self):
+        # 15번 — 6분야 전부, 상담사는 '이름', 업체는 '업체명'으로 44명 중 고른 사람이 그대로 들어간다
+        S = '마래푸중앙부동산 드림\n010-4585-7365 / 02-312-7365'
+        picks = {
+            '대출': ['d01', 'd33'], '세무사': ['s01'], '법무사': ['l01'],
+            '인테리어': ['i01', 'i02'], '입주청소': ['c03'], '이사': ['m01', 'm02'],
+        }
+        intro = {
+            '대출': '부동산 대출 상담을 받아보실 수 있는 상담사를 소개드립니다.',
+            '세무사': '양도소득세·취득세 등 부동산 세금 관련 상담을 받아보실 수 있는 세무사를 소개드립니다.',
+            '법무사': '소유권이전등기, 근저당권 말소 등 등기 업무를 상담받아 보실 수 있는 법무사를 소개드립니다.',
+            '인테리어': '입주 전 인테리어 공사에 관해 상담 및 견적을 받아보실 수 있는 업체를 소개드립니다.',
+            '입주청소': '입주청소 상담 및 견적을 받아보실 수 있는 업체를 소개드립니다.',
+            '이사': '이사 일정과 비용에 관해 상담 및 견적을 받아보실 수 있는 업체를 소개드립니다.',
+        }
+        for cat, ids in picks.items():
+            with self.subTest(cat=cat):
+                body = self.build_body('t20', {'vendorCat': cat, 'vendorSel': {cat: ids}})
+                self.assertIn(intro[cat], body)
+                label = '업체명' if cat in ('인테리어', '입주청소', '이사') else '이름'
+                self.assertIn('- %s : ' % label, body)
+                self.assertNotIn('- 이름 : (상담사/업체 이름)', body)
+                self.assertIn('마래푸중앙부동산 소개로 연락하셨다고 말씀해 주시면 됩니다. 감사합니다.', body)
+                self.assertIn(S, body)
+        body = self.build_body('t20', {'vendorCat': '대출', 'vendorSel': {'대출': ['d01', 'd33']}})
+        self.assertIn('- 이름 : 국민 대출 김동준\n- 연락처 : 010-3704-2417', body)
+        self.assertIn('- 이름 : 삼성생명 대출 박재영\n- 연락처 : 010-3361-5793', body)
+        body = self.build_body('t20', {'vendorCat': '이사', 'vendorSel': {'이사': ['m01', 'm02']}})
+        self.assertIn('- 업체명 : 소원아빠 이사\n- 연락처 : 010-9248-4484', body)
+        self.assertIn('- 업체명 : KGB주식회사 소장 민병권\n- 연락처 : 010-4155-3011', body)
+        # 44명 전원이 분야별로 들어 있다
+        counts = self.js("() => Object.fromEntries(Object.entries(SMSTemplates.DEFAULT_CONTACTS).map(([k, v]) => [k, v.length]))")
+        self.assertEqual(counts, {'대출': 33, '세무사': 1, '법무사': 1, '인테리어': 2, '입주청소': 5, '이사': 2})
+        phones = self.js("""() => Object.values(SMSTemplates.DEFAULT_CONTACTS).flat().map(c => c.phone)""")
+        self.assertEqual(len(phones), 44)
+        self.assertEqual(len(set(phones)), 44, '번호가 겹치지 않는다')
+        self.assertTrue(all(re.match(r'^010-\d{4}-\d{4}$', p) for p in phones), phones)
+        # 8번 주차 안내처럼 값이 없는 문자도 서명은 늘 붙는다
+        for tid in ('t1', 't6'):
+            self.assertTrue(self.build_body(tid, {}).endswith(S), tid)
+
+    def test_v143_pay_schedule_percent_and_amount_two_way(self):
+        # 11번 지급 일정 — % ↔ 금액 양방향, 잔금 자동, 약정금·가계약금 문구까지 본문에 반영
+        self.pick('t8')
+        self.page.fill('#fields [data-field="price"]', '76000')
+        self.pay_rate('gyeyak', 10)
+        self.wait(150)
+        self.assertEqual(self.page.input_value('#fields [data-pay-amt="gyeyak"][data-pay-idx="0"]'), '7,600')
+        self.pay_fill('jung', 19000)
+        self.wait(150)
+        self.assertEqual(self.page.input_value('#fields [data-pay-rate="jung"][data-pay-idx="0"]'), '25')
+        self.assertEqual(self.page.input_value('#fields [data-pay-amt="jan"][data-pay-idx="0"]'), '49,400')
+        body = self.text()
+        self.assertIn('- 매매대금 : 760,000,000원 (7억 6천만 원)', body)
+        self.assertIn('- 계약금 10% : 76,000,000원 (7,600만 원)', body)
+        self.assertIn('- 중도금 25% : 190,000,000원 (1억 9천만 원)', body)
+        self.assertIn('- 잔금 : 494,000,000원 (4억 9,400만 원)', body)
+        # 금액을 고치면 % 가 따라온다
+        self.pay_fill('gyeyak', 7600 * 2)
+        self.wait(150)
+        self.assertEqual(self.page.input_value('#fields [data-pay-rate="gyeyak"][data-pay-idx="0"]'), '20')
+        # 약정금·가계약금을 넣으면 계약일 안내 문장의 숫자가 따라온다
+        self.pay_fill('yakjeong', 1000)
+        self.pay_fill('jeong', 3000)
+        self.wait(200)
+        body = self.text()
+        self.assertIn('기지급한 약정금 10,000,000원은 계약일에 전액 반환받고, 계약금 152,000,000원은 약정금을 차감하지 않고 전액 입금합니다.', body)
+        self.assertIn('기지급한 가계약금 30,000,000원은 계약금에 포함하며, 계약일에는 계약금 총액 152,000,000원 중 차액 122,000,000원을 지급합니다.', body)
+        self.assertIn('가계약금 30,000,000원 (3천만 원)을 지급하며', body)
+
+    def test_v143_pay_schedule_parts_two_and_dates(self):
+        # 중도금 1·2차 — 소계·잔금·본문 줄까지
+        self.pick('t8')
+        self.page.fill('#fields [data-field="price"]', '76000')
+        self.pay_fill('gyeyak', 7600)
+        self.pay_fill('jung', 19000)
+        self.pay_add('jung')
+        self.pay_fill('jung', 9500, idx=1)
+        self.wait(200)
+        body = self.text()
+        self.assertIn('- 중도금 1차 25% : 190,000,000원', body)
+        self.assertIn('- 중도금 2차 12.5% : 95,000,000원', body)
+        # 잔금 = 76,000 − 7,600 − (19,000 + 9,500) = 39,900
+        self.assertIn('- 잔금 : 399,000,000원', body)
+        self.assertEqual(self.page.input_value('#fields [data-pay-amt="jan"][data-pay-idx="0"]'), '39,900')
+        # 날짜를 넣으면 '/ 날짜' 로 붙는다
+        self.page.evaluate("""() => {
+            const t = SMSApp; return 0;
+        }""")
+        self.page.click('#fields [data-date="pay:gyeyak:0"]')
+        self.wait(120)
+        self.page.click('#calpop [data-cal-day="5"]')
+        self.wait(150)
+        self.page.click('#calpop [data-cal-close]')
+        self.wait(150)
+        body = self.text()
+        self.assertRegex(body, r'- 계약금 10% : 76,000,000원 \(7,600만 원\) / 2026년 \d+월 5일 \S+요일')
+
+    def test_v143_t10_schedule_amounts_and_total(self):
+        # 12번 계약 일정 — 중도금·잔금·합계가 본문에 그대로
+        self.pick_with('t10', {'trade': '매매', 'kind': '잔금'})
+        self.page.fill('#fields [data-prop="prop"][data-key="dong"]', '404')
+        self.page.fill('#fields [data-prop="prop"][data-key="ho"]', '1903')
+        self.page.fill('#fields [data-prop="prop"][data-money="amount"]', '247000')
+        self.wait(150)
+        self.pay_fill('gyeyak', 24700)
+        self.pay_fill('jung', 61750)
+        self.wait(200)
+        body = self.text()
+        self.assertIn('마포래미안푸르지오 404동 1903호 잔금 일정 및 입금 내역을 안내드립니다.', body)
+        self.assertIn('- 계약금 : 247,000,000원', body)
+        self.assertIn('- 중도금 : 617,500,000원', body)
+        self.assertIn('- 잔금 : 1,605,500,000원', body)
+        self.assertIn('- 합계 : 2,470,000,000원', body)
+        self.assertEqual(self.page.input_value('#fields [data-pay-amt="jan"][data-pay-idx="0"]'), '160,550')
+
+    def test_v143_fee_calculator_matches_core(self):
+        # 16번 중개보수 — 코어 계산값(요율·공급가액·부가세·합계)이 본문에 그대로
+        cases = [
+            {'calcKind': 'house', 'calcTrade': '매매', 'calcAmount': '230000', 'calcVat': '4'},
+            {'calcKind': 'house', 'calcTrade': '매매', 'calcAmount': '230000', 'calcVat': 'none'},
+            {'calcKind': 'house', 'calcTrade': '매매', 'calcAmount': '230000', 'calcVat': '10'},
+            {'calcKind': 'house', 'calcTrade': '전세', 'calcAmount': '76000', 'calcVat': '4'},
+            {'calcKind': 'house', 'calcTrade': '매매', 'calcAmount': '3000', 'calcVat': 'none'},
+            {'calcKind': 'house', 'calcTrade': '전세', 'calcAmount': '9000', 'calcVat': '4'},
+            {'calcKind': 'officetel', 'calcTrade': '매매', 'calcAmount': '30000', 'calcVat': '4', 'calcOffice': 'resident'},
+            {'calcKind': 'officetel', 'calcTrade': '전세', 'calcAmount': '30000', 'calcVat': '4', 'calcOffice': 'business'},
+            {'calcKind': 'commercial', 'calcTrade': '매매', 'calcAmount': '50000', 'calcVat': '10'},
+            {'calcKind': 'commercial', 'calcTrade': '월세', 'calcDeposit': '10000', 'calcRent': '100', 'calcVat': '4'},
+            {'calcKind': 'house', 'calcTrade': '월세', 'calcDeposit': '10000', 'calcRent': '50', 'calcVat': 'none'},
+            {'calcKind': 'house', 'calcTrade': '매매', 'calcAmount': '230000', 'calcVat': '4', 'calcRate': '0.5'},
+            {'calcKind': 'house', 'calcTrade': '매매', 'calcAmount': '230000', 'calcVat': '4', 'calcRate': '0.9'},
+            {'calcKind': 'house', 'calcTrade': '매매', 'calcAmount': '20000', 'calcVat': '4', 'calcTotalWon': '900000'},
+        ]
+        ctx = {'feeAccount': '우리은행 1002-762-106047 황호선'}
+        for patch in cases:
+            with self.subTest(patch=str(patch)):
+                got = self.js("""a => {
+                    const C = window.SMSCore, T = window.SMSTemplates;
+                    const patch = a[0], ctx = a[1];
+                    const r = C.feeCalc({ kind: patch.calcKind, trade: patch.calcTrade,
+                        officetelUse: patch.calcOffice || 'resident',
+                        amountMan: C.parseMan(patch.calcAmount), depositMan: C.parseMan(patch.calcDeposit),
+                        rentMan: C.parseMan(patch.calcRent), ratePct: patch.calcRate,
+                        vat: patch.calcVat || '4' });
+                    const t = T.TEMPLATES.find(x => x.id === 't14');
+                    const d = Object.assign(T.defaultData(t), patch);
+                    const body = t.build(d, Object.assign({ office: '마래푸중앙부동산',
+                        phones: '010-4585-7365 / 02-312-7365', amountMode: 'won_eokman',
+                        contacts: T.defaultContacts() }, ctx));
+                    const money = C.feeBreakdown(r, C.wonOrNull(patch.calcTotalWon));
+                    return { rate: C.rateLabel(r.ratePct), supply: C.formatWonPlain(money.supply),
+                             vat: C.formatWonPlain(money.vat), total: C.formatWonPlain(money.total),
+                             vatMode: money.vatMode, body: body,
+                             conv: r.converted ? C.formatWonPlain(r.amountWon) : '',
+                             capped: !!r.capped && !money.custom, capWon: r.capWon };
+                }""", [patch, ctx])
+                body = got['body']
+                self.assertIn('- 적용 요율 : %s%%' % got['rate'], body)
+                self.assertIn('- 중개보수 (공급가액) : %s' % got['supply'], body)
+                self.assertIn('- 합계 : %s' % got['total'], body)
+                if got['vatMode'] == 'none':
+                    self.assertIn('- 부가가치세 : 별도', body)
+                else:
+                    pct = '간이과세 4%' if got['vatMode'] == '4' else '일반과세 10%'
+                    self.assertIn('- 부가가치세 : %s (%s)' % (got['vat'], pct), body)
+                if got['conv']:
+                    self.assertIn('(환산 %s)' % got['conv'], body)
+                if got['capped']:
+                    self.assertIn('- 한도액', body)
+                self.assertIn('- 입금계좌 : 우리은행 1002-762-106047 황호선', body)
+                self.assertIn('믿고 맡겨주셔서 진심으로 감사드립니다.', body)
+                self.assertNotIn('[', body)
+                self.assertNotIn(']', body)
+
+    def test_v143_fee_calculator_ui_text(self):
+        # 화면에서 고른 값이 그대로 본문에 (주택 매매 23억 4% → 0.7% · 16,100,000 · 644,000 · 16,744,000)
+        self.pick('t14')
+        self.page.fill('#fields [data-field="calcAmount"]', '230000')
+        self.wait(200)
+        body = self.text()
+        self.assertIn('- 거래 유형 : 주택 · 매매', body)
+        self.assertIn('- 거래금액 : 2,300,000,000원', body)
+        self.assertIn('- 적용 요율 : 0.7%', body)
+        self.assertIn('- 중개보수 (공급가액) : 16,100,000원', body)
+        self.assertIn('- 부가가치세 : 644,000원 (간이과세 4%)', body)
+        self.assertIn('- 합계 : 16,744,000원', body)
+        # 합계 직접 수정 — 나눠서 표시하고 요율은 법정 그대로
+        self.page.fill('#fields [data-field="calcTotalWon"]', '900000')
+        self.wait(200)
+        body = self.text()
+        self.assertIn('- 적용 요율 : 0.7%', body)
+        self.assertIn('- 중개보수 (공급가액) : 865,385원', body)
+        self.assertIn('- 부가가치세 : 34,615원 (간이과세 4%)', body)
+        self.assertIn('- 합계 : 900,000원', body)
+
 
 
 if __name__ == '__main__':

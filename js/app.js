@@ -23,10 +23,12 @@
   var PLAIN_PROP = { t8: 1, t10: 1 };
 
   /* ---------------- 저장소 ---------------- */
+  // 기본 협력업체 44명을 저장값에 합치는 버전 — 이 값이 바뀌면 한 번 더 합친다
+  var CONTACT_SEED = 'v1.4.3';
   var store = {
     profile: Object.assign({}, DEFAULT_PROFILE),
     stars: ['t3', 't4', 't5', 't14'],
-    data: {}, texts: {}, contacts: T.defaultContacts(),
+    data: {}, texts: {}, contacts: T.defaultContacts(), contactsSeed: CONTACT_SEED,
     current: 't5', stage: 'all',
     custom: [],          // 내가 만든 문구
     overrides: {},       // 기존 20종을 영구 수정한 본문 (id -> {body, sign})
@@ -41,11 +43,21 @@
       var raw = localStorage.getItem(KEY);
       if (!raw) return;
       var o = JSON.parse(raw);
+      var seeded = false;
       if (o.profile) store.profile = Object.assign({}, DEFAULT_PROFILE, o.profile);
       if (Array.isArray(o.stars)) store.stars = o.stars;
       if (o.data && typeof o.data === 'object') store.data = o.data;
       if (o.texts && typeof o.texts === 'object') store.texts = o.texts;
-      if (o.contacts && typeof o.contacts === 'object') store.contacts = mergeContacts(o.contacts);
+      if (o.contacts && typeof o.contacts === 'object') {
+        // 2026-11-27: 기본 협력업체 44명을 한 번 합친다 (예전에 빈 연락처가 저장돼 있어도 보이게)
+        if (o.contactsSeed === CONTACT_SEED) {
+          store.contacts = mergeContacts(o.contacts);
+        } else {
+          store.contacts = seedContacts(o.contacts);
+          store.contactsSeed = CONTACT_SEED;
+          seeded = true;
+        }
+      }
       store.custom = SYNC.sanitizeCustom(o.custom);
       store.overrides = SYNC.sanitizeOverrides(o.overrides);
       // 문구 목록은 이 함수가 끝난 뒤 rebuildTemplates 로 만들어진다 — 고른 문구 검사는 그 뒤에 한다
@@ -67,6 +79,7 @@
         store.vatDefault4 = true;
         save();
       }
+      if (seeded) save();
     } catch (e) { /* 저장값이 깨졌으면 기본값으로 시작 */ }
   }
 
@@ -76,11 +89,27 @@
     var out = {};
     // 2026-11-26 분야 이름을 짧게 바꿨다 — 예전 이름으로 저장한 연락처도 그대로 살린다
     var alias = { '세무': '세무사', '이사업체': '이사' };
+    saved = saved || {};
     T.VENDOR_CATS.forEach(function (cat) {
       var old = null;
       Object.keys(alias).forEach(function (k) { if (alias[k] === cat) old = k; });
       var list = Array.isArray(saved[cat]) ? saved[cat] : (old && Array.isArray(saved[old]) ? saved[old] : (base[cat] || []));
       out[cat] = list;
+    });
+    return out;
+  }
+
+  // 기본 명단을 id 기준으로 합친다 — 저장된 사본(이름·번호를 고친 것)은 그대로 두고 없는 사람만 더한다
+  function seedContacts(saved) {
+    var out = mergeContacts(saved);
+    var base = T.defaultContacts();
+    T.VENDOR_CATS.forEach(function (cat) {
+      var list = out[cat] || (out[cat] = []);
+      var have = {};
+      list.forEach(function (c) { if (c && c.id) have[c.id] = true; });
+      (base[cat] || []).forEach(function (b) {
+        if (!have[b.id]) list.push({ id: b.id, name: b.name, phone: b.phone, fav: !!b.fav });
+      });
     });
     return out;
   }
@@ -1319,9 +1348,10 @@
       case 'contacts': {
         var cat = T.VENDOR_CATS.indexOf(data.vendorCat) !== -1 ? data.vendorCat : '대출';
         var all = (store.contacts && store.contacts[cat]) || [];
-        var favs = all.filter(function (c) { return !!c.fav; });
-        // 즐겨찾기가 있으면 그것만, 하나도 없으면 저장한 업체를 모두 보여 준다
-        var shown = favs.length ? favs : all;
+        // 기본 명단 44명이 들어 있어도 다 고를 수 있게 모두 보여 주고, 즐겨찾기(★)만 위로 올린다
+        var shown = all.slice().sort(function (a, b) {
+          return (b.fav ? 1 : 0) - (a.fav ? 1 : 0);
+        });
         var picked = T.selectedFor(data, cat);
         row = fieldRow(f.label || '연락처');
         var listBox = el('div', 'contact-list');
