@@ -1123,9 +1123,8 @@
         line.dataset.payItem = item.key;
         line.dataset.payIdx = String(i);
 
-        // 윗줄 — 항목 이름만 왼쪽에 두어 절대 잘리지 않게, (+)(−)는 행 오른쪽 끝 위에
+        // 윗줄 — (+)(−)만 행 오른쪽 끝에 얇게. 항목 이름은 왼쪽 칸(.pay-name) 안에서 [일정][금액] 세로 가운데
         var head = el('div', 'pay-head');
-        head.appendChild(el('span', 'pay-name-text', label));
         var steps = el('span', 'pay-steps');
         var add = el('button', 'pay-step is-add', '+');
         add.type = 'button';
@@ -1144,9 +1143,10 @@
         head.appendChild(steps);
         line.appendChild(head);
 
-        // 본문 줄 — 왼쪽에는 % 칸만(계약금·중도금), 오른쪽은 [일정][금액] 한 줄. 세로 가운데 정렬
+        // 본문 줄 — 왼쪽 칸에 항목 이름과 % 칸(계약금·중도금), 오른쪽은 [일정][금액] 한 줄. 왼쪽 묶음은 입력칸 세로 가운데
         var body = el('div', 'pay-body');
         var name = el('div', 'pay-name');
+        name.appendChild(el('span', 'pay-name-text', label));
         if (item.rate) name.appendChild(rateBadge(t, data, item, i));
         body.appendChild(name);
 

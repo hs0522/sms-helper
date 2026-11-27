@@ -5017,25 +5017,25 @@ class AppTest(unittest.TestCase):
 
     # ============================================================== 버전 · 배포 파일
 
-    def test_24_version_bumped_to_1_4_8(self):
+    def test_24_version_bumped_to_1_4_9(self):
         # 서비스 워커 · 화면 캐시 주소 · 안드로이드 빌드 번호가 모두 같은 버전을 가리킨다
         with open(os.path.join(ROOT, 'sw.js'), encoding='utf-8') as f:
             sw = f.read()
         m = re.search(r"var VERSION = '(v\d+\.\d+\.\d+)';", sw)
         self.assertIsNotNone(m, 'sw.js에 VERSION이 있다')
         ver = m.group(1)
-        self.assertEqual(ver, 'v1.4.8')
+        self.assertEqual(ver, 'v1.4.9')
         self.assertIn("'js/sync.js'", sw)
         # 새 파일(동호수 타입표)도 오프라인 캐시에 들어간다
         self.assertIn("'js/maraepu-types.js'", sw)
         with open(os.path.join(ROOT, 'index.html'), encoding='utf-8') as f:
             html = f.read()
         for f_ in ('icons', 'maraepu-types', 'core', 'templates', 'sync', 'app'):
-            self.assertIn(f'js/{f_}.js?v=1.4.8', html)
-        self.assertIn('styles.css?v=1.4.8', html)
+            self.assertIn(f'js/{f_}.js?v=1.4.9', html)
+        self.assertIn('styles.css?v=1.4.9', html)
         gradle = open(os.path.join(ROOT, 'android/app/build.gradle'), encoding='utf-8').read()
-        self.assertIn('versionCode 23', gradle)
-        self.assertIn("versionName '1.4.8'", gradle)
+        self.assertIn('versionCode 24', gradle)
+        self.assertIn("versionName '1.4.9'", gradle)
 
     def test_t8_deal_combos_and_labels(self):
         # 계약 조건 안내 — 상단 구분(매매 가계약·약정·계약) + 12번과 같은 공통 매물칸
@@ -5743,9 +5743,12 @@ class AppTest(unittest.TestCase):
                         self.assertGreaterEqual(r['hint']['t'], r['amount']['b'] - 0.5, '환산 줄은 금액칸 아래')
                         self.assertLessEqual(r['hint']['rt'], r['amount']['rt'] + 1.0, '환산 줄이 금액칸 밖으로')
                         if r['rate']:
-                            self.assertAlmostEqual((r['rate']['t'] + r['rate']['b']) / 2,
-                                                   (r['amount']['t'] + r['amount']['b']) / 2, delta=1.5,
-                                                   msg='% 칸이 금액칸 세로 가운데가 아니다')
+                            # v1.4.9 — 항목 이름과 % 칸을 묶어 [일정][금액] 입력칸 세로 가운데
+                            bundle = (min(r['name']['t'], r['rate']['t'])
+                                      + max(r['name']['b'], r['rate']['b'])) / 2
+                            self.assertAlmostEqual(bundle, (r['amount']['t'] + r['amount']['b']) / 2,
+                                                   delta=1.5,
+                                                   msg='항목 이름·% 묶음이 금액칸 세로 가운데가 아니다')
                             self.assertLessEqual(r['rate']['l'] - r['row']['l'], 1.5, '% 칸은 왼쪽 정렬')
                 # 소계 줄은 마지막 차수 오른쪽 아래에 붙고 행을 흘들리지 않는다
                 sub = page.evaluate("""() => { const s = document.querySelector('#fields .pay-sub');
@@ -5817,6 +5820,7 @@ class AppTest(unittest.TestCase):
                     const d = r.querySelector('.date-btn'), a = r.querySelector('.money-box');
                     const hint = r.querySelector('.pay-hint'), rate = r.querySelector('.pay-rate-inp');
                     return {label: r.querySelector('.pay-name-text').textContent.trim(),
+                            name: box(r.querySelector('.pay-name-text')),
                             date: box(d), amount: box(a), hintText: hint.textContent.trim(),
                             rate: rate ? box(rate) : null};
                   });
@@ -5830,10 +5834,12 @@ class AppTest(unittest.TestCase):
                                                msg=f"{r['label']} 일정 칸과 금액 칸 위쪽이 어긋난다")
                         self.assertAlmostEqual(r['date']['h'], r['amount']['h'], delta=0.6,
                                                msg=f"{r['label']} 일정 칸과 금액 칸 높이가 다르다")
-                        if r['rate']:
-                            self.assertAlmostEqual((r['rate']['t'] + r['rate']['b']) / 2,
-                                                   (r['amount']['t'] + r['amount']['b']) / 2, delta=1.5,
-                                                   msg=f"{r['label']} % 칸이 금액 칸 세로 가운데가 아니다")
+                        # v1.4.9 — 항목 이름·% 묶음이 입력칸 세로 가운데
+                        bundle = (min(r['name']['t'], r['rate']['t'] if r['rate'] else r['name']['t'])
+                                  + max(r['name']['b'], r['rate']['b'] if r['rate'] else r['name']['b'])) / 2
+                        self.assertAlmostEqual(bundle, (r['amount']['t'] + r['amount']['b']) / 2,
+                                               delta=1.5,
+                                               msg=f"{r['label']} 항목 이름 묶음이 금액 칸 세로 가운데가 아니다")
                 self.assertEqual(errs, [])
                 ctx.close()
 
@@ -6701,15 +6707,144 @@ class AppTest(unittest.TestCase):
           const dt = row.querySelector('.date-btn').getBoundingClientRect();
           const rateRow = [...document.querySelectorAll('#fields .pay-row')].find(r => r.querySelector('.pay-rate'));
           const rr = rateRow.querySelector('.pay-rate').getBoundingClientRect();
+          const rl = rateRow.querySelector('.pay-name-text').getBoundingClientRect();
           const ra = rateRow.querySelector('.money-box').getBoundingClientRect();
           return { labelGap: +(label.top - rb.top).toFixed(1),
-                   rateCenter: +((rr.top + rr.bottom) / 2).toFixed(1),
+                   bundleCenter: +((Math.min(rl.top, rr.top) + Math.max(rl.bottom, rr.bottom)) / 2).toFixed(1),
                    amtCenter: +((ra.top + ra.bottom) / 2).toFixed(1),
                    dateTop: +dt.top.toFixed(1), amtTop: +amt.top.toFixed(1) };
         }""")
         self.assertGreaterEqual(info['labelGap'], 10, f"항목 이름이 점선에 붙어 있다 {info}")
-        self.assertLessEqual(abs(info['rateCenter'] - info['amtCenter']), 1.5, '% 칸이 금액칸 세로 가운데가 아니다')
+        self.assertLessEqual(abs(info['bundleCenter'] - info['amtCenter']), 1.5,
+                             '항목 이름·% 묶음이 금액칸 세로 가운데가 아니다')
         self.assertLessEqual(abs(info['dateTop'] - info['amtTop']), 1.0, '일정·금액 입력칸 위쪽 선이 어긋난다')
+
+    def test_v149_pay_name_centered_and_head_left(self):
+        # v1.4.9 — 항목 이름이 왼쪽 구분 칸 안에서 [일정][금액] 세로 가운데, 머리글 '구분'은 왼쪽 정렬
+        for w, h in ((1440, 900), (390, 844)):
+            with self.subTest(viewport=f'{w}x{h}'):
+                ctx = self.browser.new_context(viewport={'width': w, 'height': h},
+                                               is_mobile=w < 500, has_touch=w < 500)
+                page = ctx.new_page()
+                errs = []
+                page.on('pageerror', lambda e: errs.append(str(e)))
+                page.goto(BASE, wait_until='networkidle')
+                page.evaluate('localStorage.clear()')
+                page.reload(wait_until='networkidle')
+                page.wait_for_timeout(220)
+                if w < 900:
+                    page.click('#btn-sheet')
+                    page.wait_for_timeout(150)
+                    page.click('#sheet-list [data-id="t8"]')
+                else:
+                    page.click('#tpl-list [data-id="t8"]')
+                page.wait_for_timeout(220)
+                page.click('#fields [data-seg="kind"][data-value="계약"]')
+                page.wait_for_timeout(250)
+                page.fill('#fields [data-prop="prop"][data-money="amount"]', '76000')
+                page.fill('#fields [data-pay-amt="yakjeong"][data-pay-idx="0"]', '1000')
+                page.fill('#fields [data-pay-amt="jeong"][data-pay-idx="0"]', '3000')
+                page.fill('#fields [data-pay-amt="gyeyak"][data-pay-idx="0"]', '7600')
+                page.fill('#fields [data-pay-amt="jung"][data-pay-idx="0"]', '19000')
+                page.eval_on_selector('#fields .pay-row[data-pay-item="jeong"] [data-pay-add]',
+                                      "e => { e.scrollIntoView({block: 'center'}); e.click(); }")
+                page.wait_for_timeout(250)
+                page.evaluate('document.activeElement && document.activeElement.blur()')
+                page.wait_for_timeout(250)
+                info = page.evaluate("""() => {
+                  const b = e => { const r = e.getBoundingClientRect();
+                    return {l:+r.left.toFixed(1), r:+r.right.toFixed(1), t:+r.top.toFixed(1), b:+r.bottom.toFixed(1),
+                            h:+r.height.toFixed(1)}; };
+                  const head = document.querySelector('#fields .paytable-head');
+                  const headName = (head && head.getBoundingClientRect().height > 0)
+                    ? head.querySelector('.head-name') : null;
+                  const rows = [...document.querySelectorAll('#fields .pay-row')].map(r => {
+                    const nm = r.querySelector('.pay-name-text'), rate = r.querySelector('.pay-rate');
+                    const nb = b(nm), amt = b(r.querySelector('.money-box')), rb = rate ? b(rate) : null;
+                    const rowB = r.getBoundingClientRect();
+                    const st = r.querySelector('.pay-steps').getBoundingClientRect();
+                    const top = Math.min(nb.t, rb ? rb.t : nb.t), bot = Math.max(nb.b, rb ? rb.b : nb.b);
+                    return {label: nm.textContent.trim(), inNameCol: !!nm.closest('.pay-name'),
+                            inStepsHead: !!nm.closest('.pay-head'),
+                            left: +(rowB.left - nb.l), name: nb, rate: rb, amt: amt,
+                            clipped: nm.scrollWidth > nm.clientWidth + 1,
+                            lines: Math.round(nb.h / (parseFloat(getComputedStyle(nm).lineHeight) || 14)),
+                            bundleCenter: +((top + bot) / 2).toFixed(1),
+                            amtCenter: +((amt.t + amt.b) / 2).toFixed(1),
+                            stepsRight: +(rowB.right - st.right).toFixed(1),
+                            stepsAbove: st.bottom <= amt.t + 0.5};
+                  });
+                  return {headAlign: headName ? getComputedStyle(headName).textAlign : null,
+                          headLeft: headName ? b(headName).l : null,
+                          firstLabelLeft: rows.length ? rows[0].name.l : null,
+                          docW: document.documentElement.scrollWidth, winW: window.innerWidth,
+                          rows};
+                }""")
+                self.assertLessEqual(info['docW'], info['winW'], f'{w} 가로 넘침')
+                self.assertEqual([r['label'] for r in info['rows']],
+                                 ['약정금', '가계약금 1차', '가계약금 2차', '계약금', '중도금', '잔금'])
+                for r in info['rows']:
+                    with self.subTest(row=f"{w} {r['label']}"):
+                        self.assertTrue(r['inNameCol'], '항목 이름이 왼쪽 구분 칸(.pay-name) 안에 없다')
+                        self.assertFalse(r['inStepsHead'], '항목 이름이 (+)(−) 윗줄에 남아 있다')
+                        self.assertLessEqual(r['left'], 0.5, '항목 이름이 왼쪽 정렬이 아니다')
+                        self.assertFalse(r['clipped'], f"{r['label']} 이름이 잘린다")
+                        self.assertEqual(r['lines'], 1, f"{r['label']} 이름이 두 줄로 접혔다")
+                        self.assertLessEqual(abs(r['bundleCenter'] - r['amtCenter']), 1.5,
+                                             f"{r['label']} 이름·% 묶음이 입력칸 세로 가운데가 아니다")
+                        self.assertLessEqual(r['stepsRight'], 1.5, '(+)(−)는 행 오른쪽 끝')
+                        self.assertTrue(r['stepsAbove'], '(+)(−)는 입력칸 위 윗줄')
+                    if r['label'] in ('계약금', '중도금'):
+                        self.assertIsNotNone(r['rate'], f"{r['label']} 에 % 칸이 없다")
+                        self.assertGreaterEqual(r['rate']['t'], r['name']['b'] - 0.5, '% 칸은 이름 아래줄')
+                    else:
+                        self.assertIsNone(r['rate'], f"{r['label']} 에 % 칸이 있으면 안 된다")
+                if info['headAlign'] is not None:
+                    self.assertEqual(info['headAlign'], 'left', "머리글 '구분'이 가운데 정렬이다")
+                    self.assertAlmostEqual(info['headLeft'], info['firstLabelLeft'], delta=1.0,
+                                           msg="머리글 '구분'과 항목 이름의 왼쪽 선이 어긋난다")
+                else:
+                    self.assertLess(w, 900, 'PC에서 머리글이 사라졌다')
+                self.assertEqual(errs, [])
+                ctx.close()
+
+    def test_v149_pay_head_steps_only(self):
+        # 지급 일정 행의 윗줄에는 (+)(−) 만 남고, 근저당 목록 윗줄(.pay-head)의 왼쪽 이름은 그대로다
+        self.pick('t8')
+        self.page.click('#fields [data-seg="kind"][data-value="계약"]')
+        self.page.fill('#fields [data-prop="prop"][data-money="amount"]', '76000')
+        self.wait(200)
+        info = self.js("""() => {
+          const row = document.querySelector('#fields .pay-row');
+          const head = row.querySelector('.pay-head');
+          return {headChildren: head.children.length,
+                  headChildClass: head.children[0] && head.children[0].className,
+                  headJustify: getComputedStyle(head).justifyContent,
+                  stepsRight: +(row.getBoundingClientRect().right
+                    - head.querySelector('.pay-steps').getBoundingClientRect().right).toFixed(1),
+                  firstLabelInPayName: !!row.querySelector('.pay-name > .pay-name-text'),
+                  labelInHead: !!head.querySelector('.pay-name-text')};
+        }""")
+        self.assertEqual(info['headChildren'], 1, '윗줄에는 (+)(−) 묶음만 있어야 한다')
+        self.assertEqual(info['headChildClass'], 'pay-steps')
+        self.assertIn(info['headJustify'], ('flex-end', 'flow-end'), '(+)(−)는 행 오른쪽 끝')
+        self.assertLessEqual(info['stepsRight'], 1.5, '(+)(−)가 행 오른쪽 끝에 있지 않다')
+        self.assertTrue(info['firstLabelInPayName'], '항목 이름은 왼쪽 구분 칸 안')
+        self.assertFalse(info['labelInHead'], '항목 이름이 윗줄에 남아 있다')
+        # 근저당 목록 윗줄(_pay-head)은 이름이 왼쪽 · (+)(−)가 오른쪽 (예전 그대로)
+        self.page.click('#fields [data-toggle="mortgage"]')
+        self.wait(220)
+        mtg = self.js("""() => {
+          const h = document.querySelector('#fields .mtg-row .pay-head');
+          if (!h) return null;
+          const lab = h.querySelector('.pay-name-text').getBoundingClientRect();
+          const st = h.querySelector('.pay-steps').getBoundingClientRect();
+          return {justify: getComputedStyle(h).justifyContent,
+                  labelLeft: +lab.left.toFixed(1), stepsLeft: +st.left.toFixed(1)};
+        }""")
+        self.assertIsNotNone(mtg, '근저당 줄이 없다')
+        self.assertEqual(mtg['justify'], 'space-between', '근저당 윗줄까지 오른쪽 정렬로 바뀌었다')
+        self.assertLess(mtg['labelLeft'], mtg['stepsLeft'], '근저당 이름이 왼쪽에 있지 않다')
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

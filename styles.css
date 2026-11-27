@@ -1430,12 +1430,12 @@ select.inp,
   padding-bottom: 5px;
 }
 .paytable-head span { font-size: 10px; font-weight: 700; color: var(--muted2); }
-.paytable-head .head-name { flex: 0 0 var(--pay-name, 86px); width: var(--pay-name, 86px); text-align: center; }
+.paytable-head .head-name { flex: 0 0 var(--pay-name, 86px); width: var(--pay-name, 86px); text-align: left; }
 /* 머리글의 일정·금액도 입력칸(.pay-main)과 같은 그리드로 나누어 각 칸 바로 위에 놓는다 */
 .paytable-head .head-cols { flex: 1 1 auto; min-width: 0; display: grid; grid-template-columns: var(--pay-cols); gap: 6px; align-items: center; }
 .paytable-head .head-cols span { text-align: left; }
 .pay-row { padding: 11px 0; border-top: 1px dashed var(--line-soft); }
-/* 윗줄 — 항목 이름은 왼쪽 한 줄로(잘리지 않게), (+)(−)는 행 오른쪽 끝 위 */
+/* 윗줄 — (+)(−)만 행 오른쪽 끝에 얇게 둔다 (항목 이름은 아래 본문 왼쪽 칸으로 내렸다) */
 .pay-head {
   display: flex;
   align-items: center;
@@ -1444,9 +1444,10 @@ select.inp,
   width: 100%;
   min-width: 0;
 }
-/* 본문 줄 — 왼쪽 칸(% 자리)과 [일정][금액]의 위쪽 선을 맞춘다 (환산 줄이 생겨도 밀리지 않게) */
-.pay-body { display: flex; align-items: start; gap: 8px; width: 100%; min-width: 0; }
-/* 왼쪽 — 항목 이름은 윗줄로 올렸고, 아래 칸에는 계약금·중도금의 % 만 남는다 */
+.pay-row .pay-head { justify-content: flex-end; min-height: 15px; }
+/* 본문 줄 — 왼쪽 칸(항목 이름 · %)과 [일정][금액]의 위쪽 선을 맞춘다 (환산 줄이 생겨도 밀리지 않게) */
+.pay-body { display: flex; align-items: flex-start; gap: 8px; width: 100%; min-width: 0; }
+/* 왼쪽 — 항목 이름과 % 칸을 묶어 입력칸 높이 안에서 세로 가운데에 둔다 */
 .pay-name { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; flex: 0 0 var(--pay-name, 86px); width: var(--pay-name, 86px); min-width: 0; text-align: left; }
 .pay-name-top { display: flex; align-items: center; justify-content: center; gap: 3px; width: 100%; min-width: 0; }
 .pay-steps { display: inline-flex; align-items: center; gap: 2px; flex: 0 0 auto; }
@@ -1503,7 +1504,7 @@ select.inp,
   justify-content: center;
 }
 .pay-row .pay-amount { min-width: 0; }
-.pay-name-text { font-size: 11.6px; font-weight: 700; color: var(--ink); text-align: left; white-space: nowrap; overflow: visible; text-overflow: clip; min-width: 0; }
+.pay-name-text { font-size: 11.6px; font-weight: 700; color: var(--ink); text-align: left; line-height: 1.22; white-space: normal; word-break: keep-all; overflow-wrap: normal; max-width: 100%; min-width: 0; }
 .pay-rate { display: inline-flex; align-items: center; gap: 1px; }
 .pay-rate-inp {
   width: 30px;
