@@ -71,7 +71,7 @@ jobs:
           Get-Content "desktop/version.py"
 
       - name: Check pywebview import
-        run: python -c "import sys, importlib.metadata as md, webview; print('pywebview', md.version('pywebview'), '| python', sys.version)"
+        run: python -c "import webview; print('pywebview import OK')"
 
       - name: Build with PyInstaller
         run: python -m PyInstaller --noconfirm --clean desktop/build.spec
