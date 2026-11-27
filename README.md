@@ -39,8 +39,8 @@ python3 -m http.server 8000
 | **안드로이드** | 아래 `.apk`를 내려받아 설치 (오프라인 내장) |
 
 - 웹: https://hs0522.github.io/sms-helper/ (GitHub Pages · `gh-pages` 브랜치 루트)
-- 안드로이드 설치 파일: https://github.com/hs0522/sms-helper/releases/download/v1.4.5/Maraepu-SMS-Helper-v1.4.5.apk
-- 릴리즈 페이지: https://github.com/hs0522/sms-helper/releases/tag/v1.4.5
+- 안드로이드 설치 파일: https://github.com/hs0522/sms-helper/releases/download/v1.4.6/Maraepu-SMS-Helper-v1.4.6.apk
+- 릴리즈 페이지: https://github.com/hs0522/sms-helper/releases/tag/v1.4.6
 
 ### 안드로이드 앱(.apk)
 
@@ -434,6 +434,10 @@ projects/sms-helper/
 > 웹 링크 통로와 앱 통로를 **`openSmsApp` 헬퍼 하나로 합치고** `Uri.encode`(%20 · `+`는 `%2B` · 줄바꿈 `%0A` · 이모지 UTF-8)로 바꿨습니다. `sms:?body=`를 받지 않는 기기는 `smsto:` + `sms_body` 인텐트로 한 번 더 시도합니다.
 > 웹(안드로이드 브라우저)은 `sms:?body=`, 아이폰은 `sms:&body=` 형태를 그대로 씁니다.
 > 테스트 197개. 서비스 워커 캐시 `v1.4.5`, 안드로이드 `versionCode 20`.
+>
+> 2026-11-27 열여섯 번째 수정(v1.4.6): **매물 줄 표기 정리.**
+> ① **`예약 확정`** 에서 매물을 여러 건 넣으면 ` · `로 한 줄에 붙던 것을 **`조율 중`과 똑같이 매물 한 건당 한 줄**(`- 마포그랑자이 111동 19층 / 매매 23억`)로 바꿨습니다.
+> ② 전 템플릿에서 **`- 매물 : ` 접두어를 없애** `- ` 뒤에 매물만 오게 했습니다(특가 매물 홍보의 `🔑 매물 : ` 이모지 라벨은 그대로).
 >
 > 2026-11-26 열세 번째 수정(v1.1.7): **매물 블록의 거래유형·금액을 한 줄로** — `[매매] [전세] [월세]` 오른쪽이 비어 있고
 > 금액칸이 아래 줄로 내려가던 배치를 고쳤습니다. 이제 버튼 옆 오른쪽 영역이 금액칸 하나(매매·전세)이고,

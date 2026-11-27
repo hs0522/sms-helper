@@ -471,7 +471,7 @@
         return join([
           hello(ctx),
           '소중한 매물을 의뢰해 주셔서 진심으로 감사드립니다.\n접수해 주신 내용을 아래와 같이 안내드리오니 확인 부탁드립니다.',
-          '- 매물 : ' + prop(p, d.mode) + '\n' +
+          '- ' + prop(p, d.mode) + '\n' +
           '- 거래조건 : ' + (price || '(금액)') + '\n' +
           '- 입주 : ' + movein + '\n' +
           '- 옵션 : ' + txt(d.option, '옵션'),
@@ -627,7 +627,7 @@
           var simple = [
             first,
             guest + ' 손님이 계셔서 ' + (co ? '공동중개 및 ' : '') + '집보기 가능 여부' + (co ? ' 여쭙습니다.' : '를 여쭙습니다.'),
-            '- 매물 : ' + place + '\n- 희망 일시 : ' + when,
+            '- ' + place + '\n- 희망 일시 : ' + when,
             co
               ? '해당 시간에 집보기가 가능할지 확인 부탁드립니다.\n어려우시다면 가능하신 시간을 알려주시면 손님과 조율하겠습니다. 감사합니다.'
               : '해당 시간에 방문이 가능하실지 확인 부탁드립니다.\n어려우시다면 편하신 시간을 알려주시면 조율하겠습니다. 감사합니다.'
@@ -642,7 +642,7 @@
           co
             ? guest + ' 손님이 계셔서 공동중개 및 집보기 일정을 문의드립니다.'
             : guest + ' 손님께서 집보기를 희망하셔서 방문 일정을 여쭙습니다.',
-          '- 매물 : ' + place + '\n- 방문 희망 시간 : ' + when2
+          '- ' + place + '\n- 방문 희망 시간 : ' + when2
         ];
         blocks.push(co
           ? '번거로우시겠지만 위 시간 중 집보기가 가능할지 확인 부탁드립니다.\n어려우시다면 가능하신 시간을 알려주시면 손님과 조율하겠습니다.\n감사합니다, 사장님.'
@@ -670,8 +670,8 @@
         var list = itemsOf(d, 'items', d.mode);
         if (d.status === 'pending') {
           var plines = list.length
-            ? list.map(function (p) { return '- 매물 : ' + propWithPrice(p, d.mode); }).join('\n')
-            : '- 매물 : (매물) / (가격)';
+            ? list.map(function (p) { return '- ' + propWithPrice(p, d.mode); }).join('\n')
+            : '- (매물) / (가격)';
           return join([
             hello(ctx),
             '아래 매물의 집보기 일정을 현재 조율 중입니다.',
@@ -685,9 +685,9 @@
           '요청하신 집보기 일정이 아래와 같이 확정되었습니다.',
           '- 방문 일시 : ' + dt(d.when, '방문 일시') +
             (d.detail
-              ? '\n- 매물 : ' + (list.length
-                ? list.map(function (p) { return propWithPrice(p, d.mode); }).join(' · ')
-                : '(매물) / (가격)')
+              ? '\n' + (list.length
+                ? list.map(function (p) { return '- ' + propWithPrice(p, d.mode); }).join('\n')
+                : '- (매물) / (가격)')
               : '')
         ];
         blocks.push(d.parking
@@ -730,8 +730,8 @@
       build: function (d, ctx) {
         var list = itemsOf(d, 'items', d.mode);
         var lines = list.length
-          ? list.map(function (p) { return '- 매물 : ' + propWithPrice(p, d.mode); }).join('\n')
-          : '- 매물 : (매물) / (가격)';
+          ? list.map(function (p) { return '- ' + propWithPrice(p, d.mode); }).join('\n')
+          : '- (매물) / (가격)';
         return join([
           hello(ctx),
           '오늘 함께 보신 매물 정보를 정리해 보내드립니다.',

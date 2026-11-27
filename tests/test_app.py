@@ -857,7 +857,7 @@ class AppTest(unittest.TestCase):
         })
         body = page.input_value('#preview')
         self.assertIn('전세 손님께서 집보기를 희망하셔서', body)
-        self.assertIn('- 매물 : 마포래미안푸르지오 304동 1103호 / 전세 11억 5천만', body)
+        self.assertIn('- 마포래미안푸르지오 304동 1103호 / 전세 11억 5천만', body)
         self.assertEqual(page.inner_text('#fields [data-seg="view"][data-value="detail"]').strip(), '상세')
         ctx.close()
 
@@ -1280,7 +1280,7 @@ class AppTest(unittest.TestCase):
         self.page.fill('#fields [data-prop="prop"][data-money="amount"]', '230000')
         self.wait(180)
         body = self.text()
-        self.assertIn('- 매물 : 마포래미안푸르지오 208동 1103호', body)
+        self.assertIn('- 마포래미안푸르지오 208동 1103호', body)
         self.assertIn('- 거래조건 : 매매 23억', body)
         # 월세는 보증금·월차임이 한 줄로 조합된다
         self.page.click('#fields [data-prop-trade="prop"][data-value="월세"]')
@@ -2120,6 +2120,7 @@ class AppTest(unittest.TestCase):
         self.page.click('#fields [data-toggle="detail"]')
         self.wait(120)
         self.assertNotIn('- 매물 :', self.text())
+        self.assertNotIn('- 마포래미안푸르지오', self.text(), '상세를 끄면 매물 줄 자체가 없다')
 
 
     def test_amount_display_mode_setting(self):
@@ -3353,7 +3354,7 @@ class AppTest(unittest.TestCase):
         # 값이 하나도 없으면 빈 매물 줄을 만들지 않는다 (집보기 일정 안내의 매물 블록은 늘 한 줄)
         ctx, page = self.open_with_query('template=t5')
         self.assertEqual(page.query_selector_all('#fields .prop-item').__len__(), 1)
-        self.assertNotIn('(매물)', page.input_value('#preview').replace('- 매물 : (매물) / (가격)', ''))
+        self.assertNotIn('(매물)', page.input_value('#preview').replace('- (매물) / (가격)', ''))
         ctx.close()
 
     # ============================================================== 수정요청서(2026-11-25) 회귀
@@ -4760,25 +4761,25 @@ class AppTest(unittest.TestCase):
 
     # ============================================================== 버전 · 배포 파일
 
-    def test_24_version_bumped_to_1_4_5(self):
+    def test_24_version_bumped_to_1_4_6(self):
         # 서비스 워커 · 화면 캐시 주소 · 안드로이드 빌드 번호가 모두 같은 버전을 가리킨다
         with open(os.path.join(ROOT, 'sw.js'), encoding='utf-8') as f:
             sw = f.read()
         m = re.search(r"var VERSION = '(v\d+\.\d+\.\d+)';", sw)
         self.assertIsNotNone(m, 'sw.js에 VERSION이 있다')
         ver = m.group(1)
-        self.assertEqual(ver, 'v1.4.5')
+        self.assertEqual(ver, 'v1.4.6')
         self.assertIn("'js/sync.js'", sw)
         # 새 파일(동호수 타입표)도 오프라인 캐시에 들어간다
         self.assertIn("'js/maraepu-types.js'", sw)
         with open(os.path.join(ROOT, 'index.html'), encoding='utf-8') as f:
             html = f.read()
         for f_ in ('icons', 'maraepu-types', 'core', 'templates', 'sync', 'app'):
-            self.assertIn(f'js/{f_}.js?v=1.4.5', html)
-        self.assertIn('styles.css?v=1.4.5', html)
+            self.assertIn(f'js/{f_}.js?v=1.4.6', html)
+        self.assertIn('styles.css?v=1.4.6', html)
         gradle = open(os.path.join(ROOT, 'android/app/build.gradle'), encoding='utf-8').read()
-        self.assertIn('versionCode 20', gradle)
-        self.assertIn("versionName '1.4.5'", gradle)
+        self.assertIn('versionCode 21', gradle)
+        self.assertIn("versionName '1.4.6'", gradle)
 
     def test_t8_deal_combos_and_labels(self):
         # 계약 조건 안내 — [매매][전세][월세] | [가계약][계약], 다섯 버튼이 한 줄·같은 크기
@@ -5673,7 +5674,7 @@ class AppTest(unittest.TestCase):
             # (id, patch, 반드시 있어야 할 문구, 있으면 안 되는 문구)
             ('t1', {}, ['바쁘신 중에 통화해 주셔서 감사합니다.', '성심껏 도와드리겠습니다.', S], []),
             ('t2', {'prop': prop, 'moveinMode': '협의', 'option': '시스템에어컨, 올수리'},
-             ['- 매물 : 마포래미안푸르지오 404동 1903호', '- 거래조건 : 매매 24억 7천만',
+             ['- 마포래미안푸르지오 404동 1903호', '- 거래조건 : 매매 24억 7천만',
               '- 입주 : 즉시입주(협의)', '- 옵션 : 시스템에어컨, 올수리', S],
              ['(매물)', '(금액)', '(입주)', '(옵션)']),
             ('t2', {'prop': prop, 'moveinMode': '고정', 'moveinStart': day(2026, 12, 1), 'moveinFix': '선호'},
@@ -5697,7 +5698,7 @@ class AppTest(unittest.TestCase):
             ('t3', {'who': 'owner', 'view': 'simple', 'prop': rent_prop,
                     'when': dict(day(2026, 11, 28), hour=10, min=0)},
              ['전세 손님이 계셔서 집보기 가능 여부를 여쭙습니다.',
-              '- 매물 : 마포래미안푸르지오 208동 1203호 / 전세 11억 5천만',
+              '- 마포래미안푸르지오 208동 1203호 / 전세 11억 5천만',
               '- 희망 일시 : 11월 28일 (토) 10:00'], ['(방문 일시)', '(매물)']),
             ('t3', {'who': 'coagent', 'view': 'simple', 'prop': prop,
                     'when': dict(day(2026, 11, 28), hour=14, min=30)},
@@ -5712,18 +5713,18 @@ class AppTest(unittest.TestCase):
             ('t5', {'status': 'confirmed', 'detail': True, 'parking': True,
                     'when': dict(day(2026, 11, 28), hour=10, min=0), 'items': [prop]},
              ['- 방문 일시 : 2026년 11월 28일 토요일 10:00',
-              '- 매물 : 마포래미안푸르지오 404동 1903호 / 매매 24억 7천만',
+              '- 마포래미안푸르지오 404동 1903호 / 매매 24억 7천만',
               '주차가 필요하시면 미리 말씀해 주시기 바랍니다.', '약속된 일정에 뵙겠습니다.'], ['(방문 일시)', '(가격)']),
             ('t5', {'status': 'confirmed', 'detail': False, 'parking': False, 'when': dict(day(2026, 11, 28))},
-             ['약속된 일정에 뵙겠습니다.'], ['- 매물 :', '주차가 필요하시면']),
+             ['약속된 일정에 뵙겠습니다.'], ['- 마포래미안푸르지오', '주차가 필요하시면']),
             ('t5', {'status': 'pending', 'items': [rent_prop]},
              ['아래 매물의 집보기 일정을 현재 조율 중입니다.',
-              '- 매물 : 마포래미안푸르지오 208동 1203호 / 전세 11억 5천만'], ['(매물)']),
+              '- 마포래미안푸르지오 208동 1203호 / 전세 11억 5천만'], ['(매물)', '- 매물 :']),
             ('t6', {}, ['🚘 주차 장소 안내드립니다.', '- 주차 장소 : 아현장로교회',
                         '- 주소 : 서울 마포구 마포대로 197-1', S], []),
             ('t7', {'items': [prop, rent_prop]},
-             ['- 매물 : 마포래미안푸르지오 404동 1903호 / 매매 24억 7천만',
-              '- 매물 : 마포래미안푸르지오 208동 1203호 / 전세 11억 5천만', S], ['(가격)']),
+             ['- 마포래미안푸르지오 404동 1903호 / 매매 24억 7천만',
+              '- 마포래미안푸르지오 208동 1203호 / 전세 11억 5천만', S], ['(가격)', '- 매물 :']),
             ('t8', {'trade': '매매', 'kind': '가계약', 'price': '247000',
                     'address': '서울시 마포구 아현동 777 외 3필지',
                     'account': '국민 123456-01-234567 홍길동', 'prop': prop,
@@ -6187,6 +6188,68 @@ class AppTest(unittest.TestCase):
         page.wait_for_timeout(250)
         self.assertEqual(page.input_value('#fields [data-field="address"]'), '서울시 마포구 아현동 777 외 3필지')
         ctx.close()
+
+    # ============================================================== v1.4.6 — 매물 줄 표기
+    def test_v146_no_property_label_anywhere(self):
+        # `- 매물 : ` 접두어를 전 템플릿에서 없앴다 (🔑 매물 : 같은 이모지 라벨은 그대로)
+        prop = {'complex': '마포래미안푸르지오', 'dong': '404', 'ho': '1903',
+                'trade': '매매', 'amount': '247000', 'deposit': '', 'rent': '', 'price': ''}
+        when = {'date': '2026-11-28', 'hour': 11, 'min': 0}
+        bad = self.js("""a => {
+            const props = a[0], when = a[1];
+            const T = window.SMSTemplates;
+            const ctx = { office: '마래푸중앙부동산', phones: '010-4585-7365 / 02-312-7365',
+                feeAccount: '우리은행 1002-762-106047 황호선', amountMode: 'won_eokman',
+                contacts: T.defaultContacts() };
+            const out = [];
+            const cases = [];
+            T.TEMPLATES.forEach(t => {
+                ['default', 'filled'].forEach(kind => cases.push([t, kind, {}]));
+            });
+            // 갈래가 있는 문자는 한 번씩 더 돌린다
+            [['t5', { status: 'pending' }], ['t5', { status: 'confirmed', detail: true }],
+             ['t3', { view: 'simple' }], ['t3', { view: 'detail', times: '11월 28일 (토) 10:00' }],
+             ['t19', { emphasis: '급매' }], ['t7', {}]].forEach(([tid, patch]) => {
+                const t = T.TEMPLATES.find(x => x.id === tid);
+                cases.push([t, 'branch', patch]);
+            });
+            cases.forEach(([t, kind, patch]) => {
+                const d = Object.assign(T.defaultData(t), kind === 'default' ? {} : {
+                    prop: props, items: [props, props], when: when, times: '11월 28일 (토) 10:00'
+                }, patch);
+                const body = t.build(d, ctx);
+                if (body.indexOf('- 매물 : ') !== -1) out.push(t.id + '/' + kind + '/' + JSON.stringify(patch));
+            });
+            return out;
+        }""", [prop, when])
+        self.assertEqual(bad, [], '`- 매물 : ` 접두어가 남아 있다')
+        # 특가 매물 홍보의 🔑 매물 : 은 문맥상 필요한 라벨이라 남긴다
+        self.assertIn('🔑 매물 : 마포래미안푸르지오 404동 1903호', self.build_body('t19', {'items': [prop]}))
+
+    def test_v146_reservation_confirmed_multiple_props_one_per_line(self):
+        # 예약 확정 — 매물을 여러 건 넣으면 조율 중과 똑같이 한 줄에 하나씩 `- ` 로 나온다
+        prop1 = {'complex': '마포그랑자이', 'dong': '111', 'ho': '19', 'trade': '매매',
+                 'amount': '230000', 'deposit': '', 'rent': '', 'price': ''}
+        prop2 = {'complex': '마포그랑자이', 'dong': '110', 'ho': '1302', 'trade': '매매',
+                 'amount': '230000', 'deposit': '', 'rent': '', 'price': ''}
+        when = {'date': '2026-11-28', 'hour': 11, 'min': 0}
+        confirmed = self.build_body('t5', {'status': 'confirmed', 'detail': True, 'parking': False,
+                                           'when': when, 'items': [prop1, prop2]})
+        self.assertIn('- 방문 일시 : 2026년 11월 28일 토요일 11:00\n'
+                      '- 마포그랑자이 111동 19호 / 매매 23억\n'
+                      '- 마포그랑자이 110동 1302호 / 매매 23억', confirmed)
+        self.assertNotIn(' · ', confirmed, '매물을 ` · `로 한 줄에 붙이지 않는다')
+        self.assertNotIn('- 매물 :', confirmed)
+        # 조율 중도 같은 모양 — 매물 한 건당 한 줄
+        pending = self.build_body('t5', {'status': 'pending', 'items': [prop1, prop2]})
+        self.assertIn('- 마포그랑자이 111동 19호 / 매매 23억\n- 마포그랑자이 110동 1302호 / 매매 23억', pending)
+        self.assertNotIn('- 매물 :', pending)
+        # 화면에서도 같다 — 미리보기에도 `- 매물 :` 없이 한 줄에 한 건
+        self.pick_with('t5', {'status': 'confirmed', 'detail': True, 'items': [prop1, prop2]})
+        body = self.text()
+        self.assertIn('- 마포그랑자이 111동 19호 / 매매 23억\n- 마포그랑자이 110동 1302호 / 매매 23억', body)
+        self.assertNotIn('- 매물 :', body)
+        self.assertNotIn(' · ', body)
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
