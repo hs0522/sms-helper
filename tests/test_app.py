@@ -2158,6 +2158,51 @@ class AppTest(unittest.TestCase):
         from urllib.parse import unquote
         self.assertEqual(unquote(url[len('sms:&body='):]), '안녕 😊')
 
+    # ---------------------------------------------------------------- v1.4.5
+    def test_v145_sms_url_never_puts_plus_for_space(self):
+        # 문자 앱이 공백을 '+'로 보여 주던 버그 — 띄어쓰기는 %20, 진짜 '+'는 %2B
+        text = '안녕하세요, 마래푸중앙부동산입니다. 😊\n010-4585-7365 / 02-312-7365'
+        url = self.js("t => SMSUI.smsUrl(t)", text)
+        from urllib.parse import unquote
+        body = url[url.index('body=') + 5:]
+        self.assertIn('%20', body, '공백은 %20으로 인코딩돼야 한다')
+        self.assertNotIn('+', body, "본문에 '+'가 남으면 문자 앱에 +가 그대로 보인다")
+        self.assertEqual(unquote(body), text)
+        plus = self.js("() => SMSUI.smsUrl('A+B')")
+        self.assertIn('A%2BB', plus, "진짜 '+' 기호는 %2B로 살아 있어야 한다")
+        self.assertNotIn('A+B', plus)
+
+    def test_v145_sms_url_android_uses_question_form(self):
+        # 안드로이드(웹)는 sms:?body=, 아이폰은 sms:&body= 형태를 읽는다
+        ctx = self.browser.new_context(
+            viewport={'width': 390, 'height': 844},
+            user_agent=('Mozilla/5.0 (Linux; Android 14; SM-S918N) AppleWebKit/537.36 '
+                        '(KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36'),
+        )
+        page = ctx.new_page()
+        page.goto(BASE, wait_until='networkidle')
+        page.wait_for_timeout(200)
+        url = page.evaluate("() => SMSUI.smsUrl('안녕하세요, 마래푸중앙부동산입니다.')")
+        ctx.close()
+        self.assertTrue(url.startswith('sms:?body='), url)
+        self.assertIn('%20', url)
+        self.assertNotIn('+', url[url.index('body=') + 5:])
+
+    def test_v145_android_sms_intent_never_uses_urlencoder(self):
+        # 안드로이드 앱 껍데기는 공백을 URLEncoder(+로 바뀜)로 인코딩하지 않는다
+        path = os.path.join(
+            ROOT, 'android/app/src/main/java/com/maraepu/smshelper/MainActivity.java')
+        with open(path, encoding='utf-8') as f:
+            src = f.read()
+        self.assertNotIn('URLEncoder.encode', src, 'URLEncoder.encode는 공백을 +로 바꾼다 — 쓰면 안 된다')
+        self.assertNotIn('import java.net', src)
+        self.assertIn('Uri.encode(text)', src)
+        self.assertIn('putExtra("sms_body"', src)
+        # 웹 링크 통로와 앱 통로가 같은 헬퍼 하나를 쓴다 (정의 1 + 호출 2)
+        self.assertEqual(len(re.findall(r'openSmsApp\(', src)), 3)
+        self.assertIn('openSmsApp(smsBodyOf(uri))', src)
+        self.assertIn('openSmsApp(text);', src)
+
     def test_favorite_pinning(self):
         self.pick('t1')
         star = self.page.query_selector('#tpl-list [data-star="t1"]')
@@ -4715,25 +4760,25 @@ class AppTest(unittest.TestCase):
 
     # ============================================================== 버전 · 배포 파일
 
-    def test_24_version_bumped_to_1_4_4(self):
+    def test_24_version_bumped_to_1_4_5(self):
         # 서비스 워커 · 화면 캐시 주소 · 안드로이드 빌드 번호가 모두 같은 버전을 가리킨다
         with open(os.path.join(ROOT, 'sw.js'), encoding='utf-8') as f:
             sw = f.read()
         m = re.search(r"var VERSION = '(v\d+\.\d+\.\d+)';", sw)
         self.assertIsNotNone(m, 'sw.js에 VERSION이 있다')
         ver = m.group(1)
-        self.assertEqual(ver, 'v1.4.4')
+        self.assertEqual(ver, 'v1.4.5')
         self.assertIn("'js/sync.js'", sw)
         # 새 파일(동호수 타입표)도 오프라인 캐시에 들어간다
         self.assertIn("'js/maraepu-types.js'", sw)
         with open(os.path.join(ROOT, 'index.html'), encoding='utf-8') as f:
             html = f.read()
         for f_ in ('icons', 'maraepu-types', 'core', 'templates', 'sync', 'app'):
-            self.assertIn(f'js/{f_}.js?v=1.4.4', html)
-        self.assertIn('styles.css?v=1.4.4', html)
+            self.assertIn(f'js/{f_}.js?v=1.4.5', html)
+        self.assertIn('styles.css?v=1.4.5', html)
         gradle = open(os.path.join(ROOT, 'android/app/build.gradle'), encoding='utf-8').read()
-        self.assertIn('versionCode 19', gradle)
-        self.assertIn("versionName '1.4.4'", gradle)
+        self.assertIn('versionCode 20', gradle)
+        self.assertIn("versionName '1.4.5'", gradle)
 
     def test_t8_deal_combos_and_labels(self):
         # 계약 조건 안내 — [매매][전세][월세] | [가계약][계약], 다섯 버튼이 한 줄·같은 크기

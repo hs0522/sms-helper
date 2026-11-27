@@ -2534,7 +2534,12 @@
   }
 
   // 아이폰·안드로이드 모두 '문자 앱'에 완성 문자가 채워진 채로 열린다
-  function smsUrl(text) { return 'sms:&body=' + encodeURIComponent(text); }
+  // 공백은 encodeURIComponent가 %20으로 넣는다 — '+'로 바꾸면 문자 앱이 '+'를 그대로 보여 준다
+  // 아이폰은 sms:&body=, 안드로이드(웹)는 sms:?body= 형태를 읽는다
+  function smsUrl(text) {
+    var body = encodeURIComponent(text);
+    return /Android/i.test(navigator.userAgent) ? 'sms:?body=' + body : 'sms:&body=' + body;
+  }
 
   function openSms() {
     var text = $('#preview').value;

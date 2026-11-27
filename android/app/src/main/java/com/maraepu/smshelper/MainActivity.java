@@ -19,8 +19,6 @@ import android.widget.Toast;
 
 import androidx.webkit.WebViewAssetLoader;
 
-import java.net.URLEncoder;
-
 /**
  * 마래푸중앙부동산 문자 도우미 — 안드로이드 껍데기(WebView 래퍼).
  * 앱 안에 들어 있는 웹 파일을 https://appassets.androidplatform.net 으로 열어
@@ -96,7 +94,7 @@ public class MainActivity extends Activity {
         String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase();
 
         if ("sms".equals(scheme) || "smsto".equals(scheme) || "mms".equals(scheme)) {
-            openSms(uri);
+            openSmsApp(smsBodyOf(uri));
             return true;
         }
         if ("tel".equals(scheme)) {
@@ -131,34 +129,48 @@ public class MainActivity extends Activity {
 
     /**
      * 웹 쪽은 아이폰용 "sms:&body=..." 형태를 쓴다. 안드로이드는 이 형태를 모르는 앱이 많아
-     * 본문을 뽑아 "sms:?body=..." 로 바꿔 기본 문자 앱에 넘긴다.
+     * 본문만 뽑아 공통 헬퍼(openSmsApp)로 넘긴다.
      */
-    private void openSms(Uri uri) {
+    private String smsBodyOf(Uri uri) {
         String s = uri.toString();
-        String body = null;
         int i = s.indexOf("body=");
-        if (i >= 0) {
-            body = Uri.decode(s.substring(i + 5));
-        }
-        Uri target;
-        if (body != null && body.length() > 0) {
-            target = Uri.parse("sms:?body=" + URLEncoder.encode(body));
-        } else {
-            target = Uri.parse("sms:");
-        }
-        Intent intent = new Intent(Intent.ACTION_VIEW, target);
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        if (i < 0) return "";
+        return Uri.decode(s.substring(i + 5));
+    }
+
+    /**
+     * 문자 앱 열기 — 웹 링크(handleUrl)와 앱 통로(SmsBridge)가 모두 이 헬퍼 하나를 쓴다.
+     *
+     * 공백은 반드시 %20 으로 넣는다. java.net.URLEncoder 는 공백을 '+' 로 바꾸는데,
+     * 구글 메시지·삼성 메시지는 URI 안의 '+' 를 공백으로 풀어 주지 않아서
+     * "안녕하세요,+마래푸중앙부동산입니다." 처럼 '+' 가 그대로 보였다. (v1.4.5)
+     * Uri.encode 는 공백을 %20, 실제 '+' 기호는 %2B, 줄바꿈은 %0A, 이모지는 UTF-8 로 넣는다.
+     */
+    private void openSmsApp(String body) {
+        final String text = body == null ? "" : body;
+
+        // ① sms:?body= — 본문이 채워진 채로 문자 앱이 열린다
+        Uri target = text.length() > 0
+                ? Uri.parse("sms:?body=" + Uri.encode(text))
+                : Uri.parse("sms:");
+        Intent view = new Intent(Intent.ACTION_VIEW, target);
+        view.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         try {
-            startActivity(intent);
+            startActivity(view);
+            return;
         } catch (Exception e1) {
             // 일부 기기는 sms:?body= 를 받지 않는다 — 받는 사람 없이 본문만 넘기는 방식으로 한 번 더
-            try {
-                Intent alt = new Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:"));
-                if (body != null) alt.putExtra("sms_body", body);
-                startActivity(alt);
-            } catch (Exception e2) {
-                toast("문자 앱을 열 수 없어요. 본문을 복사해 붙여넣어 주세요.");
-            }
+        }
+
+        // ② smsto: + sms_body — 안드로이드 문서가 권하는 표준 방식
+        Intent sendTo = new Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:"));
+        if (text.length() > 0) sendTo.putExtra("sms_body", text);
+        sendTo.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            startActivity(sendTo);
+        } catch (Exception e2) {
+            copyToClipboard(text);
+            toast("문자 앱을 열 수 없어요. 본문을 복사해 두었으니 붙여넣어 주세요.");
         }
     }
 
@@ -166,16 +178,20 @@ public class MainActivity extends Activity {
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
     }
 
+    private void copyToClipboard(String text) {
+        try {
+            ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+            if (cm != null) {
+                cm.setPrimaryClip(ClipData.newPlainText("문자", text));
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
     public class CopyBridge {
         @JavascriptInterface
         public void copy(String text) {
-            try {
-                ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-                if (cm != null) {
-                    cm.setPrimaryClip(ClipData.newPlainText("문자", text));
-                }
-            } catch (Exception ignored) {
-            }
+            copyToClipboard(text);
         }
     }
 
@@ -186,18 +202,7 @@ public class MainActivity extends Activity {
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-                    Uri target = Uri.parse("sms:?body=" + URLEncoder.encode(text == null ? "" : text));
-                    try {
-                        startActivity(new Intent(Intent.ACTION_VIEW, target));
-                    } catch (Exception e1) {
-                        try {
-                            Intent alt = new Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:"));
-                            alt.putExtra("sms_body", text);
-                            startActivity(alt);
-                        } catch (Exception e2) {
-                            toast("문자 앱을 열 수 없어요. 본문을 복사해 붙여넣어 주세요.");
-                        }
-                    }
+                    openSmsApp(text);
                 }
             });
         }
