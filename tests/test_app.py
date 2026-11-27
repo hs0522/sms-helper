@@ -2644,29 +2644,62 @@ class AppTest(unittest.TestCase):
                 self.assertTrue(overflow, f'{tid} PC 가로 넘침')
 
     def test_pc_compact_widget_layout(self):
-        # 1440 넓이에서도 컴팩트 위젯 크기(최대 1040 × 700)로 가운데에 놓인다
+        # 1440 모니터에서 사방에 빈 여백만 남지 않도록 최대 1400 × 880으로 넓게 채운다 (v1.4.7)
         info = self.js("""() => {
           const l = document.querySelector('.layout').getBoundingClientRect();
           const panels = [...document.querySelectorAll('.panel')].map(e => {
             const r = e.getBoundingClientRect();
             return { w: r.width, h: r.height, top: r.top, bottom: r.bottom, right: r.right };
           });
+          const brand = document.querySelector('.brand').getBoundingClientRect();
+          const first = document.querySelector('.panel').getBoundingClientRect();
+          const last = document.querySelectorAll('.panel')[document.querySelectorAll('.panel').length - 1].getBoundingClientRect();
           return { w: l.width, h: l.height, left: l.left, right: l.right, panels,
+                   brandLeft: brand.left, panelLeft: first.left, panelRight: last.right,
                    winW: window.innerWidth, winH: window.innerHeight,
                    docW: document.documentElement.scrollWidth,
                    docH: document.documentElement.scrollHeight };
         }""")
-        self.assertLessEqual(info['w'], 1040.5, 'PC 컨테이너가 1040px를 넘으면 안 된다')
-        self.assertGreaterEqual(info['w'], 860, '너무 좁아 내용이 눌리면 안 된다')
-        self.assertLessEqual(info['h'], 700.5, '패널 높이가 700px를 넘으면 안 된다')
-        self.assertGreaterEqual(info['h'], 640, '패널 높이가 640px 아래로 내려가면 안 된다')
+        self.assertLessEqual(info['w'], 1400.5, 'PC 컨테이너가 1400px를 넘으면 안 된다')
+        self.assertGreaterEqual(info['w'], 1200, '1440 화면에서는 넓게 채워야 한다')
+        self.assertLessEqual(info['h'], 880.5, '패널 높이가 880px를 넘으면 안 된다')
+        self.assertGreaterEqual(info['h'], 780, '패널 높이가 780px 아래로 내려가면 안 된다')
         self.assertAlmostEqual(info['left'], info['winW'] - info['right'], delta=2, msg='가운데 정렬')
+        # 상단 바의 좌우 끝선이 3단 패널의 끝선과 같다
+        self.assertAlmostEqual(info['brandLeft'], info['panelLeft'], delta=1.5, msg='상단 바와 패널 왼쪽 끝선이 다르다')
+        self.assertAlmostEqual(info['panelRight'], info['winW'] - info['brandLeft'], delta=1.5, msg='상단 바와 패널 오른쪽 끝선이 다르다')
         for p in info['panels']:
             self.assertLessEqual(p['bottom'], info['winH'] + 0.5, '패널이 화면 아래로 잘린다')
             self.assertLessEqual(p['right'], info['winW'] + 0.5)
-            self.assertGreater(p['h'], 560)
+            self.assertGreater(p['h'], 700)
         self.assertLessEqual(info['docW'], info['winW'])
         self.assertLessEqual(info['docH'], info['winH'])
+
+    def test_pc_paytable_head_single_row(self):
+        # 지급 일정 머리글 — '구분'과 '일정 · 금액'이 나란히 한 줄 (예전에는 '구분' 자리가 86px 빈 공간)
+        self.pick('t8')
+        self.wait(200)
+        info = self.js("""() => {
+          const head = document.querySelector('#fields .paytable-head');
+          const cs = getComputedStyle(head);
+          const b = e => { const r = e.getBoundingClientRect();
+            return {l:+r.left.toFixed(1), r:+r.right.toFixed(1), t:+r.top.toFixed(1), b:+r.bottom.toFixed(1),
+                    w:+r.width.toFixed(1), h:+r.height.toFixed(1)}; };
+          const hb = b(head);
+          const name = b(head.querySelector('.head-name'));
+          const right = b(head.querySelector('.head-right'));
+          const row = b(document.querySelector('#fields .pay-row'));
+          return { dir: cs.flexDirection, head: hb, name: name, right: right, rowTop: row.t,
+                   texts: [...head.querySelectorAll('span')].map(s => s.textContent) };
+        }""")
+        self.assertEqual(info['texts'], ['구분', '일정 · 금액'])
+        self.assertEqual(info['dir'], 'row', '머리글 flex 방향이 가로가 아니다')
+        self.assertLess(info['head']['h'], 26, f"머리글 높이가 커졌다 {info['head']}")
+        self.assertLess(info['name']['h'], 24, f"'구분' 칸 높이가 글자 한 줄을 넘는다 {info['name']}")
+        self.assertGreater(info['name']['w'], 50, "'구분' 칸이 사라졌다")
+        self.assertLessEqual(info['name']['r'], info['right']['l'] + 0.5, "'일정 · 금액'이 '구분' 오른쪽에 있지 않다")
+        self.assertAlmostEqual(info['name']['t'], info['right']['t'], delta=2, msg='두 머리글이 같은 줄이 아니다')
+        self.assertGreater(info['rowTop'], info['head']['b'] - 0.5, '첫 항목 줄이 머리글 아래로 내려오지 않았다')
 
     def test_compact_layout_fits_small_desktop_window(self):
         # 1000×720 같은 작은 창에서도 빈 여백 없이 딱 맞고 잘리지 않는다
@@ -3246,56 +3279,249 @@ class AppTest(unittest.TestCase):
         self.assertEqual(page.evaluate("() => JSON.parse(localStorage.getItem('smshelper.v1')).contactsSeed"), 'v1.4.3')
         ctx.close()
 
-    def test_vendor_contact_list_scrolls_at_three_items(self):
-        # 보낼 상담사 목록은 3개 높이에서 단독으로 스크롤된다
+    def test_vendor_contact_list_three_on_phone_more_on_pc(self):
+        # 폰은 지금처럼 3개 높이만, PC는 목록 버튼 없이 6~8줄이 시원하게 보인다 (v1.4.7)
         self.pick('t20')
         self.page.click('#fields [data-seg="vendorCat"][data-value="법무사"]')
         self.wait(150)
-        for i in range(4):
+        for i in range(8):
             self.page.fill('#fields [data-contact-new="name"]', '상담사%d' % (i + 1))
             self.page.fill('#fields [data-contact-new="phone"]', '010-1234-567%d' % i)
             self.page.click('#fields [data-contact-add]')
             self.wait(140)
-        info = self.js("""() => {
+        pc = self.js("""() => {
           const l = document.querySelector('#fields .contact-list');
-          const items = [...l.querySelectorAll('.contact')].map(e => e.getBoundingClientRect().height);
+          const items = [...l.querySelectorAll('.contact')];
+          const h = items[0].getBoundingClientRect().height;
+          const gap = parseFloat(getComputedStyle(l).rowGap || 6) || 6;
           const lb = l.getBoundingClientRect();
-          const last = l.querySelectorAll('.contact')[3].getBoundingClientRect();
-          return { count: items.length, itemH: items[0], client: l.clientHeight, scroll: l.scrollHeight,
-                   overflow: getComputedStyle(l).overflowY,
-                   lastBelow: last.bottom > lb.bottom - 1, scrollTop: l.scrollTop };
+          const visible = items.filter(e => { const r = e.getBoundingClientRect();
+            return r.top >= lb.top - 1 && r.bottom <= lb.bottom + 1; }).length;
+          return { count: items.length, itemH: h, gap: gap, client: l.clientHeight, scroll: l.scrollHeight,
+                   visible: visible, overflow: getComputedStyle(l).overflowY };
+        }""")
+        self.assertEqual(pc['count'], 10, '기본 1 + 추가 8 + 새 업체 한 줄')
+        self.assertEqual(pc['overflow'], 'auto')
+        self.assertGreaterEqual(pc['visible'], 6, f"PC에서는 6줄 이상 보여야 한다 {pc}")
+        self.assertLessEqual(pc['visible'], 10, f"PC에서 너무 많이 보인다 {pc}")
+        self.assertGreater(pc['client'], 300, f"PC에서는 3줄 높이(152)에 갈히지 않는다 {pc}")
+        self.assertGreater(pc['scroll'], pc['client'] + 20, '업체가 10개면 넘쳐야 한다')
+        # PC에서는 목록 버튼 대신 각 줄의 ★로 바로 즐겨찾기를 켜고 끈다
+        self.assertTrue(self.page.query_selector('#btn-vendor-list').is_hidden(), 'PC에는 목록 버튼이 없다')
+        stars = self.page.query_selector_all('#fields .contact-fav')
+        self.assertEqual(len(stars), 9, 'PC 폼의 모든 업체 줄에 ★가 있다')
+        self.assertTrue(self.js("() => [...document.querySelectorAll('#fields .contact-fav')]"
+                                ".every(s => s.offsetParent !== null && s.getBoundingClientRect().width > 10)"),
+                        'PC 폼의 ★가 보이지 않는다')
+
+        # ★를 누르면 그 업체가 ★ 무리로 올라가고, 보던 스크롤 자리는 그대로
+        self.page.evaluate("() => { document.querySelector('#fields .contact-list').scrollTop = 90; }")
+        self.wait(80)
+        before_top = self.js("() => document.querySelector('#fields .contact-list').scrollTop")
+        self.assertGreater(before_top, 0)
+        picked = self.js("""() => {
+          const row = [...document.querySelectorAll('#fields .contact:not(.is-new)')]
+            .find(c => !c.querySelector('.contact-fav').classList.contains('is-on'));
+          return row ? row.querySelector('.contact-inp').value : null;
+        }""")
+        self.assertTrue(picked, '★ 안 된 업체가 있어야 한다')
+        self.page.evaluate("""() => {
+          const row = [...document.querySelectorAll('#fields .contact:not(.is-new)')]
+            .find(c => !c.querySelector('.contact-fav').classList.contains('is-on'));
+          row.querySelector('.contact-fav').click();
+        }""")
+        self.wait(250)
+        after = self.js("""() => {
+          const l = document.querySelector('#fields .contact-list');
+          const rows = [...l.querySelectorAll('.contact:not(.is-new)')];
+          const favs = rows.map(c => c.querySelector('.contact-fav').classList.contains('is-on'));
+          return { names: rows.map(c => c.querySelector('.contact-inp').value), favs: favs,
+                   favCount: favs.filter(Boolean).length, scrollTop: l.scrollTop };
+        }""")
+        self.assertEqual(after['names'].index(picked), 0, '★한 업체가 맨 위로')
+        self.assertEqual(after['favs'], [True] * after['favCount'] + [False] * (len(after['favs']) - after['favCount']),
+                         '★한 업체가 ★ 무리에 모여 있다')
+        self.assertAlmostEqual(after['scrollTop'], before_top, delta=1, msg='★를 누르면 스크롤이 맨 위로 튄다')
+
+        # 폰은 그대로 3개 높이 + 목록 창으로
+        ctx = self.browser.new_context(viewport={'width': 390, 'height': 844}, is_mobile=True, has_touch=True)
+        page = ctx.new_page()
+        errors = []
+        page.on('pageerror', lambda e: errors.append(str(e)))
+        page.goto(BASE, wait_until='networkidle')
+        page.evaluate('localStorage.clear()')
+        page.reload(wait_until='networkidle')
+        page.wait_for_timeout(200)
+        page.click('#btn-sheet')
+        page.wait_for_timeout(150)
+        page.click('#sheet-list [data-id="t20"]')
+        page.wait_for_timeout(220)
+        page.click('#fields [data-seg="vendorCat"][data-value="법무사"]')
+        page.wait_for_timeout(150)
+        for i in range(4):
+            page.fill('#fields [data-contact-new="name"]', '상담사%d' % (i + 1))
+            page.fill('#fields [data-contact-new="phone"]', '010-1234-567%d' % i)
+            page.click('#fields [data-contact-add]')
+            page.wait_for_timeout(140)
+        info = page.evaluate("""() => {
+          const l = document.querySelector('#fields .contact-list');
+          const items = [...l.querySelectorAll('.contact')];
+          const hs = items.map(e => e.getBoundingClientRect().height);
+          const lb = l.getBoundingClientRect();
+          const last = items[3].getBoundingClientRect();
+          return { count: items.length, itemH: hs[0], client: l.clientHeight, scroll: l.scrollHeight,
+                   overflow: getComputedStyle(l).overflowY, lastBelow: last.bottom > lb.bottom - 1,
+                   thirdSeen: items[2].getBoundingClientRect().top < lb.bottom - 1,
+                   visible: items.filter(e => { const r = e.getBoundingClientRect();
+                     return r.top >= lb.top - 1 && r.bottom <= lb.bottom + 1; }).length };
         }""")
         self.assertEqual(info['count'], 6, '기본 1 + 추가 4 + 새 업체 한 줄')
         self.assertEqual(info['overflow'], 'auto')
         self.assertGreater(info['scroll'], info['client'] + 20, '업체가 4개면 넘쳐야 한다')
-        three = info['itemH'] * 3 + 12  # 항목 3개 + 간격 2번
-        self.assertGreaterEqual(info['client'], three - 2, '3개는 보여야 한다')
-        self.assertLessEqual(info['client'], three + 3, '3개보다 많이 보이면 안 된다')
-        self.assertTrue(info['lastBelow'], '4번째는 목록 밖으로 나가 있어야 한다')
-        # 목록 안에서만 스크롤되고 페이지는 움직이지 않는다
-        head_top = self.js("() => document.querySelector('#form-title').getBoundingClientRect().top")
-        self.page.mouse.move(*self._center('#fields .contact-list'))
-        self.page.mouse.wheel(0, 240)
-        self.wait(200)
-        after = self.js("""() => {
-          const l = document.querySelector('#fields .contact-list');
-          const c = l.querySelectorAll('.contact')[3];
-          const lb = l.getBoundingClientRect(), cb = c.getBoundingClientRect();
-          return { scrollTop: l.scrollTop, inView: cb.top >= lb.top - 1 && cb.bottom <= lb.bottom + 1,
-                   headTop: document.querySelector('#form-title').getBoundingClientRect().top };
-        }""")
-        self.assertGreater(after['scrollTop'], 0, '목록이 스크롤돼야 한다')
-        self.assertTrue(after['inView'], '스크롤하면 4번째가 보여야 한다')
-        self.assertAlmostEqual(after['headTop'], head_top, delta=1)
-        # 스크롤한 목록 안에서 체크를 눌러 뺄 수 있다 (4번째 상담사)
-        self.page.locator('#fields .contact-list .contact').nth(3).locator('.contact-check').click()
-        self.wait(200)
-        self.assertNotIn('상담사4', self.text())
-        self.assertIn('상담사1', self.text())
+        self.assertLessEqual(info['client'], 153, '폰은 지금처럼 3줄 높이(152px) 그대로')
+        self.assertTrue(info['thirdSeen'], '3번째 업체는 보여야 한다')
+        self.assertLessEqual(info['visible'], 3, '폰에서는 3개보다 많이 보이면 안 된다')
+        self.assertGreater(info['scroll'], info['client'] + 40, '목록 안에서만 넘친다')
+        # 폰에서는 목록 버튼이 보이고, 여전히 목록 창으로 연다
+        self.assertFalse(page.query_selector('#btn-vendor-list').is_hidden(), '폰에는 목록 버튼이 있다')
+        self.assertTrue(page.query_selector('#fields .contact-fav').is_hidden(), '폰 폼에는 ★가 없다')
+        self.assertEqual(errors, [])
+        ctx.close()
 
     def _center(self, sel):
         box = self.page.query_selector(sel).bounding_box()
         return (box['x'] + box['width'] / 2, box['y'] + box['height'] / 2)
+
+    def test_vendor_modal_star_sort_and_scroll_kept(self):
+        # 폰 목록 창 — ★한 업체가 맨 위로 오고, ★·삭제 뒤에도 보던 스크롤 자리가 그대로 (v1.4.7)
+        ctx = self.browser.new_context(viewport={'width': 390, 'height': 844}, is_mobile=True, has_touch=True)
+        page = ctx.new_page()
+        errors = []
+        page.on('pageerror', lambda e: errors.append(str(e)))
+        page.goto(BASE, wait_until='networkidle')
+        page.evaluate('localStorage.clear()')
+        page.reload(wait_until='networkidle')
+        page.wait_for_timeout(200)
+        page.click('#btn-sheet')
+        page.wait_for_timeout(150)
+        page.click('#sheet-list [data-id="t20"]')
+        page.wait_for_timeout(220)
+        page.click('#fields [data-seg="vendorCat"][data-value="법무사"]')
+        page.wait_for_timeout(150)
+        for i in range(8):
+            page.fill('#fields [data-contact-new="name"]', '업체%d' % (i + 1))
+            page.fill('#fields [data-contact-new="phone"]', '010-2222-33%02d' % i)
+            page.click('#fields [data-contact-add]')
+            page.wait_for_timeout(130)
+        page.click('#btn-vendor-list')
+        page.wait_for_timeout(250)
+        # 새로 추가한 업체는 ★ 켜진 채라 이미 위로 정렬 — 기본 업체 하나에 ★를 켜 본다
+        info = page.evaluate("""() => {
+          const l = document.querySelector('#vendor-list-body .contact-list');
+          const rows = [...l.querySelectorAll('.contact:not(.is-new)')];
+          return { scroll: l.scrollHeight, client: l.clientHeight, top: l.scrollTop,
+                   names: rows.map(c => c.querySelector('.contact-inp').value),
+                   favs: rows.map(c => c.querySelector('.contact-star').classList.contains('is-on')) };
+        }""")
+        self.assertGreater(info['scroll'], info['client'] + 20, '목록 창이 넘쳐야 한다')
+        self.assertEqual(info['favs'][:6], [True] * 6, '★한 업체가 먼저 보인다')
+        self.assertEqual(info['names'].index('업체8'), 7, '★끼리는 저장 순서 그대로')
+        # 중간으로 스크롤해서 기본 업체에 ★를 켜면 그 업체가 맨 위로, 스크롤은 그 자리에
+        page.evaluate("() => { document.querySelector('#vendor-list-body .contact-list').scrollTop = 140; }")
+        page.wait_for_timeout(100)
+        before = page.evaluate("() => document.querySelector('#vendor-list-body .contact-list').scrollTop")
+        self.assertGreater(before, 0)
+        page.evaluate("""() => {
+          const rows = [...document.querySelectorAll('#vendor-list-body .contact:not(.is-new)')];
+          const row = rows.find(c => !c.querySelector('.contact-star').classList.contains('is-on'));
+          window.__pickedFav = row.querySelector('.contact-inp').value;
+          row.querySelector('.contact-star').click();
+        }""")
+        page.wait_for_timeout(300)
+        after = page.evaluate("""() => {
+          const l = document.querySelector('#vendor-list-body .contact-list');
+          const rows = [...l.querySelectorAll('.contact:not(.is-new)')];
+          const names = rows.map(c => c.querySelector('.contact-inp').value);
+          const favs = rows.map(c => c.querySelector('.contact-star').classList.contains('is-on'));
+          return { scrollTop: l.scrollTop, index: names.indexOf(window.__pickedFav),
+                   favCount: favs.filter(Boolean).length,
+                   grouped: favs.every((f, i) => f === (i < favs.filter(Boolean).length)) };
+        }""")
+        self.assertLess(after['index'], after['favCount'], '★한 업체가 ★ 무리에 모인다')
+        self.assertTrue(after['grouped'], '★한 업체가 위로 모여 있어야 한다')
+        self.assertEqual(after['favCount'], 9)
+        self.assertAlmostEqual(after['scrollTop'], before, delta=1, msg='★ 토글 뒤 스크롤이 맨 위로 튄다')
+        # 지워도 스크롤은 그 자리에
+        page.evaluate("() => { document.querySelector('#vendor-list-body .contact-list').scrollTop = 120; }")
+        page.wait_for_timeout(100)
+        before_del = page.evaluate("() => document.querySelector('#vendor-list-body .contact-list').scrollTop")
+        page.evaluate("""() => {
+          const rows = [...document.querySelectorAll('#vendor-list-body .contact:not(.is-new)')];
+          rows[rows.length - 2].querySelector('[data-vl-del]').click();
+        }""")
+        page.wait_for_timeout(350)
+        self.assertAlmostEqual(
+            page.evaluate("() => document.querySelector('#vendor-list-body .contact-list').scrollTop"),
+            before_del, delta=2, msg='삭제 뒤 스크롤이 맨 위로 튄다')
+        self.assertEqual(errors, [])
+        ctx.close()
+
+    def test_list_star_keeps_scroll(self):
+        # 전체 문자 목록에서 ★를 눌러도 스크롤이 맨 위로 튄지 않는다 (PC 왼쪽 목록 · 폰 시트)
+        ctx = self.browser.new_context(viewport={'width': 1280, 'height': 620})
+        page = ctx.new_page()
+        errors = []
+        page.on('pageerror', lambda e: errors.append(str(e)))
+        page.goto(BASE, wait_until='networkidle')
+        page.evaluate('localStorage.clear()')
+        page.reload(wait_until='networkidle')
+        page.wait_for_timeout(250)
+        base = page.evaluate("""() => {
+          const l = document.querySelector('#tpl-list');
+          return { scroll: l.scrollHeight, client: l.clientHeight };
+        }""")
+        self.assertGreater(base['scroll'], base['client'] + 30, '목록이 넘쳐야 검사가 의미 있다')
+        page.evaluate("() => { document.querySelector('#tpl-list').scrollTop = 150; }")
+        page.wait_for_timeout(100)
+        before = page.evaluate("() => document.querySelector('#tpl-list').scrollTop")
+        self.assertGreater(before, 0)
+        page.evaluate("() => document.querySelector('#tpl-list [data-star=\"t17\"]').click()")
+        page.wait_for_timeout(300)
+        after = page.evaluate("""() => {
+          const l = document.querySelector('#tpl-list');
+          return { scrollTop: l.scrollTop,
+                   favHeads: [...l.querySelectorAll('.list-head')].map(e => e.textContent),
+                   favFirst: l.querySelector('[data-star="t17"]').classList.contains('is-on') };
+        }""")
+        self.assertTrue(after['favFirst'], '★가 켜져야 한다')
+        self.assertIn('★ 즐겨찾기', after['favHeads'])
+        self.assertAlmostEqual(after['scrollTop'], before, delta=1, msg='PC 목록 ★ 토글에 스크롤이 튄다')
+        ctx.close()
+
+        # 폰 — 목록 시트에서도 같은 방식으로
+        ctx = self.browser.new_context(viewport={'width': 390, 'height': 844}, is_mobile=True, has_touch=True)
+        page = ctx.new_page()
+        page.on('pageerror', lambda e: errors.append(str(e)))
+        page.goto(BASE, wait_until='networkidle')
+        page.evaluate('localStorage.clear()')
+        page.reload(wait_until='networkidle')
+        page.wait_for_timeout(250)
+        page.click('#btn-sheet')
+        page.wait_for_timeout(200)
+        page.evaluate("() => { document.querySelector('#sheet-list').scrollTop = 120; }")
+        page.wait_for_timeout(100)
+        before = page.evaluate("() => document.querySelector('#sheet-list').scrollTop")
+        self.assertGreater(before, 0)
+        page.evaluate("() => document.querySelector('#sheet-list [data-star=\"t15\"]').click()")
+        page.wait_for_timeout(300)
+        after = page.evaluate("""() => ({ scrollTop: document.querySelector('#sheet-list').scrollTop,
+            on: document.querySelector('#sheet-list [data-star="t15"]').classList.contains('is-on'),
+            open: document.querySelector('#sheet').classList.contains('is-open') })""")
+        self.assertTrue(after['on'], '시트에서도 ★가 켜진다')
+        self.assertTrue(after['open'], '시트는 열린 채')
+        self.assertAlmostEqual(after['scrollTop'], before, delta=1, msg='목록 시트 ★ 토글에 스크롤이 튄다')
+        self.assertEqual(errors, [])
+        ctx.close()
 
     def test_t20_contact_requires_name_and_phone(self):
         self.pick('t20')
@@ -4951,56 +5177,84 @@ class AppTest(unittest.TestCase):
 
     # ============================================================== v1.3.0 피드백(9장) 회귀
     def test_t20_vendor_list_button_and_modal(self):
-        # 「목록」은 전문가·협력업체 소개에서만, 비우기 바로 왼쪽에 컴팩트하게 선다
+        # PC에서는 「목록」 버튼 없이 폼에서 다 보고, 폰에서는 비우기 바로 왼쪽 「목록」으로 창을 연다
         self.pick('t2')
         self.assertTrue(self.page.query_selector('#btn-vendor-list').is_hidden(), '다른 문자에는 목록이 없다')
         self.pick('t20')
-        self.assertFalse(self.page.query_selector('#btn-vendor-list').is_hidden(), '전문가·협력업체 소개에는 있다')
-        self.assertEqual(self.page.inner_text('#btn-vendor-list').strip(), '목록', '글자는 「목록」만')
-        gap = self.js("""() => {
+        self.assertTrue(self.page.query_selector('#btn-vendor-list').is_hidden(), 'PC에서는 목록 버튼을 두지 않는다')
+        self.page.wait_for_timeout(200)
+        self.assertEqual(len(self.page.query_selector_all('#fields .contact-list .contact:not(.is-new)')), 33,
+                         'PC는 폼에서 기본 대출 33명이 다 보인다')
+
+        ctx = self.browser.new_context(viewport={'width': 390, 'height': 844}, is_mobile=True, has_touch=True)
+        page = ctx.new_page()
+        errors = []
+        page.on('pageerror', lambda e: errors.append(str(e)))
+        page.goto(BASE, wait_until='networkidle')
+        page.evaluate('localStorage.clear()')
+        page.reload(wait_until='networkidle')
+        page.wait_for_timeout(200)
+        page.click('#btn-sheet')
+        page.wait_for_timeout(150)
+        page.click('#sheet-list [data-id="t20"]')
+        page.wait_for_timeout(220)
+        self.assertFalse(page.query_selector('#btn-vendor-list').is_hidden(), '폰에는 목록 버튼이 있다')
+        self.assertEqual(page.inner_text('#btn-vendor-list').strip(), '목록', '글자는 「목록」만')
+        gap = page.evaluate("""() => {
           const a = document.querySelector('#btn-vendor-list').getBoundingClientRect();
           const b = document.querySelector('#btn-reset').getBoundingClientRect();
           const head = document.querySelector('.form-panel .panel-head').getBoundingClientRect();
-          const title = document.querySelector('#form-title').getBoundingClientRect();
-          return {gap: b.left - a.right, right: head.right - b.right, titleGap: head.right - title.right,
-                  w: a.width, h: a.height};
+          return {gap: b.left - a.right, right: head.right - b.right, w: a.width, h: a.height};
         }""")
         self.assertGreaterEqual(gap['gap'], 0, '목록은 비우기 왼쪽')
         self.assertLessEqual(gap['gap'], 8, f"목록과 비우기 사이가 멀다 {gap}")
         self.assertLessEqual(gap['w'], 78, f"목록 버튼이 넓다 {gap}")
         self.assertLessEqual(gap['right'], 18, '머리 오른쪽 끝에 붙어 있다')
-        self.page.click('#btn-vendor-list')
-        self.wait(200)
-        self.assertTrue(self.page.is_visible('#vendor-list .modal-card'))
-        self.assertIn('대출', self.page.inner_text('#vendor-list-body'), '지금 고른 분야의 목록')
+        page.click('#btn-vendor-list')
+        page.wait_for_timeout(220)
+        self.assertTrue(page.is_visible('#vendor-list .modal-card'))
+        self.assertIn('대출', page.inner_text('#vendor-list-body'), '지금 고른 분야의 목록')
         # 기본 명단(대출 33명) 위에 세 곳을 더하고 두 곳을 지운다
-        before = self.page.query_selector_all('#vendor-list .contact:not(.is-new)').__len__()
-        self.assertEqual(before, 33, '기본 대출 33명이 목록에 다 보인다')
+        rows = page.query_selector_all('#vendor-list .contact:not(.is-new)')
+        self.assertEqual(len(rows), 33, '기본 대출 33명이 목록에 다 보인다')
         for n, ph in (('A상담사', '010-1111-2222'), ('B상담사', '010-3333-4444'), ('C상담사', '010-5555-6666')):
-            self.page.fill('#vendor-list [data-vl-new="name"]', n)
-            self.page.fill('#vendor-list [data-vl-new="phone"]', ph)
-            self.page.click('#vendor-list [data-vl-add]')
-            self.wait(180)
-        self.assertEqual(self.page.query_selector_all('#vendor-list .contact:not(.is-new)').__len__(), before + 3)
-        self.page.click('#vendor-list [data-vl-del]')
-        self.wait(250)
-        self.page.click('#vendor-list [data-vl-del]')
-        self.wait(250)
-        self.assertEqual(self.page.query_selector_all('#vendor-list .contact:not(.is-new)').__len__(), before + 1)
-        # 추가한 곳은 ★ 켜진 채 — 껐다 켜도 그대로 센다
-        self.assertEqual(self.page.query_selector_all('#vendor-list .contact-star.is-on').__len__(), 3)
-        last_star = self.page.locator('#vendor-list .contact:not(.is-new) .contact-star').last
-        last_star.click()
-        self.wait(200)
-        self.assertEqual(self.page.query_selector_all('#vendor-list .contact-star.is-on').__len__(), 2)
-        last_star.click()
-        self.wait(200)
-        self.assertEqual(self.page.query_selector_all('#vendor-list .contact-star.is-on').__len__(), 3)
+            page.fill('#vendor-list [data-vl-new="name"]', n)
+            page.fill('#vendor-list [data-vl-new="phone"]', ph)
+            page.click('#vendor-list [data-vl-add]')
+            page.wait_for_timeout(180)
+        names = page.evaluate("""() => [...document.querySelectorAll('#vendor-list .contact:not(.is-new)')]
+            .map(c => c.querySelector('.contact-inp').value)""")
+        self.assertEqual(len(names), 36)
+        self.assertEqual(names[:3], ['A상담사', 'B상담사', 'C상담사'], '★한 새 업체가 목록 창에서도 맨 위')
+        # 지우면 ★한 색이 먼저 사라지고 스크롤은 그대로
+        page.click('#vendor-list [data-vl-del]')
+        page.wait_for_timeout(280)
+        page.click('#vendor-list [data-vl-del]')
+        page.wait_for_timeout(280)
+        self.assertEqual(len(page.query_selector_all('#vendor-list .contact:not(.is-new)')), 34)
+        self.assertEqual(len(page.query_selector_all('#vendor-list .contact-star.is-on')), 1)
+        # 남은 C상담사의 ★를 껐다 켜도 그대로 센다
+        page.evaluate("""() => {
+          const row = [...document.querySelectorAll('#vendor-list .contact:not(.is-new)')]
+            .find(c => c.querySelector('.contact-inp').value === 'C상담사');
+          row.querySelector('.contact-star').click();
+        }""")
+        page.wait_for_timeout(250)
+        self.assertEqual(len(page.query_selector_all('#vendor-list .contact-star.is-on')), 0)
+        page.evaluate("""() => {
+          const row = [...document.querySelectorAll('#vendor-list .contact:not(.is-new)')]
+            .find(c => c.querySelector('.contact-inp').value === 'C상담사');
+          row.querySelector('.contact-star').click();
+        }""")
+        page.wait_for_timeout(250)
+        self.assertEqual(len(page.query_selector_all('#vendor-list .contact-star.is-on')), 1)
         # 목록에서 지운 것은 연락처에도 바로 반영
-        self.page.click('#btn-vendor-list-done')
-        self.wait(200)
-        self.assertFalse(self.page.is_visible('#vendor-list .modal-card'))
-        self.assertTrue(self.page.query_selector('#btn-vendor-list-close'))
+        page.click('#btn-vendor-list-done')
+        page.wait_for_timeout(220)
+        self.assertFalse(page.is_visible('#vendor-list .modal-card'))
+        self.assertTrue(page.query_selector('#btn-vendor-list-close'))
+        self.assertEqual(errors, [])
+        ctx.close()
 
     def test_t20_favorites_show_in_contacts(self):
         # 분야별 즐겨찾기 두 곳이 「연락처」에 기본으로 보이고, 체크는 풀린 상태
@@ -5573,9 +5827,12 @@ class AppTest(unittest.TestCase):
                 if w < 900:   # 폰에서는 헤더 「목록」이 보인다
                     for k in ('h', 'w', 'pad', 'font', 'gap', 'radius', 'icon', 'label'):
                         self.assertEqual(m['sheet'][k], m['vendor'][k], f'{k}가 다르다 {m}')
-                # 카드 머리에서 「목록」과 「비우기」도 같은 높이
-                self.assertAlmostEqual(m['vendor']['h'], m['reset']['h'], delta=0.5,
-                                       msg=f"목록·비우기 높이가 다르다 {m}")
+                    # 카드 머리에서 「목록」과 「비우기」도 같은 높이
+                    self.assertAlmostEqual(m['vendor']['h'], m['reset']['h'], delta=0.5,
+                                           msg=f"목록·비우기 높이가 다르다 {m}")
+                else:
+                    # PC에서는 폼에서 바로 다 보이므로 「목록」 버튼이 없다
+                    self.assertEqual(m['vendor']['w'], 0, f"PC에는 목록 버튼이 없어야 한다 {m}")
                 self.assertEqual(errs, [])
                 ctx.close()
 
@@ -5588,12 +5845,22 @@ class AppTest(unittest.TestCase):
         self.assertTrue(all(v in ('이름', '연락처') for v in ph), f'플레이스홀더 {ph}')
         self.assertEqual(ph[0], '이름')
         self.assertEqual(ph[1], '연락처')
-        self.page.click('#btn-vendor-list')
-        self.wait(250)
-        mph = self.js("""() => [...document.querySelectorAll('#vendor-list-body .contact-inp')]
+        # 목록 창은 폰에서만 열리는 창이라 폰 화면으로 확인한다
+        ctx = self.browser.new_context(viewport={'width': 390, 'height': 844}, is_mobile=True, has_touch=True)
+        page = ctx.new_page()
+        page.goto(BASE, wait_until='networkidle')
+        page.wait_for_timeout(200)
+        page.click('#btn-sheet')
+        page.wait_for_timeout(150)
+        page.click('#sheet-list [data-id="t20"]')
+        page.wait_for_timeout(220)
+        page.click('#btn-vendor-list')
+        page.wait_for_timeout(250)
+        mph = page.evaluate("""() => [...document.querySelectorAll('#vendor-list-body .contact-inp')]
             .map(e => e.placeholder)""")
         self.assertTrue(mph, '목록 모달 입력칸이 없다')
         self.assertTrue(all(v in ('이름', '연락처') for v in mph), f'모달 플레이스홀더 {mph}')
+        ctx.close()
 
     def test_v142_trade_and_role_rows_match_input_height(self):
         # 거래유형·임대차 만기 버튼은 옆 금액칸과 같은 높이·같은 위쪽 선

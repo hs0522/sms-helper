@@ -185,6 +185,20 @@
     return null;
   }
 
+  /* 다시 그려도 보던 자리를 잃지 않게 — 넘긴 칸들의 scrollTop을 기억했다가 되돌린다.
+     (★ 즐겨찾기·정렬·삭제로 목록을 새로 그리면 스크롤이 맨 위로 튀던 문제) */
+  function keepScroll(selectors, fn) {
+    var saved = [];
+    selectors.forEach(function (sel) {
+      $$(sel).forEach(function (e, i) { saved.push({ sel: sel, i: i, top: e.scrollTop }); });
+    });
+    fn();
+    saved.forEach(function (s) {
+      var again = $$(s.sel)[s.i];
+      if (again && s.top) again.scrollTop = s.top;
+    });
+  }
+
   /* ---------------- 문구 목록 만들기 (기본 20종 + 영구 수정 + 내 문구) ---------------- */
   function composeBody(item, c) {
     var body = String(item.body == null ? '' : item.body).replace(/\r\n/g, '\n').replace(/\s+$/, '');
@@ -1486,6 +1500,14 @@
         shown.forEach(function (c) {
           var on = picked.indexOf(c.id) !== -1;
           var item = el('div', 'contact' + (on ? ' is-on' : ''));
+          // PC에서는 목록 창을 열지 않고 이 자리에서 ★를 켜고 끈다(폰에서는 CSS로 숨김)
+          var favBtn = el('button', 'contact-star contact-fav' + (c.fav ? ' is-on' : ''), '★');
+          favBtn.type = 'button';
+          favBtn.dataset.contactFav = c.id;
+          favBtn.dataset.cat = cat;
+          favBtn.setAttribute('aria-pressed', c.fav ? 'true' : 'false');
+          favBtn.setAttribute('aria-label', (c.name || '업체') + ' 즐겨찾기');
+          item.appendChild(favBtn);
           var chk = el('button', 'contact-check' + (on ? ' is-on' : ''), on ? '✓' : '');
           chk.type = 'button';
           chk.dataset.contactPick = c.id;
@@ -3181,6 +3203,8 @@
     // 폼: 클릭
     $('#fields').addEventListener('click', function (e) {
       // 협력업체 연락처
+      var cfav = e.target.closest('[data-contact-fav]');
+      if (cfav) { toggleFormContactFav(cfav.dataset.cat, cfav.dataset.contactFav); return; }
       var cdel = e.target.closest('[data-contact-del]');
       if (cdel) { removeContact(cdel.dataset.cat, cdel.dataset.contactDel); return; }
       var cpick = e.target.closest('[data-contact-pick]');
@@ -3810,8 +3834,11 @@
     if (on) store.stars.push(id);
     else store.stars.splice(i, 1);
     save();
-    renderList($('#tpl-list'), { withFavorites: true });
-    renderList($('#sheet-list'), { withFavorites: false });
+    // ★를 눌러 목록이 다시 그려져도 보던 자리를 그대로 둔다
+    keepScroll(['#tpl-list', '#sheet-list'], function () {
+      renderList($('#tpl-list'), { withFavorites: true });
+      renderList($('#sheet-list'), { withFavorites: false });
+    });
     if (fromLongPress) toast(on ? '★ 즐겨찾기에 넣었어요' : '즐겨찾기에서 뺐어요');
   }
 
@@ -3918,7 +3945,21 @@
     else sel[cat].splice(i, 1);
     markEdited();
     save();
-    renderForm();
+    keepScroll(['#fields', '#fields .contact-list'], renderForm);
+    updatePreviewOnly();
+  }
+
+  // PC 폼 안의 ★ — 즐겨찾기를 바꾸면 ★한 업체가 위로 정렬된다(보던 스크롤 자리는 그대로).
+  function toggleFormContactFav(cat, id) {
+    var list = store.contacts[cat] || [];
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].id !== id) continue;
+      list[i].fav = !list[i].fav;
+      break;
+    }
+    markEdited();
+    save();
+    keepScroll(['#fields', '#fields .contact-list'], renderForm);
     updatePreviewOnly();
   }
 
@@ -3939,7 +3980,7 @@
     sel[cat].push(id);
     markEdited();
     save();
-    renderForm();
+    keepScroll(['#fields', '#fields .contact-list'], renderForm);
     updatePreviewOnly();
     toast('연락처를 추가했어요');
   }
@@ -3957,7 +3998,7 @@
     var selIdx = Array.isArray(sel[cat]) ? sel[cat].indexOf(id) : -1;
     if (selIdx !== -1) sel[cat].splice(selIdx, 1);
     save();
-    renderForm();
+    keepScroll(['#fields', '#fields .contact-list'], renderForm);
     updatePreviewOnly();
     showSnack('연락처를 지웠어요', function () {
       store.contacts[cat] = store.contacts[cat] || [];
@@ -3969,7 +4010,7 @@
         sel2[cat].splice(Math.min(selIdx, sel2[cat].length), 0, id);
       }
       save();
-      renderForm();
+      keepScroll(['#fields', '#fields .contact-list'], renderForm);
       updatePreviewOnly();
     });
   }
@@ -4007,13 +4048,18 @@
     var box = $('#vendor-list-body');
     if (!box) return;
     var cat = vendorCatOf();
+    var prevList = box.querySelector('.contact-list');
+    var keepTop = prevList ? prevList.scrollTop : 0;
     box.innerHTML = '';
     var head = el('div', 'vendor-list-head');
     head.appendChild(el('b', 'vendor-list-cat', cat));
     head.appendChild(el('span', 'vendor-list-count', vendorRows(cat).length + '곳 · ★ 즐겨찾기한 업체가 연락처에 먼저 보여요'));
     box.appendChild(head);
     var wrap = el('div', 'contact-list is-tall');
-    vendorRows(cat).forEach(function (c) {
+    // ★ 즐겨찾기한 업체를 목록 창에서도 위로 올린다(같은 끼리끼리는 저장 순서 그대로)
+    vendorRows(cat).slice().sort(function (a, b) {
+      return (b.fav ? 1 : 0) - (a.fav ? 1 : 0);
+    }).forEach(function (c) {
       var item = el('div', 'contact is-flat' + (c.fav ? ' is-fav' : ''));
       var star = el('button', 'contact-star' + (c.fav ? ' is-on' : ''), '★');
       star.type = 'button';
@@ -4067,6 +4113,8 @@
     addRow.appendChild(pInp);
     wrap.appendChild(addRow);
     box.appendChild(wrap);
+    // ★ 토글·추가·삭제로 다시 그려도 보던 자리를 그대로
+    if (keepTop) wrap.scrollTop = keepTop;
     var bar = el('div', 'vendor-list-bar');
     var addBtn = el('button', 'ghost add-btn has-ico', '추가');
     addBtn.type = 'button';
