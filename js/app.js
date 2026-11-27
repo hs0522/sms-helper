@@ -47,6 +47,7 @@
       if (o.profile) store.profile = Object.assign({}, DEFAULT_PROFILE, o.profile);
       if (Array.isArray(o.stars)) store.stars = o.stars;
       if (o.data && typeof o.data === 'object') store.data = o.data;
+      tidySavedDefaults();
       if (o.texts && typeof o.texts === 'object') store.texts = o.texts;
       if (o.contacts && typeof o.contacts === 'object') {
         // 2026-11-27: 기본 협력업체 44명을 한 번 합친다 (예전에 빈 연락처가 저장돼 있어도 보이게)
@@ -81,6 +82,32 @@
       }
       if (seeded) save();
     } catch (e) { /* 저장값이 깨졌으면 기본값으로 시작 */ }
+  }
+
+  // 2026-11-27 v1.4.4 — 빈 기본값으로 바꾸면서, 예전 기본 예시값이 그대로 저장돼 있던 것만 비운다.
+  // (직접 친 값은 건드리지 않는다) 빈 지급일정 차수·빈 근저당 줄도 함께 정리한다.
+  function tidySavedDefaults() {
+    var D = store.data || {};
+    if (D.t8) {
+      if (D.t8.address === '서울시 마포구 아현동 777 외 3필지') D.t8.address = '';
+      var mrows = T.mortgageRows(D.t8);
+      var filled = T.mortgageFilledRows(mrows);
+      D.t8.mortgages = filled.length ? filled : [{ holder: '', amount: '' }];
+    }
+    if (D.t15 && String(D.t15.months) === '2') D.t15.months = '';
+    if (D.t18 && D.t18.guestNote === '염리초 보내고 싶은 학부모입니다') D.t18.guestNote = '';
+    if (D.t19 && D.t19.emphasis === '최저가 조율 가능합니다') D.t19.emphasis = '';
+    ['t8', 't10'].forEach(function (id) {
+      var d = D[id];
+      if (!d || !d.payExtra) return;
+      Object.keys(d.payExtra).forEach(function (k) {
+        var arr = d.payExtra[k];
+        if (!Array.isArray(arr)) { delete d.payExtra[k]; return; }
+        var kept = arr.filter(function (p) { return p && (C.parseMan(p.amount) != null || p.date); });
+        if (kept.length) d.payExtra[k] = kept; else delete d.payExtra[k];
+      });
+      if (!Object.keys(d.payExtra).length) delete d.payExtra;
+    });
   }
 
   // 저장된 연락처에 빠진 분야(새로 추가된 분야 포함)는 기본값으로 채운다
@@ -277,6 +304,8 @@
       if (data.trade !== '전세' && data.trade !== '월세') data.trade = '매매';
       // 약정 → 가계약 이름 변경
       if (data.kind !== '계약') data.kind = '가계약';
+      // 예전 한 건짜리 근저당(채권자 · 채권최고액)을 첫 줄로 옮긴다
+      data.mortgages = T.mortgageRows(data);
     }
     if (t.id === 't10') {
       // 거래 유형은 매물칸의 [매매][전세][월세]를 따른다
@@ -977,6 +1006,39 @@
     renderPreview();
   }
 
+  // 근저당 (+) 한 건 더 — 빈 줄을 맨 뒤에 붙인다
+  function addMortgage() {
+    var t = tplById(store.current);
+    if (!t) return;
+    var data = dataOf(t);
+    var rows = T.mortgageRows(data);
+    rows.push({ holder: '', amount: '' });
+    data.mortgages = rows;
+    markEdited();
+    save();
+    renderForm();
+    renderPreview();
+  }
+
+  // 근저당 (−) 이 건 빼기 — 한 줄뿐이면 값만 지운다
+  function removeMortgage(idx) {
+    var t = tplById(store.current);
+    if (!t) return;
+    var data = dataOf(t);
+    var rows = T.mortgageRows(data);
+    if (rows.length <= 1) {
+      rows = [{ holder: '', amount: '' }];
+    } else {
+      rows.splice(idx, 1);
+      if (!rows.length) rows = [{ holder: '', amount: '' }];
+    }
+    data.mortgages = rows;
+    markEdited();
+    save();
+    renderForm();
+    renderPreview();
+  }
+
   function payTotal(t, data) {
     var box = el('div', 'pay-total');
     box.dataset.paytotal = '1';
@@ -1131,6 +1193,62 @@
         });
         pair.appendChild(cells);
         return pair;
+      }
+
+      // 근저당 — 채권자 | 채권최고액 한 줄 반반, (+)·(−)로 여러 건
+      case 'mortgageList': {
+        var mg = el('div', 'field is-mortgage');
+        if (f.label) mg.appendChild(el('div', 'field-label', f.label));
+        var mrows = T.mortgageRows(data);
+        data.mortgages = mrows;
+        var mlist = el('div', 'mtg-list');
+        mrows.forEach(function (r, mi) {
+          var line = el('div', 'mtg-row');
+          line.dataset.mtgRow = String(mi);
+          var mhead = el('div', 'pay-head');
+          mhead.appendChild(el('span', 'pay-name-text', '근저당 ' + (mi + 1)));
+          var msteps = el('span', 'pay-steps');
+          var madd = el('button', 'pay-step is-add', '+');
+          madd.type = 'button';
+          madd.dataset.mtgAdd = '1';
+          madd.setAttribute('aria-label', '근저당 한 건 더 추가');
+          madd.title = '근저당을 한 건 더 추가합니다';
+          msteps.appendChild(madd);
+          var mdel = el('button', 'pay-step is-del', '−');
+          mdel.type = 'button';
+          mdel.dataset.mtgDel = String(mi);
+          mdel.setAttribute('aria-label', '근저당 ' + (mi + 1) + ' 빼기');
+          mdel.title = mrows.length > 1 ? '이 근저당을 뺍니다' : '입력한 내용을 지웁니다';
+          msteps.appendChild(mdel);
+          mhead.appendChild(msteps);
+          line.appendChild(mhead);
+
+          var mpair = el('div', 'pair-row');
+          var mc1 = el('div', 'pair-cell');
+          mc1.appendChild(el('div', 'pair-label', '채권자'));
+          var mhi = el('input', 'inp');
+          mhi.type = 'text';
+          mhi.autocomplete = 'off';
+          mhi.placeholder = '예: 주식회사 카카오뱅크';
+          mhi.dataset.mtgHolder = String(mi);
+          mhi.setAttribute('aria-label', '근저당 ' + (mi + 1) + ' 채권자');
+          mhi.value = r.holder || '';
+          mc1.appendChild(mhi);
+          mpair.appendChild(mc1);
+
+          var mc2 = el('div', 'pair-cell');
+          mc2.appendChild(el('div', 'pair-label', '채권최고액'));
+          var mmf = moneyField({ value: r.amount, ph: '' });
+          var mai = mmf.querySelector('input');
+          mai.dataset.mtgAmount = String(mi);
+          mai.setAttribute('aria-label', '근저당 ' + (mi + 1) + ' 채권최고액');
+          mc2.appendChild(mmf);
+          mpair.appendChild(mc2);
+          line.appendChild(mpair);
+          mlist.appendChild(line);
+        });
+        mg.appendChild(mlist);
+        return mg;
       }
 
       // 잔금처럼 자동으로 계산되는 금액 (t13)
@@ -1454,7 +1572,7 @@
           var addr = el('input', 'inp prop-address');
           addr.type = 'text';
           addr.autocomplete = 'off';
-          addr.placeholder = '서울시 마포구 아현동 777 외 3필지';
+          addr.placeholder = '예: 서울시 마포구 아현동 777 외 3필지';
           addr.dataset.field = 'address';
           addr.value = data.address == null ? '' : data.address;
           row.appendChild(addr);
@@ -2976,6 +3094,28 @@
         updatePreviewOnly();
         return;
       }
+      // 근저당 줄 — 채권자 · 채권최고액
+      if (t.dataset.mtgHolder != null || t.dataset.mtgAmount != null) {
+        var mtT = tplById(store.current);
+        var mtD = dataOf(mtT);
+        var mtIdx = Number(t.dataset.mtgHolder != null ? t.dataset.mtgHolder : t.dataset.mtgAmount) || 0;
+        var mtRows = T.mortgageRows(mtD);
+        while (mtRows.length <= mtIdx) mtRows.push({ holder: '', amount: '' });
+        if (t.dataset.mtgHolder != null) {
+          mtRows[mtIdx].holder = t.value;
+        } else {
+          var mtMan = formatMoneyInput(t);
+          mtRows[mtIdx].amount = mtMan == null ? '' : mtMan;
+          var mtHint = t.parentNode.parentNode.querySelector('.money-hint');
+          if (mtHint) setHint(mtHint, C.moneyHintLine(mtMan));
+        }
+        mtD.mortgages = mtRows;
+        markEdited();
+        updatePreviewOnly();
+        validateInline();
+        save();
+        return;
+      }
       if (t.dataset.prop) {
         var pid = t.dataset.prop;
         var pitem = t.dataset.idx != null
@@ -3041,6 +3181,12 @@
       if (payAdd) { addPayPart(payAdd.dataset.payAdd); return; }
       var payDel = e.target.closest('[data-pay-del]');
       if (payDel) { removePayPart(payDel.dataset.payDel, Number(payDel.dataset.payIdx || 0)); return; }
+
+      // 근저당 — (+) 한 건 더 · (−) 이 건 빼기
+      var mtgAdd = e.target.closest('[data-mtg-add]');
+      if (mtgAdd) { addMortgage(); return; }
+      var mtgDel = e.target.closest('[data-mtg-del]');
+      if (mtgDel) { removeMortgage(Number(mtgDel.dataset.mtgDel || 0)); return; }
 
       var pt = e.target.closest('[data-prop-trade]');
       if (pt) {

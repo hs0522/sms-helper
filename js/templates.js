@@ -190,6 +190,54 @@
     if (!out.length && o.force) out.push('- ' + item.label + ' : (' + item.label + ')');
     return out;
   }
+  /* ---------------- 근저당 (여러 건) -------------
+     채권자 + 채권최고액을 한 줄에 반반 두고, (+)·(−)로 건수를 늘리고 줄인다.
+     본문에는 입력한 건수만큼 목록이 나가고 '근저당권 N건'의 N 도 건수를 따른다. */
+  function mortgageFilledRows(rows) {
+    return (rows || []).filter(function (r) {
+      return String((r && r.holder) || '').trim() || C.parseMan(r && r.amount) != null;
+    });
+  }
+  function mortgageRows(d) {
+    var list = d && Array.isArray(d.mortgages) ? d.mortgages : [];
+    var rows = list.map(function (r) {
+      return {
+        holder: r && r.holder != null ? String(r.holder) : '',
+        amount: r && r.amount != null ? String(r.amount) : ''
+      };
+    });
+    // 예전 한 건짜리 저장값(채권자 · 채권최고액)은 첫 줄로 옮겨 읽는다
+    if (!mortgageFilledRows(rows).length) {
+      var legacy = [{
+        holder: d && d.mortgageHolder != null ? String(d.mortgageHolder) : '',
+        amount: d && d.mortgageAmount != null ? String(d.mortgageAmount) : ''
+      }];
+      if (mortgageFilledRows(legacy).length) rows = legacy;
+    }
+    return rows.length ? rows : [{ holder: '', amount: '' }];
+  }
+  function mortgageCount(d) {
+    return mortgageFilledRows(mortgageRows(d)).length || 1;
+  }
+  // 특약 한 줄 — 1건은 한 문장으로, 2건 이상은 건수 + 목록으로
+  function mortgageClause(d, ctx, party) {
+    var rows = mortgageFilledRows(mortgageRows(d));
+    var n = rows.length || 1;
+    if (n === 1) {
+      var r = rows[0] || { holder: '', amount: '' };
+      return '- 등기사항전부증명서상 ' + txt(r.holder, '채권자') + '를 채권자로 하는 채권최고액 ' +
+        (amt(C.parseMan(r.amount), ctx) || '(채권최고액)') + '의 근저당권 1건이 설정된 상태이며, ' +
+        party + '은 잔금일까지 해당 채무를 상환하고 근저당권을 말소합니다. 말소비용은 ' + party + '이 부담합니다.';
+    }
+    var lines = rows.map(function (x) {
+      return '  · ' + txt(x.holder, '채권자') + ' / 채권최고액 ' +
+        (amt(C.parseMan(x.amount), ctx) || '(채권최고액)');
+    });
+    return '- 등기사항전부증명서상 근저당권 ' + n + '건이 설정된 상태이며, ' + party +
+      '은 잔금일까지 해당 채무를 상환하고 근저당권을 모두 말소합니다. 말소비용은 ' + party + '이 부담합니다.\n' +
+      lines.join('\n');
+  }
+
   function prop(p, mode) {
     var o = Object.assign({}, p || {});
     o.mode = mode || o.mode || 'ho';
@@ -743,10 +791,8 @@
         { t: 'group', label: '특약' },
         { t: 'toggle', id: 'permit', label: '토지거래허가구역 (특약 자동 포함)', showIf: function (d) { return isSaleAgreement(d); } },
         { t: 'toggle', id: 'mortgage', label: '근저당 말소 특약 포함' },
-        // 채권자 · 채권최고액은 한 줄 반반
-        { t: 'moneyPair', id: 'mortgageInfo', showIf: function (d) { return d.mortgage; },
-          left: { t: 'text', id: 'mortgageHolder', label: '채권자', ph: '예: 주식회사 카카오뱅크' },
-          right: { t: 'money', id: 'mortgageAmount', label: '채권최고액' } }
+        // 채권자 · 채권최고액은 한 줄 반반 — 여러 건이면 (+)로 줄을 늘린다
+        { t: 'mortgageList', id: 'mortgages', showIf: function (d) { return d.mortgage; } }
       ],
       build: function (d, ctx) {
         var trade = tradeOf(d);
@@ -766,8 +812,6 @@
         var totalMan = payScheduleMan(null, d, items);
         var dealMan = baseMan != null ? baseMan : totalMan;
         var askAmt = amt(payDepositMan(null, d, items, kind), ctx);
-        var mAmt = amt(C.parseMan(d.mortgageAmount), ctx) || '(채권최고액)';
-        var holder = String(d.mortgageHolder || '').trim();
         var party = trade === '매매' ? '매도인' : '임대인';
         var basics = '- 물건지 : ' + (place || '(물건지)') +
           '\n- 입금계좌 : ' + (C.accountParse(d.account) || '(계좌번호)');
@@ -828,10 +872,7 @@
           if (kind === '계약') {
             clauses.push(++n + '. 계약 해제 시 계약금의 귀속 및 배액배상 등은 당사자 간 약정과 관계 법령에 따릅니다.');
           }
-          if (d.mortgage) {
-            clauses.push('- 등기사항전부증명서상 ' + (holder || '(채권자)') + '를 채권자로 하는 채권최고액 ' + mAmt +
-              '의 근저당권 1건이 설정된 상태이며, 매도인은 잔금일까지 해당 채무를 상환하고 근저당권을 말소합니다. 말소비용은 매도인이 부담합니다.');
-          }
+          if (d.mortgage) clauses.push(mortgageClause(d, ctx, '매도인'));
           clauses.push('- 매도인은 잔금일까지 매수인의 권리 취득에 지장을 줄 수 있는 새로운 권리변동을 발생시키지 않기로 합니다.');
           clauses.push('- 명시되지 않은 사항은 민법 등 관계 법령 및 일반적인 거래 관례에 따릅니다.');
           blocks.push('■ 특약사항\n' + clauses.join('\n'));
@@ -851,10 +892,7 @@
           moneyBlock
         ];
         var rclauses = [];
-        if (d.mortgage) {
-          rclauses.push('- 등기사항전부증명서상 ' + (holder || '(채권자)') + '를 채권자로 하는 채권최고액 ' + mAmt +
-            '의 근저당권 1건이 설정된 상태이며, 임대인은 잔금일까지 해당 채무를 상환하고 근저당권을 말소합니다. 말소비용은 임대인이 부담합니다.');
-        }
+        if (d.mortgage) rclauses.push(mortgageClause(d, ctx, '임대인'));
         rclauses.push('- 임대인은 잔금일까지 임차인의 권리 보호에 지장을 줄 수 있는 새로운 근저당권 설정, 가압류 등의 권리변동을 발생시키지 않기로 합니다.');
         rclauses.push('- 임대인은 임차인이 주택을 인도받은 후 전입신고 및 확정일자 부여 절차를 진행할 수 있도록 협조합니다.');
         rclauses.push('- 명시되지 않은 사항은 주택임대차보호법 및 민법 등 관계 법령에 따릅니다.');
@@ -1268,15 +1306,16 @@
     if (t.id === 't2') emptyMovein(d);
     if (t.id === 't3') { d.who = 'owner'; d.view = 'simple'; d.times = ''; d.prop = defaultProp(); }
     if (t.id === 't10') { d.trade = '매매'; d.kind = '계약'; }
-    if (t.id === 't8') { d.trade = '매매'; d.kind = '가계약'; d.address = '서울시 마포구 아현동 777 외 3필지'; }
+    // 2026-11-27 v1.4.4 — 처음 열었을 때는 직접 입력칸·날짜·금액이 모두 빈 상태로 시작한다
+    if (t.id === 't8') { d.trade = '매매'; d.kind = '가계약'; d.address = ''; d.mortgages = [{ holder: '', amount: '' }]; }
     if (t.id === 't11') d.trade = '매매';
     if (t.id === 't12') d.owner = '공동';
-    if (t.id === 't15') { d.role = '임대인'; d.months = 2; }
+    if (t.id === 't15') { d.role = '임대인'; d.months = ''; }
     if (t.id === 't14') { d.calcKind = 'house'; d.calcTrade = '매매'; d.calcVat = '4'; d.calcTotal = ''; }
     if (t.id === 't16') { d.trade = '매매'; }
     if (t.id === 't17') { d.target = 'resident'; d.vpick = { resident: 0, coagent: 0, guest: 0 }; d.greets = []; }
-    if (t.id === 't18') { d.trade = '매매'; emptyMovein(d); d.guestNote = '염리초 보내고 싶은 학부모입니다'; }
-    if (t.id === 't19') { d.emphasis = '최저가 조율 가능합니다'; }
+    if (t.id === 't18') { d.trade = '매매'; emptyMovein(d); d.guestNote = ''; }
+    if (t.id === 't19') { d.emphasis = ''; }
     if (t.id === 't20') { d.vendorCat = '대출'; d.vendorSel = defaultVendorSel(); }
     return d;
   }
@@ -1318,6 +1357,11 @@
     payPartValue: payPartValue,
     payScheduleMan: payScheduleMan,
     payDepositMan: payDepositMan,
-    payLines: payLines
+    payLines: payLines,
+    // 근저당 여러 건
+    mortgageRows: mortgageRows,
+    mortgageFilledRows: mortgageFilledRows,
+    mortgageCount: mortgageCount,
+    mortgageClause: mortgageClause
   };
 })(typeof window !== 'undefined' ? window : globalThis);

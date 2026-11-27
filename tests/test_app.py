@@ -2972,7 +2972,11 @@ class AppTest(unittest.TestCase):
         body = self.text()
         self.assertIn('매수 의사가 분명한 손님이 계셔서 조건에 맞는 매물 문의드립니다.', body)
         self.assertIn('- 매매 희망금액 : (금액)까지', body)
-        self.assertIn('염리초 보내고 싶은 학부모입니다', body)
+        # 고객 특징은 빈 칸으로 시작한다 (v1.4.4)
+        self.assertIn('- 고객 참고사항 : (고객 특징)', body)
+        self.page.fill('#fields [data-field="guestNote"]', '염리초 보내고 싶은 학부모입니다')
+        self.wait(150)
+        self.assertIn('염리초 보내고 싶은 학부모입니다', self.text())
         self.page.fill('#fields [data-field="amount"]', '90000')
         self.wait(150)
         self.assertIn('- 매매 희망금액 : 9억까지', self.text())
@@ -3030,6 +3034,9 @@ class AppTest(unittest.TestCase):
         t19_fields = self.js("() => [...document.querySelectorAll('#fields [data-key]')].map(e => e.dataset.key)")
         self.assertEqual(t7_fields, t19_fields, '매물 칸 구성이 같다')
         self.assertEqual(t19_fields, ['complex', 'dong', 'ho'], '단지·동·호 세 칸만')
+        self.assertIn('🔑 매물 : (매물)\n🔑 거래조건 : (가격)\n✔️ 특징 : (강조 문구)', self.text())
+        self.page.fill('#fields [data-field="emphasis"]', '최저가 조율 가능합니다')
+        self.wait(150)
         self.assertIn('🔑 매물 : (매물)\n🔑 거래조건 : (가격)\n✔️ 특징 : 최저가 조율 가능합니다', self.text())
         self.assertIn('마포래미안푸르지오 매매 특가 매물 안내드립니다.', self.text())
 
@@ -4761,6 +4768,9 @@ class AppTest(unittest.TestCase):
         body = self.text()
         self.assertIn('매매 가계약 주요 내용', body)
         self.assertIn('- 입금계좌 :', body)
+        self.page.fill('#fields [data-field="address"]', '서울시 마포구 아현동 777 외 3필지')
+        self.wait(150)
+        body = self.text()
         self.assertIn('- 물건지 : 서울시 마포구 아현동 777 외 3필지', body)
         self.page.click('#fields [data-seg="kind"][data-value="계약"]')
         self.wait(120)
@@ -5091,26 +5101,32 @@ class AppTest(unittest.TestCase):
                 self.assertEqual(self.page.input_value('#fields [data-pay-amt="gyeyak"][data-pay-idx="0"]'), expect)
 
     def test_v140_mortgage_holder_and_amount_one_row(self):
-        # 근저당 말소 특약 — 채권자 | 채권최고액 한 줄 반반
+        # 근저당 말소 특약 — 채권자 | 채권최고액 한 줄 반반 (기본 1줄, 빈 값)
         self.pick('t8')
+        self.assertEqual(len(self.page.query_selector_all('#fields .mtg-row')), 0,
+                         '근저당 토글을 켜기 전에는 줄이 없어야 한다')
         self.page.click('#fields [data-toggle="mortgage"]')
         self.wait(150)
+        self.assertEqual(len(self.page.query_selector_all('#fields .mtg-row')), 1, '기본은 1줄')
         box = self.js("""() => {
-          const holder = document.querySelector('#fields [data-field="mortgageHolder"]');
-          const amount = document.querySelector('#fields [data-field="mortgageAmount"]');
+          const holder = document.querySelector('#fields [data-mtg-holder="0"]');
+          const amount = document.querySelector('#fields [data-mtg-amount="0"]');
           if (!holder || !amount) return null;
           const h = holder.getBoundingClientRect(), a = amount.getBoundingClientRect();
           const cells = [...holder.closest('.pair-row').querySelectorAll('.pair-cell')].map(c => c.getBoundingClientRect().width);
           return {holder: {l: h.left, r: h.right, t: h.top}, amount: {l: a.left, r: a.right, t: a.top},
-                  sameRow: Math.abs(h.top - a.top) < 6, leftFirst: h.left < a.left, cells};
+                  sameRow: Math.abs(h.top - a.top) < 6, leftFirst: h.left < a.left, cells,
+                  holderValue: holder.value, amountValue: amount.value};
         }""")
         self.assertIsNotNone(box, '채권자·채권최고액 칸이 없다')
         self.assertTrue(box['sameRow'], '두 칸이 한 줄이 아니다')
         self.assertTrue(box['leftFirst'], '채권자가 왼쪽')
+        self.assertEqual(box['holderValue'], '', '채권자 칸이 빈 값으로 시작해야 한다')
+        self.assertEqual(box['amountValue'], '', '채권최고액 칸이 빈 값으로 시작해야 한다')
         self.assertEqual(len(box['cells']), 2)
         self.assertAlmostEqual(box['cells'][0], box['cells'][1], delta=2.0, msg='반반이 아니다')
-        self.page.fill('#fields [data-field="mortgageHolder"]', '카카오뱅크')
-        self.page.fill('#fields [data-field="mortgageAmount"]', '12000')
+        self.page.fill('#fields [data-mtg-holder="0"]', '카카오뱅크')
+        self.page.fill('#fields [data-mtg-amount="0"]', '12000')
         self.wait(200)
         self.assertIn('등기사항전부증명서상 카카오뱅크를 채권자로 하는 채권최고액 120,000,000원 (1억 2천만 원)의 근저당권 1건이 설정된 상태이며', self.text())
 
@@ -5664,6 +5680,7 @@ class AppTest(unittest.TestCase):
              ['- 매물 : 마포래미안푸르지오 404동 1903호 / 매매 24억 7천만',
               '- 매물 : 마포래미안푸르지오 208동 1203호 / 전세 11억 5천만', S], ['(가격)']),
             ('t8', {'trade': '매매', 'kind': '가계약', 'price': '247000',
+                    'address': '서울시 마포구 아현동 777 외 3필지',
                     'account': '국민 123456-01-234567 홍길동', 'prop': prop,
                     'yakjeongAmount': '1000', 'yakjeongDate': day(2026, 11, 27),
                     'jeongAmount': '3000', 'jeongDate': day(2026, 11, 28),
@@ -5973,6 +5990,113 @@ class AppTest(unittest.TestCase):
         self.assertIn('- 부가가치세 : 34,615원 (간이과세 4%)', body)
         self.assertIn('- 합계 : 900,000원', body)
 
+    # ---------------------------------------------------------------- v1.4.4 (빈 기본값 · 근저당 다건)
+    def test_v144_all_inputs_empty_by_default(self):
+        # 처음 연 모든 문구는 직접 입력칸·날짜·금액이 빈 상태로 시작한다
+        ids = self.js("() => window.SMSTemplates.TEMPLATES.map(t => t.id).filter(i => i !== 't20')")
+        for tid in ids:
+            with self.subTest(template=tid):
+                self.page.evaluate("t => window.SMSApp.openTemplate(t, {})", tid)
+                self.wait(150)
+                vals = self.js("""() => [...document.querySelectorAll('#fields input, #fields textarea')]
+                    .filter(i => i.value && !i.readOnly)
+                    .map(i => ({key: i.dataset.key || '', f: i.dataset.field || i.dataset.payAmt ||
+                        i.dataset.mtgHolder || i.dataset.mtgAmount || i.dataset.prop || '', v: i.value}))
+                    .filter(x => !(x.key === 'complex'))""")
+                self.assertEqual(vals, [], f'{tid} 에 미리 채워진 칸이 있다: {vals}')
+
+    def test_v144_paytable_one_row_empty(self):
+        # 지급 일정 — 항목마다 1줄씩, %·일정·금액 모두 빈 상태
+        for tid in ('t8', 't10'):
+            with self.subTest(template=tid):
+                self.page.evaluate("t => window.SMSApp.openTemplate(t, {})", tid)
+                self.wait(150)
+                rows = self.pay_rows()
+                self.assertEqual([r['name'] for r in rows], ['약정금', '가계약금', '계약금', '중도금', '잔금'])
+                self.assertEqual([r['idx'] for r in rows], [0, 0, 0, 0, 0], '2차 이상이 미리 열려 있다')
+                self.assertEqual([r['amt'] for r in rows], ['', '', '', '', ''], '금액이 미리 채워져 있다')
+                self.assertEqual([r['rate'] for r in rows], [None, None, '', '', None], '비율이 미리 채워져 있다')
+                dates = self.js("""() => [...document.querySelectorAll('#fields .pay-row .date-text')]
+                    .map(e => e.textContent.trim())""")
+                self.assertEqual(dates, ['일정', '일정', '일정', '일정', '일정'], '일정이 미리 채워져 있다')
+                # (+) 로 한 줄 늘리고 (−) 로 다시 1줄로 — 늘어난 줄도 빈 값
+                self.pay_add('gyeyak')
+                self.assertEqual(len([r for r in self.pay_rows() if r['item'] == 'gyeyak']), 2)
+                self.assertEqual(self.page.input_value('#fields [data-pay-amt="gyeyak"][data-pay-idx="1"]'), '')
+                self.pay_del('gyeyak', 1)
+                self.assertEqual(len([r for r in self.pay_rows() if r['item'] == 'gyeyak']), 1)
+                # 비우기(초기화)도 다시 1줄·빈 값
+                self.page.fill('#fields [data-pay-amt="gyeyak"][data-pay-idx="0"]', '10000')
+                self.wait(150)
+                self.page.click('#btn-reset')
+                self.wait(200)
+                rows = self.pay_rows()
+                self.assertEqual([r['idx'] for r in rows], [0, 0, 0, 0, 0])
+                self.assertEqual([r['amt'] for r in rows], ['', '', '', '', ''])
+
+    def test_v144_mortgage_count_follows_rows(self):
+        # 근저당 1건 → 2건 → 3건 — 본문의 건수와 목록이 입력한 만큼 따라온다
+        self.page.evaluate("() => window.SMSApp.openTemplate('t8', {})")
+        self.wait(150)
+        self.page.click('#fields [data-toggle="mortgage"]')
+        self.wait(150)
+        self.assertEqual(len(self.page.query_selector_all('#fields .mtg-row')), 1)
+        # 1건
+        self.page.fill('#fields [data-mtg-holder="0"]', '주식회사 카카오뱅크')
+        self.page.fill('#fields [data-mtg-amount="0"]', '12000')
+        self.wait(200)
+        body = self.text()
+        self.assertIn('근저당권 1건이 설정된 상태이며', body)
+        self.assertIn('주식회사 카카오뱅크를 채권자로 하는 채권최고액 120,000,000원 (1억 2천만 원)', body)
+        # 2건
+        self.page.click('#fields [data-mtg-add]')
+        self.wait(200)
+        self.assertEqual(len(self.page.query_selector_all('#fields .mtg-row')), 2)
+        self.assertEqual(self.page.input_value('#fields [data-mtg-holder="1"]'), '', '새 줄은 빈 값')
+        self.page.fill('#fields [data-mtg-holder="1"]', '국민은행')
+        self.page.fill('#fields [data-mtg-amount="1"]', '5000')
+        self.wait(200)
+        body = self.text()
+        self.assertIn('근저당권 2건이 설정된 상태이며', body)
+        self.assertNotIn('근저당권 1건', body)
+        self.assertIn('· 주식회사 카카오뱅크 / 채권최고액 120,000,000원 (1억 2천만 원)', body)
+        self.assertIn('· 국민은행 / 채권최고액 50,000,000원 (5천만 원)', body)
+        self.assertIn('근저당권을 모두 말소합니다', body)
+        # 3건
+        self.page.click('#fields [data-mtg-add]')
+        self.wait(200)
+        self.page.fill('#fields [data-mtg-holder="2"]', '신한은행')
+        self.page.fill('#fields [data-mtg-amount="2"]', '3000')
+        self.wait(200)
+        body = self.text()
+        self.assertIn('근저당권 3건이 설정된 상태이며', body)
+        self.assertEqual(body.count('· '), 3, '3건 목록이 모두 나간다')
+        self.assertIn('· 신한은행 / 채권최고액 30,000,000원 (3천만 원)', body)
+        # (−) 로 한 건 빼면 건수도 줄어든다
+        self.page.click('#fields [data-mtg-del="2"]')
+        self.wait(200)
+        body = self.text()
+        self.assertEqual(len(self.page.query_selector_all('#fields .mtg-row')), 2)
+        self.assertIn('근저당권 2건이 설정된 상태이며', body)
+        self.assertNotIn('신한은행', body)
+        # 둘 다 빼면 1줄만 남고 값이 비워진다
+        self.page.click('#fields [data-mtg-del="1"]')
+        self.wait(200)
+        self.assertEqual(len(self.page.query_selector_all('#fields .mtg-row')), 1)
+        self.page.click('#fields [data-mtg-del="0"]')
+        self.wait(200)
+        self.assertEqual(len(self.page.query_selector_all('#fields .mtg-row')), 1)
+        self.assertEqual(self.page.input_value('#fields [data-mtg-holder="0"]'), '')
+        self.assertEqual(self.page.input_value('#fields [data-mtg-amount="0"]'), '')
+        self.assertIn('근저당권 1건이 설정된 상태이며', self.text())
+
+    def test_v144_mortgage_legacy_saved_value_reads_as_first_row(self):
+        # 예전 한 건짜리 저장값(채권자 · 채권최고액)은 첫 줄로 읽힌다
+        self.pick_with('t8', {'mortgage': True, 'mortgageHolder': '카카오뱅크', 'mortgageAmount': '12000'})
+        self.wait(200)
+        self.assertEqual(self.page.input_value('#fields [data-mtg-holder="0"]'), '카카오뱅크')
+        self.assertEqual(self.page.input_value('#fields [data-mtg-amount="0"]'), '12,000')
+        self.assertIn('근저당권 1건이 설정된 상태이며', self.text())
 
 
 if __name__ == '__main__':
