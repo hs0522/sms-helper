@@ -4987,25 +4987,25 @@ class AppTest(unittest.TestCase):
 
     # ============================================================== 버전 · 배포 파일
 
-    def test_24_version_bumped_to_1_4_6(self):
+    def test_24_version_bumped_to_1_4_7(self):
         # 서비스 워커 · 화면 캐시 주소 · 안드로이드 빌드 번호가 모두 같은 버전을 가리킨다
         with open(os.path.join(ROOT, 'sw.js'), encoding='utf-8') as f:
             sw = f.read()
         m = re.search(r"var VERSION = '(v\d+\.\d+\.\d+)';", sw)
         self.assertIsNotNone(m, 'sw.js에 VERSION이 있다')
         ver = m.group(1)
-        self.assertEqual(ver, 'v1.4.6')
+        self.assertEqual(ver, 'v1.4.7')
         self.assertIn("'js/sync.js'", sw)
         # 새 파일(동호수 타입표)도 오프라인 캐시에 들어간다
         self.assertIn("'js/maraepu-types.js'", sw)
         with open(os.path.join(ROOT, 'index.html'), encoding='utf-8') as f:
             html = f.read()
         for f_ in ('icons', 'maraepu-types', 'core', 'templates', 'sync', 'app'):
-            self.assertIn(f'js/{f_}.js?v=1.4.6', html)
-        self.assertIn('styles.css?v=1.4.6', html)
+            self.assertIn(f'js/{f_}.js?v=1.4.7', html)
+        self.assertIn('styles.css?v=1.4.7', html)
         gradle = open(os.path.join(ROOT, 'android/app/build.gradle'), encoding='utf-8').read()
-        self.assertIn('versionCode 21', gradle)
-        self.assertIn("versionName '1.4.6'", gradle)
+        self.assertIn('versionCode 22', gradle)
+        self.assertIn("versionName '1.4.7'", gradle)
 
     def test_t8_deal_combos_and_labels(self):
         # 계약 조건 안내 — [매매][전세][월세] | [가계약][계약], 다섯 버튼이 한 줄·같은 크기
