@@ -104,10 +104,14 @@
   function payScheduleBase(t, d) {
     if (!d) return null;
     var id = (t && typeof t === 'object') ? t.id : t;
-    if (id === 't10') {
+    if (id === 't10' || id === 't8') {
+      // 매물칸에서 — 매매·전세는 매매가/보증금, 월세는 보증금
       var p = (d.prop && typeof d.prop === 'object') ? d.prop : {};
       var trade = p.trade || d.trade || '매매';
-      return C.parseMan(trade === '월세' ? p.deposit : p.amount);
+      var v = C.parseMan(trade === '월세' ? p.deposit : p.amount);
+      if (v != null) return v;
+      // 예전 저장값(별도 금액칸 · 매물칸의 글자 가격)도 읽는다
+      return C.parseMan(p.price != null && p.price !== '' ? p.price : d.price);
     }
     return C.parseMan(d.price);
   }
@@ -157,10 +161,13 @@
   }
   // 계약일에 실제로 입금하는 금액 — 가계약금은 계약금에서 빼고 채운다
   function payDepositMan(t, d, items, kind) {
+    var yakjeong = payItemOf(items, 'yakjeong');
     var jeong = payItemOf(items, 'jeong');
     var gyeyak = payItemOf(items, 'gyeyak');
+    var yakSum = payItemSum(d, yakjeong);
     var jeongSum = payItemSum(d, jeong);
     var gySum = payItemSum(d, gyeyak);
+    if (kind === '약정') return yakSum != null ? yakSum : gySum;
     if (kind === '가계약') return jeongSum != null ? jeongSum : gySum;
     if (gySum != null) return gySum - (jeongSum || 0);
     return jeongSum;
@@ -264,7 +271,14 @@
     var t = d && d.trade;
     return t === '전세' || t === '월세' ? t : '매매';
   }
-  function isRentTrade(d) { var t = tradeOf(d); return t === '전세' || t === '월세'; }
+  // 11번·12번은 매물칸의 [매매][전세][월세]가 거래 유형을 정한다 (예전 별도 칸은 저장값 호환용)
+  function propTradeOf(d) {
+    var p = (d && d.prop && typeof d.prop === 'object') ? d.prop : null;
+    var t = p && p.trade;
+    return t === '매매' || t === '전세' || t === '월세' ? t : null;
+  }
+  function dealTrade(d) { return propTradeOf(d) || tradeOf(d); }
+  function isRentTrade(d) { var t = dealTrade(d); return t === '전세' || t === '월세'; }
   // 매수 / 전세 / 월세 (손님 쪽 표현)
   function guestOf(t) { return t === '매매' ? '매수' : (t === '전세' ? '전세' : '월세'); }
   // 방문 희망 한 줄 — "11월 26일 (목) 10:00" (시각을 비우면 날짜만)
@@ -769,36 +783,32 @@
 
     /* ---------------- 약정·계약 ---------------- */
     {
-      // 매매조건·약정 안내 → 계약 조건 안내 (매매 약정 / 매매 계약 / 전세 계약 / 월세 계약)
+      // 매매 가계약·약정·계약 / 전세·월세 가계약·계약 — 12번과 같은 공통 매물칸을 쓴다
       id: 't8',
       no: 11,
       stage: 3,
       order: 1,
       icon: 'calendar',
       title: '계약 조건 안내',
-      desc: '매매 가계약·계약 / 전세·월세 계약',
+      desc: '매매 가계약·약정·계약 / 전세·월세 계약',
       fields: [
-        { t: 'segs', id: 'deal', label: '거래 유형', deal: true, groups: [
-          { id: 'trade', options: [{ v: '매매', l: '매매' }, { v: '전세', l: '전세' }, { v: '월세', l: '월세' }] },
-          { id: 'kind', options: [{ v: '가계약', l: '가계약' }, { v: '계약', l: '계약' }] }
-        ] },
-        // 기준 금액 — 매매는 매매가, 전세·월세는 보증금(월세는 월차임까지)
-        { t: 'price', id: 'price', label: '금액' },
+        // 상단 구분 — 아래 매물칸의 [매매][전세][월세]에 따라 버튼이 바뀐다
+        { t: 'seg', id: 'kind', label: '구분', grid: true, optionsFn: dealKinds },
+        // 공통 매물 입력란 — 단지명 · 동/호수 · [매매][전세][월세] 금액 (12번과 같은 포맷)
+        { t: 'property', id: 'prop', label: '매물', price: true },
         { t: 'account', id: 'account', label: '입금계좌', ph: '예: 국민 123456-01-234567 홍길동' },
-        { t: 'property', id: 'prop', label: '물건지', address: true },
         // 공통 지급 일정 — 약정금 → 가계약금 → 계약금 → 중도금 → 잔금 (차수별 추가·제거)
         { t: 'paytable', id: 'pay', sum: true, items: payItems('Amount') },
         { t: 'group', label: '특약' },
-        { t: 'toggle', id: 'permit', label: '토지거래허가구역 (특약 자동 포함)', showIf: function (d) { return isSaleAgreement(d); } },
+        { t: 'toggle', id: 'permit', label: '토지거래허가구역 (특약 자동 포함)', showIf: function (d) { return isSalePre(d); } },
         { t: 'toggle', id: 'mortgage', label: '근저당 말소 특약 포함' },
         // 채권자 · 채권최고액은 한 줄 반반 — 여러 건이면 (+)로 줄을 늘린다
         { t: 'mortgageList', id: 'mortgages', showIf: function (d) { return d.mortgage; } }
       ],
       build: function (d, ctx) {
-        var trade = tradeOf(d);
-        var kind = dealKind(d);                     // 가계약 / 계약
-        var place = [String(d.address || '').trim(), prop(d.prop, d.mode) === '(매물)' ? '' : prop(d.prop, d.mode)]
-          .filter(Boolean).join(' ');
+        var trade = dealTrade(d);                   // 매매 / 전세 / 월세 — 매물칸에서
+        var kind = dealKind(d);                     // 가계약 / 약정 / 계약
+        var place = prop(d.prop, d.mode) === '(매물)' ? '' : prop(d.prop, d.mode);
         var items = payItems('Amount');
         var yakjeong = payItemOf(items, 'yakjeong');
         var jeong = payItemOf(items, 'jeong');
@@ -808,11 +818,13 @@
         var yakSum = payItemSum(d, yakjeong);
         var jeongSum = payItemSum(d, jeong);
         var gySum = payItemSum(d, gyeyak);
-        var baseMan = payScheduleBase(null, d);
-        var totalMan = payScheduleMan(null, d, items);
+        var baseMan = payScheduleBase('t8', d);
+        var totalMan = payScheduleMan('t8', d, items);
         var dealMan = baseMan != null ? baseMan : totalMan;
-        var askAmt = amt(payDepositMan(null, d, items, kind), ctx);
+        var askAmt = amt(payDepositMan('t8', d, items, kind), ctx);
         var party = trade === '매매' ? '매도인' : '임대인';
+        var preName = kind === '약정' ? '약정' : '가계약';    // 계약 전 단계 이름
+        var preMoney = kind === '약정' ? '약정금' : '가계약금';
         var basics = '- 물건지 : ' + (place || '(물건지)') +
           '\n- 입금계좌 : ' + (C.accountParse(d.account) || '(계좌번호)');
 
@@ -821,30 +833,35 @@
         if (trade === '매매') {
           money.push('- 매매대금 : ' + (amt(dealMan, ctx) || '(금액)'));
         } else {
-          var depAmt = baseMan != null ? amt(baseMan, ctx) : '';
-          money.push('- 보증금 : ' + (depAmt || '(보증금)'));
-          if (trade === '월세') money.push('- 월차임 : ' + (amt(C.parseMan(d.rent), ctx) || '(월차임)'));
+          var pp = (d.prop && typeof d.prop === 'object') ? d.prop : {};
+          var depMan = C.parseMan(trade === '월세' ? pp.deposit : pp.amount);
+          money.push('- 보증금 : ' + (amt(depMan, ctx) || '(보증금)'));
+          if (trade === '월세') {
+            var rentMan = C.parseMan(pp.rent != null && pp.rent !== '' ? pp.rent : d.rent);
+            money.push('- 월차임 : ' + (amt(rentMan, ctx) || '(월차임)'));
+          }
         }
         money = money
-          .concat(payLines(null, d, items, yakjeong, ctx))
-          .concat(payLines(null, d, items, jeong, ctx, { force: kind === '가계약' }))
-          .concat(payLines(null, d, items, gyeyak, ctx, { force: true }))
-          .concat(payLines(null, d, items, jung, ctx))
-          .concat(payLines(null, d, items, jan, ctx, { force: true }));
+          .concat(payLines('t8', d, items, yakjeong, ctx, { force: kind === '약정' }))
+          .concat(payLines('t8', d, items, jeong, ctx, { force: kind === '가계약' }))
+          .concat(payLines('t8', d, items, gyeyak, ctx, { force: true }))
+          .concat(payLines('t8', d, items, jung, ctx))
+          .concat(payLines('t8', d, items, jan, ctx, { force: true }));
         var moneyBlock = '■ 계약금액 및 지급 일정\n' + money.join('\n');
 
         if (trade === '매매') {
+          var label = kind === '계약' ? '매매 계약' : (kind === '약정' ? '매매 약정' : '매매 가계약');
           var blocks = [
             helloPlain(ctx),
-            '아래 부동산의 ' + (kind === '가계약' ? '매매 가계약' : '매매계약') +
-              ' 주요 내용을 안내드립니다.\n협의된 내용과 일치하는지 확인하시고, 동의 여부를 회신해 주시기 바랍니다.',
+            '아래 부동산의 ' + label +
+              ' 조건을 안내드립니다.\n협의된 내용과 일치하는지 확인하시고, 동의 여부를 회신해 주시기 바랍니다.',
             basics,
             moneyBlock
           ];
-          if (kind === '가계약' && d.permit) {
+          if (kind !== '계약' && d.permit) {
             blocks.push('계약금 지급 일정은 토지거래허가 진행 상황에 따라 쌍방이 협의하여 조정할 수 있습니다.');
           }
-          if (yakSum != null) {
+          if (yakSum != null && kind !== '약정') {
             blocks.push('기지급한 약정금 ' + won(yakSum) + '은 계약일에 전액 반환받고, 계약금 ' +
               wonOr(gySum, '(계약금)') + '은 약정금을 차감하지 않고 전액 입금합니다.');
           }
@@ -853,21 +870,21 @@
             blocks.push('기지급한 가계약금 ' + won(jeongSum) + '은 계약금에 포함하며, 계약일에는 계약금 총액 ' +
               wonOr(gySum, '(계약금)') + ' 중 차액 ' + wonOr(gyLeft, '(차액)') + '을 지급합니다.');
           }
-          if (kind === '가계약') {
-            var jd = C.formatDateTime(payPartDate(d, jeong, 0));
-            blocks.push((jd ? jd + '에 ' : '') + '가계약금 ' + (askAmt || '(금액)') +
-              '을 지급하며, 계약 성립 및 효력은 당사자가 합의한 내용에 따릅니다.');
-          } else {
+          if (kind === '계약') {
             blocks.push('잔금일에 잔금 지급과 소유권이전등기 절차를 진행하며, 매도인은 이에 필요한 사항에 협조합니다.');
+          } else {
+            var jd = C.formatDateTime(payPartDate(d, kind === '약정' ? yakjeong : jeong, 0));
+            blocks.push((jd ? jd + '에 ' : '') + preMoney + ' ' + (askAmt || '(금액)') +
+              '을 지급하며, 계약 성립 및 효력은 당사자가 합의한 내용에 따릅니다.');
           }
-          // ■ 특약사항 — 토지거래허가(가계약) · 계약 해제(계약) · 공통
+          // ■ 특약사항 — 토지거래허가(가계약·약정) · 계약 해제(계약) · 공통
           var clauses = [];
           var n = 0;
-          if (kind === '가계약' && d.permit) {
+          if (kind !== '계약' && d.permit) {
             clauses.push(++n + '. 본 부동산은 토지거래허가구역에 소재하므로 매도인과 매수인은 허가 신청에 필요한 서류 제출 등 관련 절차에 협조하기로 합니다.');
-            clauses.push(++n + '. 쌍방의 귀책사유 없이 허가를 받지 못하는 경우 계약은 효력이 없는 것으로 확정되며, 기지급한 가계약금은 반환합니다. 일방의 귀책사유로 허가를 받지 못한 경우의 책임은 별도로 합의한 위약금 및 손해배상 약정에 따릅니다.');
+            clauses.push(++n + '. 쌍방의 귀책사유 없이 허가를 받지 못하는 경우 계약은 효력이 없는 것으로 확정되며, 기지급한 ' + preMoney + '은 반환합니다. 일방의 귀책사유로 허가를 받지 못한 경우의 책임은 별도로 합의한 위약금 및 손해배상 약정에 따릅니다.');
             clauses.push(++n + '. 토지거래허가일로부터 5일 이내에 본계약서를 작성하기로 합니다.');
-            clauses.push(++n + '. 가계약 성립 후 정당한 사유 없이 본계약 체결을 거부하거나 일방적으로 철회하는 경우, 매수인 귀책 시 가계약금을 포기하고 매도인 귀책 시 가계약금의 배액을 반환하기로 합니다. 중개보수는 관계 법령 및 약정에 따라 정산합니다.');
+            clauses.push(++n + '. ' + preName + ' 성립 후 정당한 사유 없이 본계약 체결을 거부하거나 일방적으로 철회하는 경우, 매수인 귀책 시 ' + preMoney + '을 포기하고 매도인 귀책 시 ' + preMoney + '의 배액을 반환하기로 합니다. 중개보수는 관계 법령 및 약정에 따라 정산합니다.');
           }
           if (kind === '계약') {
             clauses.push(++n + '. 계약 해제 시 계약금의 귀속 및 배액배상 등은 당사자 간 약정과 관계 법령에 따릅니다.');
@@ -876,7 +893,7 @@
           clauses.push('- 매도인은 잔금일까지 매수인의 권리 취득에 지장을 줄 수 있는 새로운 권리변동을 발생시키지 않기로 합니다.');
           clauses.push('- 명시되지 않은 사항은 민법 등 관계 법령 및 일반적인 거래 관례에 따릅니다.');
           blocks.push('■ 특약사항\n' + clauses.join('\n'));
-          blocks.push(kind === '가계약'
+          blocks.push(kind !== '계약'
             ? '위 내용에 동의하시는 경우 매도인께서는 입금계좌를 회신해 주시기 바랍니다.\n확인 후 진행하겠습니다. 감사합니다.'
             : '위 내용 확인 후 동의 여부를 회신해 주시면 감사하겠습니다.\n추가로 협의하실 사항이 있으시면 말씀해 주시기 바랍니다.');
           blocks.push(sign(ctx));
@@ -912,33 +929,33 @@
       order: 2,
       icon: 'calendar',
       title: '계약 일정 안내',
-      desc: '가계약 · 계약 · 중도금 · 잔금',
+      desc: '약정 · 계약 · 중도금 · 잔금',
       fields: [
         // 일정을 맨 위로 — 거래 유형은 아래 매물칸의 [매매][전세][월세]로 고른다
         { t: 'seg', id: 'kind', label: '일정', grid: 4, optionsFn: schedKinds },
         { t: 'property', id: 'prop', label: '매물', price: true },
         { t: 'date', id: 'when', label: '일시' },
-        { t: 'toggle', id: 'jeongyakReturn', label: '가계약금 반환 안내 포함', showIf: function (d) { return !isRentTrade(d) && schedKind(d) === '계약'; } },
+        { t: 'toggle', id: 'jeongyakReturn', label: '약정금 반환 안내 포함', showIf: function (d) { return !isRentTrade(d) && schedKind(d) === '계약'; } },
         { t: 'toggle', id: 'priority', label: '선순위 권리내역 안내 포함', showIf: function (d) { return isRentTrade(d) && schedKind(d) === '계약'; } },
         { t: 'toggle', id: 'registry', label: '당일 등기부 확인 안내 포함', showIf: function (d) { return isRentTrade(d) && schedKind(d) !== '계약'; } },
         { t: 'toggle', id: 'docs', label: '잔금 구비서류 포함', showIf: function (d) { return !isRentTrade(d) && schedKind(d) === '잔금'; } },
         // 공통 지급 일정 — 약정금 → 가계약금 → 계약금 → 중도금 → 잔금 (차수별 추가·제거)
-        { t: 'paytable', id: 'pay', sum: true, showIf: function (d) { return schedKind(d) !== '가계약'; }, items: payItems('') },
-        { t: 'account', id: 'account', label: '입금 계좌', ph: '예: 국민은행 123456-01-234567 홍길동', showIf: function (d) { var k = schedKind(d); return k !== '가계약' && k !== '계약'; } }
+        { t: 'paytable', id: 'pay', sum: true, showIf: function (d) { return schedKind(d) !== '약정'; }, items: payItems('') },
+        { t: 'account', id: 'account', label: '입금 계좌', ph: '예: 국민은행 123456-01-234567 홍길동', showIf: function (d) { var k = schedKind(d); return k !== '약정' && k !== '계약'; } }
       ],
       build: function (d, ctx) {
         var place = prop(d.prop, d.mode);
         var kind = schedKind(d);
         var when = C.formatDateTime(d.when) || String(d.whenText || '').trim();
         var tail = '준비사항 확인 부탁드리며, 궁금하신 점은 편하게 연락 주시기 바랍니다. 감사합니다.';
-        if (kind === '가계약') {
+        if (kind === '약정') {
           return join([
             helloPlain(ctx),
-            place + ' 가계약서 작성 일정과 준비사항을 안내드립니다.',
-            '- 일시 : ' + (when || '(가계약 일시)'),
+            place + ' 매매 약정서 작성 일정과 준비사항을 안내드립니다.',
+            '- 일시 : ' + (when || '(약정 일시)'),
             '■ 매도인 준비사항\n1. 신분증\n2. 도장\n3. 주민등록등본 (세대원 전원의 주민등록번호 전체 공개)',
-            '■ 매수인 준비사항\n1. 신분증\n2. 도장\n3. 주민등록등본 (세대원 전원의 주민등록번호 전체 공개)\n4. 가족관계증명서 (상세)\n5. 가계약금',
-            '※ 가계약금 이체에 차질이 없도록 OTP와 1일 이체한도를 미리 확인해 주시기 바랍니다.\n※ 공동명의 취득 시 각 명의자별 준비서류를 지참해 주시기 바랍니다.',
+            '■ 매수인 준비사항\n1. 신분증\n2. 도장\n3. 주민등록등본 (세대원 전원의 주민등록번호 전체 공개)\n4. 가족관계증명서 (상세)\n5. 약정금',
+            '※ 약정금 이체에 차질이 없도록 OTP와 1일 이체한도를 미리 확인해 주시기 바랍니다.\n※ 공동명의 취득 시 각 명의자별 준비서류를 지참해 주시기 바랍니다.',
             tail,
             sign(ctx)
           ]);
@@ -962,7 +979,7 @@
             return join(blocks);
           }
           var sellerSale = '■ 매도인 준비사항\n1. 신분증\n2. 도장 (서명 가능)\n3. 등기권리증' +
-            (d.jeongyakReturn ? '\n4. 가계약금 반환 준비' : '');
+            (d.jeongyakReturn ? '\n4. 약정금 반환 준비' : '');
           return join([
             helloPlain(ctx),
             place + ' 매매계약 일정과 준비사항을 안내드립니다.',
@@ -1215,18 +1232,29 @@
   ];
 
   /* ---------------- 거래 유형 · 일정 도우미 ---------------- */
-  // 가계약(예전 이름 약정) · 계약 — 전세·월세도 둘 다 고를 수 있다
-  function dealKind(d) {
-    if (isRentTrade(d)) return d && d.kind === '가계약' ? '가계약' : '계약';
-    return d && d.kind === '계약' ? '계약' : '가계약';
+  // 11번 구분 — 매매는 가계약·약정·계약, 전세·월세는 가계약·계약
+  function dealKinds(d) {
+    if (isRentTrade(d)) {
+      return [{ v: '가계약', l: '가계약' }, { v: '계약', l: '계약' }];
+    }
+    return [{ v: '가계약', l: '가계약' }, { v: '약정', l: '약정' }, { v: '계약', l: '계약' }];
   }
+  function dealKind(d) {
+    var list = dealKinds(d).map(function (o) { return o.v; });
+    var pick = d && d.kind;
+    if (list.indexOf(pick) !== -1) return pick;
+    return isRentTrade(d) ? '계약' : '가계약';
+  }
+  // 계약 전 단계(가계약·약정) — 토지거래허가구역 특약을 함께 쓰는 구간
+  function isSalePre(d) { return !isRentTrade(d) && dealKind(d) !== '계약'; }
   function isSaleAgreement(d) { return !isRentTrade(d) && dealKind(d) === '가계약'; }
   function isSaleContract(d) { return !isRentTrade(d) && dealKind(d) === '계약'; }
+  // 12번 일정 — 매매는 약정·계약·중도금·잔금, 전세·월세는 계약·중도금·잔금
   function schedKinds(d) {
     if (isRentTrade(d)) {
       return [{ v: '계약', l: '계약' }, { v: '중도금', l: '중도금' }, { v: '잔금', l: '잔금' }];
     }
-    return [{ v: '가계약', l: '가계약' }, { v: '계약', l: '계약' }, { v: '중도금', l: '중도금' }, { v: '잔금', l: '잔금' }];
+    return [{ v: '약정', l: '약정' }, { v: '계약', l: '계약' }, { v: '중도금', l: '중도금' }, { v: '잔금', l: '잔금' }];
   }
   function schedKind(d) {
     var list = schedKinds(d);
@@ -1307,7 +1335,7 @@
     if (t.id === 't3') { d.who = 'owner'; d.view = 'simple'; d.times = ''; d.prop = defaultProp(); }
     if (t.id === 't10') { d.trade = '매매'; d.kind = '계약'; }
     // 2026-11-27 v1.4.4 — 처음 열었을 때는 직접 입력칸·날짜·금액이 모두 빈 상태로 시작한다
-    if (t.id === 't8') { d.trade = '매매'; d.kind = '가계약'; d.address = ''; d.mortgages = [{ holder: '', amount: '' }]; }
+    if (t.id === 't8') { d.trade = '매매'; d.kind = '가계약'; d.mortgages = [{ holder: '', amount: '' }]; }
     if (t.id === 't11') d.trade = '매매';
     if (t.id === 't12') d.owner = '공동';
     if (t.id === 't15') { d.role = '임대인'; d.months = ''; }
@@ -1341,6 +1369,9 @@
     contactsFor: contactsFor,
     contactBlock: contactBlock,
     dealKind: dealKind,
+    dealKinds: dealKinds,
+    dealTrade: dealTrade,
+    isSalePre: isSalePre,
     schedKinds: schedKinds,
     schedKind: schedKind,
     isRentTrade: isRentTrade,

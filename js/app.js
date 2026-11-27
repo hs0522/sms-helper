@@ -322,9 +322,24 @@
       if (data.greets.length > 1) data.greets = data.greets.slice(0, 1);
     }
     if (t.id === 't8') {
-      if (data.trade !== '전세' && data.trade !== '월세') data.trade = '매매';
-      // 약정 → 가계약 이름 변경
-      if (data.kind !== '계약') data.kind = '가계약';
+      if (!data.prop || typeof data.prop !== 'object') data.prop = T.defaultProp();
+      // 예전 매물칸 밖에 따로 두던 금액칸(price)을 매물칸으로 옮긴다 (한 번만)
+      if (!data.prop.amount && !data.prop.deposit && !data.prop.price &&
+          data.price != null && String(data.price).trim() !== '') {
+        data.prop.price = String(data.price);
+        var lp = C.propMoneyPatch(data.prop);
+        if (lp) {
+          Object.assign(data.prop, lp);
+          if (lp.trade === '매매' || lp.trade === '전세' || lp.trade === '월세') data.trade = lp.trade;
+        }
+      }
+      // 거래 유형은 매물칸의 [매매][전세][월세]를 따른다 (예전 별도 칸은 매물칸으로 옮긴다)
+      if (data.trade === '전세' || data.trade === '월세') data.prop.trade = data.trade;
+      else if (data.prop.trade !== '전세' && data.prop.trade !== '월세') data.prop.trade = '매매';
+      data.trade = data.prop.trade;
+      // 가계약 / 약정 / 계약 — 없는 조합(전세·월세의 약정)은 가계약으로 내린다
+      var dk = T.dealKinds(data).map(function (o) { return o.v; });
+      if (dk.indexOf(data.kind) === -1) data.kind = dk[0];
       // 예전 한 건짜리 근저당(채권자 · 채권최고액)을 첫 줄로 옮긴다
       data.mortgages = T.mortgageRows(data);
     }
@@ -333,7 +348,7 @@
       var pt = data.prop && typeof data.prop === 'object' ? data.prop.trade : null;
       data.trade = pt === '전세' || pt === '월세' ? pt : (data.trade === '전세' || data.trade === '월세' ? data.trade : '매매');
       if (data.prop && typeof data.prop === 'object' && !data.prop.trade) data.prop.trade = data.trade;
-      if (data.kind === '약정') data.kind = '가계약';
+      if (data.kind === '가계약') data.kind = '약정';
       var kinds = T.schedKinds(data).map(function (o) { return o.v; });
       if (kinds.indexOf(data.kind) === -1) data.kind = kinds[0];
     }
@@ -669,7 +684,7 @@
     if (!t || !data) return null;
     if (t.id === 't8') {
       return C.paymentSplit({
-        totalMan: C.parseMan(data.price),
+        totalMan: T.payScheduleBase('t8', data),
         gyeyakMan: C.parseMan(data.gyeyakAmount),
         jungMan: C.parseMan(data.jungAmount)
       });
@@ -1089,7 +1104,11 @@
     box.appendChild(el('div', 'paytable-title', '지급 일정'));
     var head = el('div', 'paytable-head');
     head.appendChild(el('span', 'head-name', '구분'));
-    head.appendChild(el('span', 'head-right', '일정 · 금액'));
+    // 일정·금액 머리글은 입력칸과 같은 그리드로 나눠 각 칸 바로 위에 놓는다
+    var hcols = el('div', 'head-cols');
+    hcols.appendChild(el('span', 'head-date', '일정'));
+    hcols.appendChild(el('span', 'head-amt', '금액'));
+    head.appendChild(hcols);
     box.appendChild(head);
     var items = payItemsOf(t);
     items.forEach(function (item) {
@@ -1316,7 +1335,7 @@
         row = fieldRow(f.label);
         var opts = typeof f.optionsFn === 'function' ? f.optionsFn(data) : f.options;
         var seg = el('div', 'seg' + (f.wrap ? ' is-wrap' : '') + (f.row5 ? ' is-row5' : '') +
-          (f.grid ? (opts.length === 3 ? ' is-grid3' : ' is-grid4') : ''));
+          (f.grid ? (opts.length === 2 ? ' is-grid2' : opts.length === 3 ? ' is-grid3' : ' is-grid4') : ''));
         opts.forEach(function (o) {
           var b = el('button', 'seg-btn' + (data[f.id] === o.v ? ' is-active' : ''), o.l);
           b.type = 'button';
@@ -3163,6 +3182,8 @@
           pitem[t.dataset.key] = t.value;
         }
         markEdited();
+        // 매물칸의 금액·거래 유형이 바뀌면 지급 일정의 %, 자동 잔금도 따라온다
+        syncPayUI();
         updatePreviewOnly();
         validateInline();
         save();
@@ -3234,8 +3255,19 @@
           : (dp[pid2] = (dp[pid2] && typeof dp[pid2] === 'object') ? dp[pid2] : T.defaultProp());
         if (!item2) return;
         item2.trade = pt.dataset.value;
-        // 계약 일정 안내는 매물칸의 거래 유형이 그대로 일정 갈래를 정한다
-        if (tp.id === 't10' && pt.dataset.idx == null) dp.trade = item2.trade;
+        // 계약 조건·계약 일정 안내는 매물칸의 거래 유형이 그대로 갈래를 정한다
+        if ((tp.id === 't10' || tp.id === 't8') && pt.dataset.idx == null) {
+          dp.trade = item2.trade;
+          // 매매의 약정처럼 없는 갈래는 있는 것으로 내린다
+          if (tp.id === 't8') {
+            var okDeal = T.dealKinds(dp).map(function (o) { return o.v; });
+            if (okDeal.indexOf(dp.kind) === -1) dp.kind = okDeal[0];
+          }
+          if (tp.id === 't10') {
+            var okSched = T.schedKinds(dp).map(function (o) { return o.v; });
+            if (okSched.indexOf(dp.kind) === -1) dp.kind = okSched[0];
+          }
+        }
         var pick = pt.dataset.value === '월세' ? 'deposit' : 'amount';
         save();
         renderForm();
