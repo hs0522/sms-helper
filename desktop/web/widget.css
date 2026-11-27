@@ -97,8 +97,11 @@ html body {
   .topbar { top: var(--wbar-h) !important; }
 }
 
-/* 좁은 창(최소 380)에서 핀 글자는 숨기고 📌 만 남긴다 */
+/* 핀은 글자 없이 아이콘만 — 툴팁(title)이 이름을 대신한다 */
+#wbtn-pin {
+  padding: 0 7px;
+  line-height: 20px;
+}
 @media (max-width: 399px) {
   #wbtn-pin { padding: 0 5px; }
-  #wbtn-pin .pin-label { display: none; }
 }

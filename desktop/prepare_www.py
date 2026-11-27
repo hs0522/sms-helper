@@ -39,7 +39,7 @@ WIDGET_BAR = """<div id="wbar" role="banner">
     <span class="wbar-web" id="wbar-web"></span>
   </div>
   <button class="wbar-update" id="wbtn-update" type="button" hidden>업데이트</button>
-  <button class="wbar-btn wbar-pin is-on" id="wbtn-pin" type="button" aria-pressed="true" title="항상 위">📌<span class="pin-label"> 항상 위</span></button>
+  <button class="wbar-btn wbar-pin is-on" id="wbtn-pin" type="button" aria-pressed="true" aria-label="항상 위 고정" title="항상 위 고정">📌</button>
   <button class="wbar-btn" id="wbtn-min" type="button" title="최소화" aria-label="최소화">—</button>
   <button class="wbar-btn is-close" id="wbtn-close" type="button" title="닫기" aria-label="닫기">×</button>
 </div>

@@ -4,7 +4,7 @@
 필라테스 계산기(`projects/pilates-calculator/`)와 같은 frameless 미니 위젯 방식입니다.
 
 - **창** 420×760 (최소 380×620) · 리사이즈 가능 · 마지막 위치·크기 기억 (`%APPDATA%\MaraepuSmsHelper\state.json`)
-- **상단 바** `.pywebview-drag-region` 드래그 이동 · `📌 항상 위` · `—` 최소화 · `×` 닫기
+- **상단 바** `.pywebview-drag-region` 드래그 이동 · `📌` 항상 위 고정(아이콘만, 툴팁 `항상 위 고정`) · `—` 최소화 · `×` 닫기
 - **업데이트** 실행할 때 GitHub Releases 의 `widget-v*` 중 최신만 골라 비교, 새 버전일 때만 `업데이트` 버튼
 - **복사** `window.pywebview.api.copy` → Win32 `ctypes`(`argtypes`/`restype` 지정) → PowerShell `Set-Clipboard` 폴백.
   대표 `복사하기` 버튼은 브리지로 바로 처리하고, 웹 앱의 `AndroidCopy` 통로도 브리지에 연결합니다.

@@ -45,6 +45,19 @@ class InjectionTest(unittest.TestCase):
                         'pywebview-drag-region'):
             self.assertIn(element, out)
 
+    def test_pin_button_is_icon_only(self):
+        """핀 버튼은 글자 없이 📌 만 — 이름은 aria-label·title 로 전한다."""
+        out = prepare_www.inject_widget(self.html, "1.4.9")
+        self.assertNotIn("pin-label", out)
+        start = out.index('id="wbtn-pin"')
+        opening = out.rindex("<button", 0, start)
+        closing = out.index("</button>", start)
+        button = out[opening:closing]
+        self.assertIn('aria-label="항상 위 고정"', button)
+        self.assertIn('title="항상 위 고정"', button)
+        self.assertIn('aria-pressed=', button)
+        self.assertEqual(button[button.index(">") + 1:].strip(), "📌")
+
     def test_injection_is_idempotent(self):
         once = prepare_www.inject_widget(self.html, "1.4.9")
         twice = prepare_www.inject_widget(once, "1.4.9")
@@ -260,6 +273,11 @@ class WidgetScriptTest(unittest.TestCase):
         self.assertIn("-webkit-app-region: drag", self.css)
         self.assertIn("padding-top", self.css)
         self.assertIn(".modal, .sheet", self.css)
+
+    def test_pin_styles_are_icon_only(self):
+        self.assertNotIn("pin-label", self.css)
+        self.assertIn("#wbtn-pin", self.css)
+        self.assertIn(".wbar-pin.is-on", self.css)
 
 
 if __name__ == "__main__":
