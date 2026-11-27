@@ -4715,25 +4715,25 @@ class AppTest(unittest.TestCase):
 
     # ============================================================== 버전 · 배포 파일
 
-    def test_24_version_bumped_to_1_4_3(self):
+    def test_24_version_bumped_to_1_4_4(self):
         # 서비스 워커 · 화면 캐시 주소 · 안드로이드 빌드 번호가 모두 같은 버전을 가리킨다
         with open(os.path.join(ROOT, 'sw.js'), encoding='utf-8') as f:
             sw = f.read()
         m = re.search(r"var VERSION = '(v\d+\.\d+\.\d+)';", sw)
         self.assertIsNotNone(m, 'sw.js에 VERSION이 있다')
         ver = m.group(1)
-        self.assertEqual(ver, 'v1.4.3')
+        self.assertEqual(ver, 'v1.4.4')
         self.assertIn("'js/sync.js'", sw)
         # 새 파일(동호수 타입표)도 오프라인 캐시에 들어간다
         self.assertIn("'js/maraepu-types.js'", sw)
         with open(os.path.join(ROOT, 'index.html'), encoding='utf-8') as f:
             html = f.read()
         for f_ in ('icons', 'maraepu-types', 'core', 'templates', 'sync', 'app'):
-            self.assertIn(f'js/{f_}.js?v=1.4.3', html)
-        self.assertIn('styles.css?v=1.4.3', html)
+            self.assertIn(f'js/{f_}.js?v=1.4.4', html)
+        self.assertIn('styles.css?v=1.4.4', html)
         gradle = open(os.path.join(ROOT, 'android/app/build.gradle'), encoding='utf-8').read()
-        self.assertIn('versionCode 18', gradle)
-        self.assertIn("versionName '1.4.3'", gradle)
+        self.assertIn('versionCode 19', gradle)
+        self.assertIn("versionName '1.4.4'", gradle)
 
     def test_t8_deal_combos_and_labels(self):
         # 계약 조건 안내 — [매매][전세][월세] | [가계약][계약], 다섯 버튼이 한 줄·같은 크기
@@ -6097,7 +6097,51 @@ class AppTest(unittest.TestCase):
         self.assertEqual(self.page.input_value('#fields [data-mtg-holder="0"]'), '카카오뱅크')
         self.assertEqual(self.page.input_value('#fields [data-mtg-amount="0"]'), '12,000')
         self.assertIn('근저당권 1건이 설정된 상태이며', self.text())
-
+    def test_v144_legacy_default_values_cleared_only_once(self):
+        # 예전 기본 예시값·빈 차수는 한 번만 정리하고, 그 뒤에 직접 친 값은 그대로 둔다
+        seed = {
+            'profile': {'office': '마래푸중앙부동산', 'phones': '010-4585-7365 / 02-312-7365',
+                        'feeAccount': '', 'amountMode': 'won_eokman'},
+            'stars': ['t3', 't4', 't5', 't14'],
+            'data': {
+                't8': {'trade': '매매', 'kind': '가계약', 'address': '서울시 마포구 아현동 777 외 3필지'},
+                't15': {'role': '임대인', 'months': 2},
+                't10': {'trade': '매매', 'kind': '계약',
+                        'payExtra': {'gyeyak': [{'amount': '', 'date': None}],
+                                     'jung': [{'amount': '', 'date': None}]}},
+            },
+            'texts': {}, 'current': 't8', 'stage': 'all', 'custom': [], 'overrides': {},
+            'sync': {'token': '', 'gistId': '', 'updatedAt': 0, 'lastSync': 0},
+        }
+        ctx = self.browser.new_context(viewport={'width': 1440, 'height': 900})
+        ctx.add_init_script("try { if (!localStorage.getItem('smshelper.v1')) localStorage.setItem('smshelper.v1', %s); } catch (e) {}"
+                            % json.dumps(json.dumps(seed, ensure_ascii=False)))
+        page = ctx.new_page()
+        page.goto(BASE, wait_until='networkidle')
+        page.wait_for_timeout(300)
+        # ① 한 번 정리 — 주소·남은 기간·빈 차수가 사라진다
+        page.evaluate("() => SMSApp.openTemplate('t8', {})")
+        page.wait_for_timeout(250)
+        self.assertEqual(page.input_value('#fields [data-field="address"]'), '')
+        page.evaluate("() => SMSApp.openTemplate('t15', {})")
+        page.wait_for_timeout(250)
+        self.assertEqual(page.input_value('#fields [data-field="months"]'), '')
+        page.evaluate("() => SMSApp.openTemplate('t10', {})")
+        page.wait_for_timeout(250)
+        gy = page.evaluate("() => document.querySelectorAll('#fields .pay-row[data-pay-item=\"gyeyak\"]').length")
+        jung = page.evaluate("() => document.querySelectorAll('#fields .pay-row[data-pay-item=\"jung\"]').length")
+        self.assertEqual((gy, jung), (1, 1), '빈 2차 줄은 지운다')
+        # ② 같은 주소를 다시 처도 새로 고친 뒤에 지워지지 않는다 (정리는 한 번만)
+        page.evaluate("() => SMSApp.openTemplate('t8', {})")
+        page.wait_for_timeout(200)
+        page.fill('#fields [data-field="address"]', '서울시 마포구 아현동 777 외 3필지')
+        page.wait_for_timeout(250)
+        page.reload(wait_until='networkidle')
+        page.wait_for_timeout(300)
+        page.evaluate("() => SMSApp.openTemplate('t8', {})")
+        page.wait_for_timeout(250)
+        self.assertEqual(page.input_value('#fields [data-field="address"]'), '서울시 마포구 아현동 777 외 3필지')
+        ctx.close()
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

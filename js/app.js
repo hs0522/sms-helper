@@ -44,10 +44,17 @@
       if (!raw) return;
       var o = JSON.parse(raw);
       var seeded = false;
+      var needSave = false;
       if (o.profile) store.profile = Object.assign({}, DEFAULT_PROFILE, o.profile);
       if (Array.isArray(o.stars)) store.stars = o.stars;
       if (o.data && typeof o.data === 'object') store.data = o.data;
-      tidySavedDefaults();
+      // 2026-11-27 v1.4.4 — 예전 기본 예시값·빈 차수 정리는 이 기기에서 **한 번만** 한다
+      // (그 뒤에 직접 고른 값·추가한 근저당 줄을 지우지 않게)
+      if (!o.blankDefaults144) {
+        tidySavedDefaults();
+        store.blankDefaults144 = true;
+        needSave = true;
+      }
       if (o.texts && typeof o.texts === 'object') store.texts = o.texts;
       if (o.contacts && typeof o.contacts === 'object') {
         // 2026-11-27: 기본 협력업체 44명을 한 번 합친다 (예전에 빈 연락처가 저장돼 있어도 보이게)
@@ -80,7 +87,7 @@
         store.vatDefault4 = true;
         save();
       }
-      if (seeded) save();
+      if (seeded || needSave) saveNow();
     } catch (e) { /* 저장값이 깨졌으면 기본값으로 시작 */ }
   }
 
