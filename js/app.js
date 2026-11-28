@@ -2241,25 +2241,30 @@
   function renderPreview() {
     var t = tplById(store.current);
     var ta = $('#preview');
+    syncEditedBody(t);                       // 바뀐 입력값이 있으면 직접 고친 본문 일부만 따라 고친다
     var edited = store.texts[t.id] != null;
     ta.value = edited ? store.texts[t.id] : buildText(t);
+    if (!edited) autoBase[t.id] = ta.value;   // 바뀐 구간을 재는 기준 — 마지막 자동 생성 문구
     $('#btn-restore').disabled = !edited;
     $('#btn-tpl-revert').hidden = !t.edited;
     $('#btn-tpl-edit').textContent = '문구 편집';
-    var note = $('#edited-note');
-    if (note) {
-      note.hidden = !edited;
-      if (edited) {
-        var head = editDirty[t.id]
-          ? '입력값이 바뀌었어요 · 지금은 직접 수정한 본문입니다'
-          : '직접 수정한 본문입니다';
-        note.innerHTML = head + ' · <button class="link" id="btn-refresh" type="button">입력값으로 새로 만들기</button>';
-        var rf = $('#btn-refresh');
-        if (rf) rf.addEventListener('click', function () { refreshFromInputs({ snack: true }); });
-      }
-    }
+    renderEditedNote(t);
     var len = ta.value.length;
     $('#char-count').textContent = len ? len.toLocaleString('en-US') + '자' : '';
+  }
+
+  function renderEditedNote(t) {
+    var note = $('#edited-note');
+    if (!note) return;
+    var edited = store.texts[t.id] != null;
+    note.hidden = !edited;
+    if (!edited) return;
+    var head = editDirty[t.id]
+      ? '입력값이 바뀌었어요 · 지금은 직접 수정한 본문입니다'
+      : '직접 수정한 본문입니다';
+    note.innerHTML = head + ' · <button class="link" id="btn-refresh" type="button">입력값으로 새로 만들기</button>';
+    var rf = $('#btn-refresh');
+    if (rf) rf.addEventListener('click', function () { refreshFromInputs({ snack: true }); });
   }
 
   function refreshFromInputs(opts) {
@@ -2281,9 +2286,18 @@
 
   function updatePreviewOnly() {
     var t = tplById(store.current);
-    if (store.texts[t.id] != null) return;
     var ta = $('#preview');
+    if (store.texts[t.id] != null) {
+      // 직접 고친 본문 — 방금 바뀐 입력값만 본문에서 찾아 바꾸고, 화면 글자도 따라 고친다
+      syncEditedBody(t);
+      if (ta.value !== store.texts[t.id]) ta.value = store.texts[t.id];
+      renderEditedNote(t);
+      var n = ta.value.length;
+      $('#char-count').textContent = n ? n.toLocaleString('en-US') + '자' : '';
+      return;
+    }
     ta.value = buildText(t);
+    autoBase[t.id] = ta.value;
     $('#char-count').textContent = ta.value.length ? ta.value.length.toLocaleString('en-US') + '자' : '';
   }
 
@@ -3580,12 +3594,6 @@
     // 상단/하단 버튼
     $('#btn-copy').addEventListener('click', function () { copyText($('#preview').value, this); });
     $('#btn-copy2').addEventListener('click', function () { copyText($('#preview').value, this); });
-    // 본문을 고치는 중에 복사 버튼을 눌러도 초점이 미리보기에서 빠지지 않게 한다.
-    // (초점이 빠지면 kbd-open 이 풀려 버튼이 사라지고, 누른 클릭이 먹지 않는다)
-    ['#btn-copy', '#btn-copy2'].forEach(function (sel) {
-      var b = $(sel);
-      if (b) b.addEventListener('mousedown', function (e) { e.preventDefault(); });
-    });
     $('#btn-sms').addEventListener('click', openSms);
     $('#btn-reset').addEventListener('click', function () {
       var t = tplById(store.current);
@@ -3716,7 +3724,8 @@
 
   // 아이폰 숫자·문자 키보드가 열린 채 스크롤해도 하단 고정 바가 화면 가운데에 떠
   // 미리보기 카드를 가로지르지 않게, 키보드가 올라온 동안에는 바를 감춘다.
-  // (감춘 동안에는 CSS 가 미리보기의 '문자 전체 복사하기' 버튼을 대신 보여 준다)
+  // 실제 소프트 키보드로 화면이 줄었을 때만 감추고, 키보드를 닫으면 초점이 남아 있어도
+  // 곧바로 원래 하단 바(문자 앱 열기 · 복사하기)로 돌아온다.
   function bindKeyboardGuard() {
     // 윈도우 위젯(desktop)·데스크톱에는 소프트 키보드가 없다 — 좁은 창이라도 바를 감추지 않는다.
     // 위젯은 prepare_www 가 <html data-widget> 을 넣고, widget.js 가 window.__WIDGET__ 도 세운다.
@@ -3726,49 +3735,17 @@
         document.body.classList.contains('is-widget'));
     };
     var isMobile = function () { return window.matchMedia('(max-width: 900px)').matches; };
-    var isField = function (el) {
-      if (!el) return false;
-      var tag = (el.tagName || '').toLowerCase();
-      return tag === 'input' || tag === 'textarea' || tag === 'select';
-    };
     var shrunk = function () {
       var vv = window.visualViewport;
       return !!(vv && vv.height && vv.height < window.innerHeight * 0.78);
     };
-    var sawShrink = false;      // 키보드가 올라와 화면이 줄어든 적이 있는지
-    var dismissedEl = null;     // 키보드가 내려간 뒤에도 초점이 남아 있는 입력칸
-    var lastInnerHeight = window.innerHeight;
     function sync() {
-      if (noSoftKeyboard()) {
-        sawShrink = false;
-        dismissedEl = null;
-        document.body.classList.remove('kbd-open');
-        return;
-      }
-      var small = shrunk();
-      var ih = window.innerHeight;
-      // 키보드를 내리면 창 높이가 다시 커진다 — 초점이 남아 있어도 키보드는 닫힌 것으로 본다
-      var grew = ih > lastInnerHeight + 80;
-      lastInnerHeight = ih;
-      if (small) {
-        sawShrink = true;
-        dismissedEl = null;
-      } else if (sawShrink || grew) {
-        // 화면이 줄었다가 되돌아왔다 = 소프트 키보드가 내려갔다
-        sawShrink = false;
-        dismissedEl = document.activeElement;
-      }
-      var active = document.activeElement;
-      var open = isMobile() && (small || (isField(active) && active !== dismissedEl));
+      // 포커스만으로는 감추지 않는다 — 화면 높이가 줄어든(= 키보드가 올라온) 동안에만 감춘다.
+      var open = !noSoftKeyboard() && isMobile() && shrunk();
       document.body.classList.toggle('kbd-open', open);
     }
-    document.addEventListener('focusin', function () {
-      dismissedEl = null;
-      // 버튼을 눌러 초점이 옮겨 갈 때는 클릭이 끝난 뒤에 판단한다 (누르던 버튼이 사라지며 클릭이 먹지 않는 일 방지)
-      if (isField(document.activeElement)) sync();
-      else setTimeout(sync, 140);
-    });
-    document.addEventListener('focusout', function () { setTimeout(sync, 120); });
+    document.addEventListener('focusin', sync);
+    document.addEventListener('focusout', sync);
     if (window.visualViewport) window.visualViewport.addEventListener('resize', sync);
     window.addEventListener('resize', sync);
     window.addEventListener('orientationchange', function () { setTimeout(sync, 200); });
@@ -3783,18 +3760,105 @@
   }
 
   function markEdited() {
-    // 직접 고친 본문이 있는 상태에서 입력값이 또 바뀌면 알려 준다
-    var t = tplById(store.current);
-    if (store.texts[t.id] != null) {
-      editDirty[t.id] = true;
-      var note = $('#edited-note');
-      if (note) {
-        note.hidden = false;
-        note.innerHTML = '입력값이 바뀌었어요 · 지금은 직접 수정한 본문입니다 · <button class="link" id="btn-refresh" type="button">입력값으로 새로 만들기</button>';
-        var rf = $('#btn-refresh');
-        if (rf) rf.addEventListener('click', refreshFromInputs);
+    // 직접 고친 본문이 있는 상태에서 입력값이 또 바뀌면, 바뀐 값만 본문에서 찾아 바꾼다
+    // (직접 고친 문장은 그대로 두고 금액·날짜·시간·동·호수 같은 값만 따라가게)
+    syncEditedBody(tplById(store.current));
+  }
+
+  // 직접 고친 본문에 자동 생성 문구의 바뀐 구간만 반영한다 (미리보기를 그릴 때마다)
+  function syncEditedBody(t) {
+    if (!t) return;
+    if (store.texts[t.id] == null) {
+      autoBase[t.id] = buildText(t);
+      return;
+    }
+    var next = buildText(t);
+    var prev = autoBase[t.id];
+    autoBase[t.id] = next;
+    if (prev == null || prev === next) return;
+    var hunks = bodyHunks(prev, next);
+    if (!hunks || !hunks.length) return;
+    var patched = applyBodyHunks(prev, store.texts[t.id], hunks);
+    if (patched != null) {
+      if (patched !== store.texts[t.id]) {
+        store.texts[t.id] = patched;
+        save();
+      }
+      delete editDirty[t.id];
+      return;
+    }
+    // 안전하게 짚을 수 없으면 손대지 않고, [입력값으로 새로 만들기] 안내를 띄운다
+    editDirty[t.id] = true;
+  }
+
+  /* ---------------- 직접 고친 본문에 바뀐 입력값만 반영 ---------------- */
+  // 템플릿별 '마지막 자동 생성 문구' — 바뀐 구간을 재는 기준
+  var autoBase = {};
+
+  // 줄바꿈·단어·공백을 토큰으로 나눈다 (바뀐 구간을 그대로 잘라 쓰기 위해)
+  function tokenizeBody(s) {
+    return String(s).match(/\n|[^\s]+|[ \t]+/g) || [];
+  }
+
+  // 직전 자동 문구에서 새 자동 문구로 바뀐 구간만 뽑는다 (토큰 LCS)
+  function bodyHunks(prev, next) {
+    var a = tokenizeBody(prev), b = tokenizeBody(next);
+    var n = a.length, m = b.length;
+    if (!n || !m) return null;              // 처음 만들거나 통째로 비었다 — 무리하지 않는다
+    if (n * m > 400000) return null;        // 너무 길면 계산을 포기하고 안내만
+    var w = m + 1;
+    var dp = new Int32Array((n + 1) * w);
+    for (var i = n - 1; i >= 0; i--) {
+      for (var j = m - 1; j >= 0; j--) {
+        dp[i * w + j] = a[i] === b[j]
+          ? dp[(i + 1) * w + j + 1] + 1
+          : Math.max(dp[(i + 1) * w + j], dp[i * w + j + 1]);
       }
     }
+    var hunks = [], cur = null;
+    function flush() {
+      if (!cur) return;
+      var o = cur.old.join(''), nn = cur.new.join('');
+      cur = null;
+      if (o === nn) return;
+      if (!o.trim() && !nn.trim()) return;  // 공백만 바뀐 구간은 건드리지 않는다
+      hunks.push({ old: o, new: nn });
+    }
+    var x = 0, y = 0;
+    while (x < n || y < m) {
+      if (x < n && y < m && a[x] === b[y]) { flush(); x++; y++; continue; }
+      if (!cur) cur = { old: [], new: [] };
+      var down = x < n ? dp[(x + 1) * w + y] : -1;
+      var right = y < m ? dp[x * w + y + 1] : -1;
+      // 점수가 같으면 지운 쪽을 먼저 묶어 치환 구간이 한 덩어리가 되게 한다
+      if (x < n && down >= right) { cur.old.push(a[x]); x++; }
+      else { cur.new.push(b[y]); y++; }
+    }
+    flush();
+    return hunks;
+  }
+
+  function countOfText(s, sub) {
+    if (!sub) return 0;
+    var c = 0, at = 0;
+    while ((at = s.indexOf(sub, at)) !== -1) { c++; at += sub.length; }
+    return c;
+  }
+
+  // 직접 고친 본문에 바뀐 구간을 차례로 적용한다. 하나라도 안전하게 짚을 수 없으면 null
+  function applyBodyHunks(prev, edited, hunks) {
+    var out = edited, cursor = 0;
+    for (var i = 0; i < hunks.length; i++) {
+      var oldText = hunks[i].old;
+      if (!oldText.trim()) return null;     // 비었다가 새로 생긴 값 — 본문에서 짚을 수 없다
+      // 본문에 같은 값이 여러 곳이면 엉뚱한 곳을 고칠 수 있다 — 개수가 같을 때만 (차례로 바꾼다)
+      if (countOfText(prev, oldText) !== countOfText(edited, oldText)) return null;
+      var at = out.indexOf(oldText, cursor);
+      if (at < 0) return null;              // 직접 고쳐서 그 값이 이미 없다
+      out = out.slice(0, at) + hunks[i].new + out.slice(at + oldText.length);
+      cursor = at + hunks[i].new.length;
+    }
+    return out;
   }
 
   /* ---------------- 인라인 안내 (막지 않고 살짝만) ---------------- */

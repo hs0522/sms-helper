@@ -2398,7 +2398,8 @@ class AppTest(unittest.TestCase):
 
     def test_mobile_bar_hidden_while_keyboard_open(self):
         # 키보드가 열린 채 스크롤해도 '문자 앱 열기 / 복사하기' 바가 화면 가운데에 떠
-        # 미리보기 카드를 가르지 않도록, 입력칸에 초점이 들어간 동안에는 바를 감춘다.
+        # 미리보기 카드를 가르지 않도록, 소프트 키보드로 화면이 줄어든 동안에만 바를 감춘다.
+        # (초점만으로는 감추지 않고, 키보드를 닫으면 초점이 남아 있어도 바로 되돌린다)
         ctx = self.browser.new_context(viewport={'width': 390, 'height': 844},
                                       is_mobile=True, has_touch=True)
         page = ctx.new_page()
@@ -2422,9 +2423,20 @@ class AppTest(unittest.TestCase):
         dong = '#fields [data-prop="items"][data-idx="0"][data-key="dong"]'
         page.click(dong)
         page.wait_for_timeout(180)
-        self.assertTrue(page.evaluate(kbd), '입력칸에 초점이 가면 kbd-open')
+        self.assertFalse(page.evaluate(kbd), '포커스만 남아 있을 때는 감추지 않는다')
+        self.assertTrue(page.is_visible('#sms-mobile-bar'))
+
+        # 소프트 키보드가 올라와 화면이 줄어든다
+        page.evaluate("""() => {
+          Object.defineProperty(window.visualViewport, 'height',
+            { configurable: true, get: () => window.innerHeight * 0.6 });
+          window.visualViewport.dispatchEvent(new Event('resize'));
+        }""")
+        page.wait_for_timeout(120)
+        self.assertTrue(page.evaluate(kbd), '키보드가 올라오면 kbd-open')
         self.assertTrue(page.is_hidden('#sms-mobile-bar'), '키보드가 열린 동안에는 하단 바를 감춘다')
         self.assertEqual(page.evaluate('getComputedStyle(document.body).paddingBottom'), '24px')
+        self.assertTrue(page.is_hidden('#btn-copy'), '카드 안 복사 버튼은 키보드가 열려도 숨긴 채다')
 
         # 키보드가 올라온 채로 맨 아래까지 스크롤해도 바가 화면 가운데에 뜨지 않는다
         page.evaluate('window.scrollTo(0, document.documentElement.scrollHeight)')
@@ -2436,36 +2448,32 @@ class AppTest(unittest.TestCase):
         }""")
         self.assertFalse(mid, '바가 화면 가운데에 떠 있지 않다')
 
-        # 초점을 빼면 잠시 뒤 다시 보인다
-        page.evaluate('document.activeElement.blur()')
-        page.wait_for_timeout(240)
-        self.assertFalse(page.evaluate(kbd), '초점을 빼면 kbd-open 을 푼다')
-        self.assertTrue(page.is_visible('#sms-mobile-bar'))
+        # 키보드만 내리면 초점이 그대로여도 바로 하단 바가 돌아온다
+        page.evaluate("""() => {
+          delete window.visualViewport.height;
+          window.visualViewport.dispatchEvent(new Event('resize'));
+        }""")
+        page.wait_for_timeout(120)
+        self.assertFalse(page.evaluate(kbd), '키보드가 내려가면 초점이 남아 있어도 kbd-open 을 푼다')
+        self.assertTrue(page.is_visible('#sms-mobile-bar'), '원래 하단 바가 즉시 돌아온다')
+        self.assertFalse(page.is_visible('#btn-copy'), '카드 안 복사 버튼은 계속 숨겨 둔다')
 
-        # 다른 입력칸으로 옮겨 다녀도 계속 감춰진다
+        # 다른 입력칸을 눌러 키보드가 다시 올라오면 다시 감춰지고, 내리면 또 바로 돌아온다
         money = '#fields [data-prop="items"][data-idx="0"][data-money="amount"]'
         page.click(money)
-        page.wait_for_timeout(180)
-        self.assertTrue(page.is_hidden('#sms-mobile-bar'))
-        page.evaluate('document.activeElement.blur()')
-        page.wait_for_timeout(240)
-        self.assertTrue(page.is_visible('#sms-mobile-bar'))
-
-        # 화면 보이는 높이(visualViewport)만 줄어도 — 키보드·주소창 — 바를 감춘다
+        page.wait_for_timeout(150)
         page.evaluate("""() => {
           Object.defineProperty(window.visualViewport, 'height',
             { configurable: true, get: () => window.innerHeight * 0.6 });
           window.visualViewport.dispatchEvent(new Event('resize'));
         }""")
         page.wait_for_timeout(120)
-        self.assertTrue(page.evaluate(kbd))
         self.assertTrue(page.is_hidden('#sms-mobile-bar'))
         page.evaluate("""() => {
           delete window.visualViewport.height;
           window.visualViewport.dispatchEvent(new Event('resize'));
         }""")
         page.wait_for_timeout(120)
-        self.assertFalse(page.evaluate(kbd))
         self.assertTrue(page.is_visible('#sms-mobile-bar'))
         self.assertEqual(errors, [])
         ctx.close()
@@ -2479,8 +2487,15 @@ class AppTest(unittest.TestCase):
         page.wait_for_timeout(200)
         page.click('#fields [data-prop="items"][data-idx="0"][data-key="dong"]')
         page.wait_for_timeout(150)
-        self.assertFalse(page.evaluate(kbd))
+        page.evaluate("""() => {
+          Object.defineProperty(window.visualViewport, 'height',
+            { configurable: true, get: () => window.innerHeight * 0.6 });
+          window.visualViewport.dispatchEvent(new Event('resize'));
+        }""")
+        page.wait_for_timeout(120)
+        self.assertFalse(page.evaluate(kbd), 'PC(1440)에서는 kbd-open 을 켜지 않는다')
         self.assertTrue(page.is_hidden('#sms-mobile-bar'))
+        self.assertTrue(page.is_visible('#btn-copy'), 'PC 카드 안 복사 버튼은 그대로 보인다')
         ctx.close()
 
     def test_mobile_inputs_16px_no_zoom(self):
@@ -6846,9 +6861,9 @@ class AppTest(unittest.TestCase):
         self.assertEqual(mtg['justify'], 'space-between', '근저당 윗줄까지 오른쪽 정렬로 바뀌었다')
         self.assertLess(mtg['labelLeft'], mtg['stepsLeft'], '근저당 이름이 왼쪽에 있지 않다')
 
-    # ---------------------------------------------------------------- v1.4.10
-    # 미리보기를 직접 고치는 순간 하단 바(kbd-open)가 감춰져도 복사 버튼이 사라지지 않아야 한다
-    def test_v1410_mobile_direct_edit_keeps_copy_button(self):
+    # ---------------------------------------------------------------- v1.4.11
+    # 폰에서 본문을 직접 고칠 때 카드 안 복사 버튼이 튀어나오지 않아야 한다
+    def test_v1411_mobile_never_shows_card_copy_button(self):
         for w, h in ((390, 844), (360, 740)):
             with self.subTest(viewport=f'{w}x{h}'):
                 ctx = self.browser.new_context(viewport={'width': w, 'height': h},
@@ -6868,26 +6883,43 @@ class AppTest(unittest.TestCase):
                 self.assertFalse(page.evaluate(kbd))
                 self.assertFalse(page.is_visible('#btn-copy'))
 
-                # 미리보기를 눌러 직접 고치는 순간 — 하단 바는 감춰지지만 카드 안 복사 버튼이 살아난다
+                # 미리보기를 눌러 직접 고쳐도 카드 안 복사 버튼은 나오지 않는다
                 page.click('#preview')
                 page.wait_for_timeout(200)
-                self.assertTrue(page.evaluate(kbd), '미리보기에 초점이 가면 kbd-open')
-                self.assertTrue(page.is_hidden('#sms-mobile-bar'), '키보드 동안 하단 바는 감춘다')
-                self.assertTrue(page.is_visible('#btn-copy'), '복사 버튼이 화면에서 완전히 사라지면 안 된다')
-                self.assertGreater(page.evaluate(
-                    "() => document.querySelector('#btn-copy').getBoundingClientRect().height"), 20)
-                # 실제로 눌러서 복사가 된다
+                self.assertFalse(page.is_visible('#btn-copy'), '폰에서 카드 안 복사 버튼은 늘 숨김')
+                self.assertTrue(page.is_visible('#sms-mobile-bar'), '키보드가 없으면 하단 바 그대로')
+
+                # 키보드가 올라오면 하단 바를 감추고, 카드 안 버튼은 여전히 숨긴 채다
+                page.evaluate("""() => {
+                  Object.defineProperty(window.visualViewport, 'height',
+                    { configurable: true, get: () => window.innerHeight * 0.6 });
+                  window.visualViewport.dispatchEvent(new Event('resize'));
+                }""")
+                page.wait_for_timeout(140)
+                self.assertTrue(page.evaluate(kbd))
+                self.assertTrue(page.is_hidden('#sms-mobile-bar'))
+                self.assertFalse(page.is_visible('#btn-copy'), '키보드가 올라와도 카드 안 복사 버튼은 숨김')
+
+                # 키보드를 내리면 초점이 남아 있어도 바로 원래 하단 바가 돌아와 복사할 수 있다
                 page.fill('#preview', '직접 고친 본문입니다')
-                page.click('#btn-copy')
+                page.evaluate("""() => {
+                  delete window.visualViewport.height;
+                  window.visualViewport.dispatchEvent(new Event('resize'));
+                }""")
+                page.wait_for_timeout(140)
+                self.assertFalse(page.evaluate(kbd))
+                self.assertEqual(page.evaluate("document.activeElement.id"), 'preview', '초점은 그대로')
+                self.assertTrue(page.is_visible('#sms-mobile-bar'))
+                self.assertFalse(page.is_visible('#btn-copy'))
+                page.click('#btn-copy2')
                 page.wait_for_timeout(260)
-                clip = page.evaluate('navigator.clipboard.readText()')
-                self.assertIn('직접 고친 본문입니다', clip)
+                self.assertIn('직접 고친 본문입니다', page.evaluate('navigator.clipboard.readText()'))
                 self.assertEqual(errors, [])
                 ctx.close()
 
-    def test_v1410_keyboard_dismissed_releases_bar_while_focus_remains(self):
+    def test_v1411_keyboard_dismissed_releases_bar_while_focus_remains(self):
         # 안드로이드 뒤로가기·키보드 내리기로 소프트 키보드만 닫으면 초점은 입력칸에 남는다.
-        # 화면 높이(visualViewport)가 줄었다가 되돌아오면 kbd-open 을 풀어 하단 바를 되살린다.
+        # 화면 높이(visualViewport)가 줄었다가 되돌아오면 지연 없이 바로 하단 바를 되살린다.
         ctx = self.browser.new_context(viewport={'width': 390, 'height': 844},
                                       is_mobile=True, has_touch=True)
         page = ctx.new_page()
@@ -6901,7 +6933,7 @@ class AppTest(unittest.TestCase):
 
         page.click('#preview')
         page.wait_for_timeout(180)
-        self.assertTrue(page.evaluate(kbd))
+        self.assertFalse(page.evaluate(kbd), '포커스만으로는 감추지 않는다')
         # 키보드가 올라와 화면이 60%로 줄어든다
         page.evaluate("""() => {
           Object.defineProperty(window.visualViewport, 'height',
@@ -6910,24 +6942,21 @@ class AppTest(unittest.TestCase):
         }""")
         page.wait_for_timeout(140)
         self.assertTrue(page.evaluate(kbd))
-        # 키보드만 내리고 초점은 미리보기에 그대로
+        self.assertTrue(page.is_hidden('#sms-mobile-bar'))
+        # 키보드만 내리고 초점은 미리보기에 그대로 — 지연 없이 바로 바가 돌아온다
         page.evaluate("""() => {
           delete window.visualViewport.height;
           window.visualViewport.dispatchEvent(new Event('resize'));
         }""")
-        page.wait_for_timeout(160)
+        page.wait_for_timeout(80)
         self.assertEqual(page.evaluate("document.activeElement.id"), 'preview', '초점은 그대로여야 한다')
-        self.assertFalse(page.evaluate(kbd), '키보드가 내려갔으면 kbd-open 을 푼다')
+        self.assertFalse(page.evaluate(kbd), '키보드가 내려갔으면 늦추지 않고 바로 kbd-open 을 푼다')
         self.assertTrue(page.is_visible('#sms-mobile-bar'), '하단 바가 다시 보인다')
-        self.assertFalse(page.is_visible('#btn-copy'), '카드 안 복사 버튼은 다시 숨는다(중복 방지)')
-        # 다시 다른 칸을 누르면 키보드 상태로 돌아간다
-        page.click('#fields [data-prop="items"][data-idx="0"][data-key="dong"]')
-        page.wait_for_timeout(180)
-        self.assertTrue(page.evaluate(kbd))
+        self.assertFalse(page.is_visible('#btn-copy'), '카드 안 복사 버튼은 다시 숨는다')
         self.assertEqual(errors, [])
         ctx.close()
 
-    def test_v1410_widget_never_hides_bottom_bar(self):
+    def test_v1411_widget_never_hides_bottom_bar(self):
         # 윈도우 위젯(420×760)은 소프트 키보드가 없다 — 초점이 가도 하단 복사 바를 감추지 않는다.
         ctx = self.browser.new_context(viewport={'width': 420, 'height': 760},
                                        permissions=['clipboard-read', 'clipboard-write'])
@@ -6943,7 +6972,19 @@ class AppTest(unittest.TestCase):
         self.assertTrue(page.is_visible('#sms-mobile-bar'))
         page.click('#preview')
         page.wait_for_timeout(200)
-        self.assertFalse(page.evaluate(kbd), '위젯에서는 초점만으로 kbd-open 을 켜지 않는다')
+        # 화면이 좁아도(그리고 잠시 줄었다 돌아와도) 위젯에서는 감추지 않는다
+        page.evaluate("""() => {
+          Object.defineProperty(window.visualViewport, 'height',
+            { configurable: true, get: () => window.innerHeight * 0.6 });
+          window.visualViewport.dispatchEvent(new Event('resize'));
+        }""")
+        page.wait_for_timeout(140)
+        page.evaluate("""() => {
+          delete window.visualViewport.height;
+          window.visualViewport.dispatchEvent(new Event('resize'));
+        }""")
+        page.wait_for_timeout(140)
+        self.assertFalse(page.evaluate(kbd), '위젯에서는 kbd-open 을 켜지 않는다')
         self.assertTrue(page.is_visible('#sms-mobile-bar'), '위젯에서 하단 바가 남아 있다')
         self.assertGreater(page.evaluate(
             "() => document.querySelector('#btn-copy2').getBoundingClientRect().height"), 20)
@@ -6954,6 +6995,100 @@ class AppTest(unittest.TestCase):
         self.assertIn('위젯에서 직접 고친 본문', clip)
         self.assertEqual(errors, [])
         ctx.close()
+
+    # ---------------------------------------------------------------- v1.4.11 (본문 스마트 치환)
+    def test_v1411_edited_body_keeps_manual_text_when_amount_changes(self):
+        # 본문을 직접 고친 뒤 금액을 바꾸면, 직접 쓴 문장은 그대로 두고 금액만 따라 바뀐다
+        self.pick('t8')
+        self.page.fill('#fields [data-prop="prop"][data-money="amount"]', '70000')
+        self.wait(250)
+        auto = self.text()
+        self.assertEqual(auto.count('700,000,000원'), 2, '매매대금·잔금 두 곳')
+        self.page.fill('#preview', auto + '\n※ 주차는 지하 2층에 해 주세요.')
+        self.wait(200)
+        self.page.fill('#fields [data-prop="prop"][data-money="amount"]', '80000')
+        self.wait(350)
+        body = self.text()
+        self.assertIn('※ 주차는 지하 2층에 해 주세요.', body, '직접 쓴 문장은 남아야 한다')
+        self.assertEqual(body.count('800,000,000원'), 2, '바뀐 금액이 두 곳 모두에 반영된다')
+        self.assertNotIn('700,000,000원', body)
+        self.assertIn('(8억 원)', body)
+        self.assertNotIn('(7억 원)', body)
+        note = self.page.inner_text('#edited-note')
+        self.assertIn('직접 수정한 본문입니다', note)
+        self.assertNotIn('입력값이 바뀌었어요', note, '값이 반영됐으면 경고를 띄우지 않는다')
+
+    def test_v1411_edited_body_keeps_manual_text_when_date_changes(self):
+        # 날짜도 달력에서 고치는 순간 직접 쓴 문장은 두고 날짜 표현만 바뀐다
+        self.pick('t10')
+        self.page.click('#fields [data-date="when"]')
+        self.wait(200)
+        self.page.click('#calpop [data-cal-day="20"]')
+        self.wait(200)
+        self.page.click('#calpop [data-cal-close]')
+        self.wait(150)
+        self.assertIn('2026년 11월 20일 금요일', self.text())
+        self.page.fill('#preview', self.text() + '\n문의는 언제든 주세요')
+        self.wait(200)
+        self.page.click('#fields [data-date="when"]')
+        self.wait(200)
+        self.page.click('#calpop [data-cal-nav="1"]')
+        self.wait(150)
+        self.page.click('#calpop [data-cal-day="5"]')
+        self.wait(300)
+        body = self.text()
+        self.assertIn('문의는 언제든 주세요', body, '직접 쓴 문장은 남아야 한다')
+        self.assertIn('2026년 12월 5일 토요일', body)
+        self.assertNotIn('2026년 11월 20일 금요일', body)
+        note = self.page.inner_text('#edited-note')
+        self.assertIn('직접 수정한 본문입니다', note)
+        self.assertNotIn('입력값이 바뀌었어요', note)
+
+    def test_v1411_edited_body_notices_when_value_cannot_be_found(self):
+        # 직접 고른 날짜를 손으로 바꿔 둔 경우처럼 본문에서 직전 값을 찾을 수 없으면
+        # 무리하게 치환하지 않고 그대로 두며 [입력값으로 새로 만들기] 안내를 띄운다
+        self.pick('t10')
+        self.page.click('#fields [data-date="when"]')
+        self.wait(200)
+        self.page.click('#calpop [data-cal-day="20"]')
+        self.wait(200)
+        self.page.click('#calpop [data-cal-close]')
+        self.wait(150)
+        edited = self.text().replace('2026년 11월 20일 금요일', '2026년 11월 21일 (직접 적음)')
+        self.page.fill('#preview', edited + '\n문의는 언제든 주세요')
+        self.wait(200)
+        self.page.click('#fields [data-date="when"]')
+        self.wait(200)
+        self.page.click('#calpop [data-cal-nav="1"]')
+        self.wait(150)
+        self.page.click('#calpop [data-cal-day="5"]')
+        self.wait(300)
+        body = self.text()
+        self.assertIn('2026년 11월 21일 (직접 적음)', body, '직접 적은 날짜는 건드리지 않는다')
+        self.assertIn('문의는 언제든 주세요', body)
+        self.assertNotIn('2026년 12월 5일', body)
+        self.assertIn('입력값이 바뀌었어요', self.page.inner_text('#edited-note'))
+        # [입력값으로 새로 만들기]를 누르면 자동 문구로 돌아간다
+        self.page.click('#btn-refresh')
+        self.wait(200)
+        self.assertIn('2026년 12월 5일 토요일', self.text())
+        self.assertTrue(self.page.is_hidden('#edited-note'))
+
+    def test_v1411_edited_body_keeps_manual_line_when_property_changes(self):
+        # 매물칸(동·호수)을 바꿔도 직접 쓴 줄은 그대로, 매물 줄만 따라 바뀐다
+        self.pick('t2')
+        self.page.fill('#fields [data-prop="prop"][data-key="dong"]', '402')
+        self.page.fill('#fields [data-prop="prop"][data-key="ho"]', '1201')
+        self.wait(250)
+        self.page.fill('#preview', self.text() + '\n추가 문장')
+        self.wait(200)
+        self.page.fill('#fields [data-prop="prop"][data-key="dong"]', '404')
+        self.wait(300)
+        body = self.text()
+        self.assertIn('404동 1201호', body)
+        self.assertNotIn('402동 1201호', body)
+        self.assertIn('추가 문장', body)
+        self.assertNotIn('입력값이 바뀌었어요', self.page.inner_text('#edited-note'))
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

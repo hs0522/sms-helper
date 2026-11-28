@@ -39,12 +39,12 @@ python3 -m http.server 8000
 | **안드로이드** | 아래 `.apk`를 내려받아 설치 (오프라인 내장) |
 
 - 웹: https://hs0522.github.io/sms-helper/ (GitHub Pages · `gh-pages` 브랜치 루트)
-- 안드로이드 설치 파일: https://github.com/hs0522/sms-helper/releases/download/v1.4.10/Maraepu-SMS-Helper-v1.4.10.apk
-- 릴리즈 페이지: https://github.com/hs0522/sms-helper/releases/tag/v1.4.10
+- 안드로이드 설치 파일: https://github.com/hs0522/sms-helper/releases/download/v1.4.11/Maraepu-SMS-Helper-v1.4.11.apk
+- 릴리즈 페이지: https://github.com/hs0522/sms-helper/releases/tag/v1.4.11
 
 ### 윈도우 미니 위젯(.exe)
 
-필라테스 계산기와 같은 방식의 **항상 위 고정 미니 위젯**입니다. 웹 앱(v1.4.10)을 그대로 안에 넣고, 위에서 드래그 이동 · `📌 항상 위` · `—` 최소화 · `×` 닫기 · 새 버전(`widget-v*`)일 때만 뜨는 `업데이트` 버튼을 더합니다. 기본 420×760(최소 380×620), 마지막 위치·크기를 기억합니다.
+필라테스 계산기와 같은 방식의 **항상 위 고정 미니 위젯**입니다. 웹 앱(v1.4.11)을 그대로 안에 넣고, 위에서 드래그 이동 · `📌 항상 위` · `—` 최소화 · `×` 닫기 · 새 버전(`widget-v*`)일 때만 뜨는 `업데이트` 버튼을 더합니다. 기본 420×760(최소 380×620), 마지막 위치·크기를 기억합니다.
 
 ```bash
 python desktop/prepare_www.py                # 웹 앱 사본 + 상단 바 주입(desktop/www)
@@ -322,12 +322,14 @@ projects/sms-helper/
   desktop/                   윈도우 미니 위젯 (widget.py · build.spec · installer.iss · web/ · tests/)
   ci/windows-widget.yml      윈도우 위젯 빌드 워크플로우(권한 때문에 ci/에 둠 — .github/workflows로 복사)
   .github/workflows-disabled/ GitHub Actions APK 빌드 워크플로우(권한 때문에 비활성 위치에 둠)
-  tests/test_app.py          자동 테스트 189개
+  tests/test_app.py          자동 테스트 215개
   tests/capture.py           스크린샷 캡처
   tests/capture_v142.py      v1.4.2 정렬·환산·목록 버튼 검수 스크린샷
   tests/capture_v143.py      v1.4.3 2차 수정본·44명 연락처 검수 스크린샷
   tests/capture_v149.py      v1.4.9 지급 일정 이름·머리글 정렬 검수 스크린샷
+  tests/capture_v1411.py     v1.4.11 키보드 복귀·위젯 검수 스크린샷
   (v1.4.10 검수 스크린샷: downloads/sms-v1410-mobile-editing.png · downloads/sms-v1410-widget-editing.png)
+  (v1.4.11 검수 스크린샷: downloads/v1.4.11-mobile-kbd-return.png · downloads/v1.4.11-widget.png)
 ```
 
 > 2026-11-25에 `📋 매물 찾기`(엑셀·표·매물표 이미지)와 `📑 진행 거래`(D-day 보드·정산표) 탭을 걷어냈습니다.
@@ -484,6 +486,14 @@ projects/sms-helper/
 > ③ 윈도우 위젯(420×760)은 소프트 키보드가 없는데도 초점만으로 하단 바가 숨던 것을 막았습니다(`<html data-widget>`).
 > ④ 복사 버튼을 눌러도 미리보기 초점이 풀리지 않아, 버튼이 사라지며 클릭이 먹지 않던 문제도 함께 정리했습니다.
 > 테스트 211개. 서비스 워커 캐시 `v1.4.10`, 안드로이드 `versionCode 25`, 윈도우 위젯 `widget-v1.0.1`.
+>
+> 2026-11-28 스물한 번째 수정(v1.4.11): **키보드를 내리면 하단 바만 깔끔하게 돌아오고, 직접 고친 본문에는 바뀐 입력값만 반영됩니다.**
+> ① 폰에서 본문을 직접 고친 뒤 키보드를 내릴 때 가끔 카드 안 `문자 전체 복사하기`가 튀어나오던 것을 없앴습니다 —
+> 폰에서는 카드 안 복사 버튼을 늘 숨기고, 키보드를 내리면 지연 없이 바로 하단 바(`문자 앱 열기 · 복사하기`)로 돌아옵니다.
+> ② 하단 바를 감추는 기준을 '실제 소프트 키보드로 화면이 줄었을 때'만으로 단순화했습니다 — 포커스만 남아 있거나 위젯(420×760)·PC에서는 감추지 않습니다.
+> ③ 본문을 직접 고친 상태에서 금액·날짜·시간·동·호수를 바꾸면, **직접 쓴 문장은 그대로 두고 바뀐 값만 본문에서 찾아 바꿉니다**(직전 자동 문구와 새 자동 문구의 차이를 토큰 단위로 비교).
+> 값이 비었다가 생겼거나 본문에서 유일하게 짚을 수 없을 때만 `입력값이 바뀌었어요 · [입력값으로 새로 만들기]` 안내를 띄우고 본문은 건드리지 않습니다.
+> 테스트 215개. 서비스 워커 캐시 `v1.4.11`, 안드로이드 `versionCode 26`, 윈도우 위젯 `widget-v1.0.2`.
 >
 > 2026-11-26 열세 번째 수정(v1.1.7): **매물 블록의 거래유형·금액을 한 줄로** — `[매매] [전세] [월세]` 오른쪽이 비어 있고
 > 금액칸이 아래 줄로 내려가던 배치를 고쳤습니다. 이제 버튼 옆 오른쪽 영역이 금액칸 하나(매매·전세)이고,

@@ -1,6 +1,6 @@
 """데스크톱 위젯용 웹 자산 묶음(www)을 만든다.
 
-`projects/sms-helper/` 의 웹 앱(v1.4.10)을 그대로 복사하고, 위젯 창에 필요한
+`projects/sms-helper/` 의 웹 앱(v1.4.11)을 그대로 복사하고, 위젯 창에 필요한
 상단 드래그 바·버튼·브리지 스크립트만 index.html 에 끼워 넣는다. 웹 앱 본체
 (index.html·styles.css·js/)는 한 줄도 고치지 않으므로 웹·폰 화면과 항상 같다.
 
@@ -50,7 +50,7 @@ WIDGET_SCRIPT = '<script src="widget/widget.js" defer></script>'
 
 
 def web_version(root: str = ROOT) -> str:
-    """sw.js 의 VERSION('v1.4.10')을 읽어 위젯에 묶인 웹 버전을 남긴다."""
+    """sw.js 의 VERSION('v1.4.11')을 읽어 위젯에 묶인 웹 버전을 남긴다."""
     try:
         with open(os.path.join(root, "sw.js"), encoding="utf-8") as fp:
             match = re.search(r"VERSION\s*=\s*['\"]v?([0-9][^'\"]*)['\"]", fp.read())
