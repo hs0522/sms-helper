@@ -71,6 +71,17 @@ class InjectionTest(unittest.TestCase):
         self.assertIn("serviceWorker", self.html)
         self.assertNotIn("serviceWorker", out)
 
+    def test_widget_flag_is_injected(self):
+        """위젯 창에는 소프트 키보드가 없다 — <html data-widget> 로 웹 앱에 알린다.
+
+        (app.js 의 bindKeyboardGuard 가 이 속성을 보고 하단 복사 바를 감추지 않는다)
+        """
+        out = prepare_www.inject_widget(self.html, "1.4.10")
+        self.assertIn('<html lang="ko" data-widget="1" data-widget-web-version="1.4.10">', out)
+        # 버전을 못 읽어도 속성은 남는다
+        plain = prepare_www.inject_widget(self.html, "")
+        self.assertIn('<html lang="ko" data-widget="1">', plain)
+
     def test_web_version_matches_bundled_app(self):
         version = prepare_www.web_version(ROOT)
         self.assertRegex(version, r"^\d+\.\d+\.\d+$")

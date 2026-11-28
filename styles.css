@@ -799,11 +799,18 @@ input, textarea, select { font-family: inherit; letter-spacing: inherit; }
 /* ---------------- 모바일 ---------------- */
 .mobile-bar { display: none; }
 #btn-sheet { display: none; }
-/* 키보드가 열린 동안에는 하단 고정 바를 감춘다 (입력칸을 가리지 않게) */
+/* 키보드가 열린 동안에는 하단 고정 바를 감춘다 (입력칸을 가리지 않게)
+   이때는 미리보기 카드 안 '문자 전체 복사하기' 버튼을 되살린다 — 두 버튼이 함께
+   사라져 본문을 직접 고치는 순간 복사할 방법이 없어지던 문제를 막는다. */
 @media (max-width: 900px) {
   body.kbd-open .mobile-bar { display: none; }
   body.kbd-open { padding-bottom: 24px; }
+  body.kbd-open .preview-foot #btn-copy { display: inline-flex; }
 }
+/* 윈도우 위젯은 소프트 키보드가 없다 — 좁은 창(420px)이어도 하단 바를 감추지 않는다 */
+html[data-widget] body.kbd-open .mobile-bar { display: flex; }
+html[data-widget] body.kbd-open { padding-bottom: calc(104px + env(safe-area-inset-bottom, 16px)); }
+html[data-widget] body.kbd-open .preview-foot #btn-copy { display: none; }
 
 .sheet { display: none; position: fixed; inset: 0; background: rgba(17, 18, 28, .34); z-index: 60; }
 .sheet.is-open { display: block; }

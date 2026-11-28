@@ -11,6 +11,11 @@
 (function () {
   'use strict';
 
+  // 이 창에는 소프트 키보드가 없다 — 웹 앱이 입력칸 초점만으로 하단 복사 바를 감추지 않도록 알린다.
+  // (app.js 의 bindKeyboardGuard 가 이 플래그와 <html data-widget> 을 함께 본다)
+  window.__WIDGET__ = true;
+  document.documentElement.setAttribute('data-widget', '1');
+
   var booted = false;
   var updateInfo = null;
 

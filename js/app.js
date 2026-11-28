@@ -3580,6 +3580,12 @@
     // 상단/하단 버튼
     $('#btn-copy').addEventListener('click', function () { copyText($('#preview').value, this); });
     $('#btn-copy2').addEventListener('click', function () { copyText($('#preview').value, this); });
+    // 본문을 고치는 중에 복사 버튼을 눌러도 초점이 미리보기에서 빠지지 않게 한다.
+    // (초점이 빠지면 kbd-open 이 풀려 버튼이 사라지고, 누른 클릭이 먹지 않는다)
+    ['#btn-copy', '#btn-copy2'].forEach(function (sel) {
+      var b = $(sel);
+      if (b) b.addEventListener('mousedown', function (e) { e.preventDefault(); });
+    });
     $('#btn-sms').addEventListener('click', openSms);
     $('#btn-reset').addEventListener('click', function () {
       var t = tplById(store.current);
@@ -3710,7 +3716,15 @@
 
   // 아이폰 숫자·문자 키보드가 열린 채 스크롤해도 하단 고정 바가 화면 가운데에 떠
   // 미리보기 카드를 가로지르지 않게, 키보드가 올라온 동안에는 바를 감춘다.
+  // (감춘 동안에는 CSS 가 미리보기의 '문자 전체 복사하기' 버튼을 대신 보여 준다)
   function bindKeyboardGuard() {
+    // 윈도우 위젯(desktop)·데스크톱에는 소프트 키보드가 없다 — 좁은 창이라도 바를 감추지 않는다.
+    // 위젯은 prepare_www 가 <html data-widget> 을 넣고, widget.js 가 window.__WIDGET__ 도 세운다.
+    var noSoftKeyboard = function () {
+      return !!(window.__WIDGET__ ||
+        document.documentElement.hasAttribute('data-widget') ||
+        document.body.classList.contains('is-widget'));
+    };
     var isMobile = function () { return window.matchMedia('(max-width: 900px)').matches; };
     var isField = function (el) {
       if (!el) return false;
@@ -3721,11 +3735,39 @@
       var vv = window.visualViewport;
       return !!(vv && vv.height && vv.height < window.innerHeight * 0.78);
     };
+    var sawShrink = false;      // 키보드가 올라와 화면이 줄어든 적이 있는지
+    var dismissedEl = null;     // 키보드가 내려간 뒤에도 초점이 남아 있는 입력칸
+    var lastInnerHeight = window.innerHeight;
     function sync() {
-      var open = isMobile() && (shrunk() || isField(document.activeElement));
+      if (noSoftKeyboard()) {
+        sawShrink = false;
+        dismissedEl = null;
+        document.body.classList.remove('kbd-open');
+        return;
+      }
+      var small = shrunk();
+      var ih = window.innerHeight;
+      // 키보드를 내리면 창 높이가 다시 커진다 — 초점이 남아 있어도 키보드는 닫힌 것으로 본다
+      var grew = ih > lastInnerHeight + 80;
+      lastInnerHeight = ih;
+      if (small) {
+        sawShrink = true;
+        dismissedEl = null;
+      } else if (sawShrink || grew) {
+        // 화면이 줄었다가 되돌아왔다 = 소프트 키보드가 내려갔다
+        sawShrink = false;
+        dismissedEl = document.activeElement;
+      }
+      var active = document.activeElement;
+      var open = isMobile() && (small || (isField(active) && active !== dismissedEl));
       document.body.classList.toggle('kbd-open', open);
     }
-    document.addEventListener('focusin', sync);
+    document.addEventListener('focusin', function () {
+      dismissedEl = null;
+      // 버튼을 눌러 초점이 옮겨 갈 때는 클릭이 끝난 뒤에 판단한다 (누르던 버튼이 사라지며 클릭이 먹지 않는 일 방지)
+      if (isField(document.activeElement)) sync();
+      else setTimeout(sync, 140);
+    });
     document.addEventListener('focusout', function () { setTimeout(sync, 120); });
     if (window.visualViewport) window.visualViewport.addEventListener('resize', sync);
     window.addEventListener('resize', sync);

@@ -5017,25 +5017,25 @@ class AppTest(unittest.TestCase):
 
     # ============================================================== 버전 · 배포 파일
 
-    def test_24_version_bumped_to_1_4_9(self):
+    def test_24_version_bumped_to_1_4_10(self):
         # 서비스 워커 · 화면 캐시 주소 · 안드로이드 빌드 번호가 모두 같은 버전을 가리킨다
         with open(os.path.join(ROOT, 'sw.js'), encoding='utf-8') as f:
             sw = f.read()
         m = re.search(r"var VERSION = '(v\d+\.\d+\.\d+)';", sw)
         self.assertIsNotNone(m, 'sw.js에 VERSION이 있다')
         ver = m.group(1)
-        self.assertEqual(ver, 'v1.4.9')
+        self.assertEqual(ver, 'v1.4.10')
         self.assertIn("'js/sync.js'", sw)
         # 새 파일(동호수 타입표)도 오프라인 캐시에 들어간다
         self.assertIn("'js/maraepu-types.js'", sw)
         with open(os.path.join(ROOT, 'index.html'), encoding='utf-8') as f:
             html = f.read()
         for f_ in ('icons', 'maraepu-types', 'core', 'templates', 'sync', 'app'):
-            self.assertIn(f'js/{f_}.js?v=1.4.9', html)
-        self.assertIn('styles.css?v=1.4.9', html)
+            self.assertIn(f'js/{f_}.js?v=1.4.10', html)
+        self.assertIn('styles.css?v=1.4.10', html)
         gradle = open(os.path.join(ROOT, 'android/app/build.gradle'), encoding='utf-8').read()
-        self.assertIn('versionCode 24', gradle)
-        self.assertIn("versionName '1.4.9'", gradle)
+        self.assertIn('versionCode 25', gradle)
+        self.assertIn("versionName '1.4.10'", gradle)
 
     def test_t8_deal_combos_and_labels(self):
         # 계약 조건 안내 — 상단 구분(매매 가계약·약정·계약) + 12번과 같은 공통 매물칸
@@ -6845,6 +6845,115 @@ class AppTest(unittest.TestCase):
         self.assertIsNotNone(mtg, '근저당 줄이 없다')
         self.assertEqual(mtg['justify'], 'space-between', '근저당 윗줄까지 오른쪽 정렬로 바뀌었다')
         self.assertLess(mtg['labelLeft'], mtg['stepsLeft'], '근저당 이름이 왼쪽에 있지 않다')
+
+    # ---------------------------------------------------------------- v1.4.10
+    # 미리보기를 직접 고치는 순간 하단 바(kbd-open)가 감춰져도 복사 버튼이 사라지지 않아야 한다
+    def test_v1410_mobile_direct_edit_keeps_copy_button(self):
+        for w, h in ((390, 844), (360, 740)):
+            with self.subTest(viewport=f'{w}x{h}'):
+                ctx = self.browser.new_context(viewport={'width': w, 'height': h},
+                                               is_mobile=True, has_touch=True,
+                                               permissions=['clipboard-read', 'clipboard-write'])
+                page = ctx.new_page()
+                errors = []
+                page.on('pageerror', lambda e: errors.append(str(e)))
+                page.goto(BASE, wait_until='networkidle')
+                page.evaluate('localStorage.clear()')
+                page.reload(wait_until='networkidle')
+                page.wait_for_timeout(220)
+
+                kbd = "document.body.classList.contains('kbd-open')"
+                # 평소: 하단 바의 복사하기가 보이고 카드 안 버튼은 숨겨져 있다
+                self.assertTrue(page.is_visible('#sms-mobile-bar'))
+                self.assertFalse(page.evaluate(kbd))
+                self.assertFalse(page.is_visible('#btn-copy'))
+
+                # 미리보기를 눌러 직접 고치는 순간 — 하단 바는 감춰지지만 카드 안 복사 버튼이 살아난다
+                page.click('#preview')
+                page.wait_for_timeout(200)
+                self.assertTrue(page.evaluate(kbd), '미리보기에 초점이 가면 kbd-open')
+                self.assertTrue(page.is_hidden('#sms-mobile-bar'), '키보드 동안 하단 바는 감춘다')
+                self.assertTrue(page.is_visible('#btn-copy'), '복사 버튼이 화면에서 완전히 사라지면 안 된다')
+                self.assertGreater(page.evaluate(
+                    "() => document.querySelector('#btn-copy').getBoundingClientRect().height"), 20)
+                # 실제로 눌러서 복사가 된다
+                page.fill('#preview', '직접 고친 본문입니다')
+                page.click('#btn-copy')
+                page.wait_for_timeout(260)
+                clip = page.evaluate('navigator.clipboard.readText()')
+                self.assertIn('직접 고친 본문입니다', clip)
+                self.assertEqual(errors, [])
+                ctx.close()
+
+    def test_v1410_keyboard_dismissed_releases_bar_while_focus_remains(self):
+        # 안드로이드 뒤로가기·키보드 내리기로 소프트 키보드만 닫으면 초점은 입력칸에 남는다.
+        # 화면 높이(visualViewport)가 줄었다가 되돌아오면 kbd-open 을 풀어 하단 바를 되살린다.
+        ctx = self.browser.new_context(viewport={'width': 390, 'height': 844},
+                                      is_mobile=True, has_touch=True)
+        page = ctx.new_page()
+        errors = []
+        page.on('pageerror', lambda e: errors.append(str(e)))
+        page.goto(BASE, wait_until='networkidle')
+        page.evaluate('localStorage.clear()')
+        page.reload(wait_until='networkidle')
+        page.wait_for_timeout(220)
+        kbd = "document.body.classList.contains('kbd-open')"
+
+        page.click('#preview')
+        page.wait_for_timeout(180)
+        self.assertTrue(page.evaluate(kbd))
+        # 키보드가 올라와 화면이 60%로 줄어든다
+        page.evaluate("""() => {
+          Object.defineProperty(window.visualViewport, 'height',
+            { configurable: true, get: () => window.innerHeight * 0.6 });
+          window.visualViewport.dispatchEvent(new Event('resize'));
+        }""")
+        page.wait_for_timeout(140)
+        self.assertTrue(page.evaluate(kbd))
+        # 키보드만 내리고 초점은 미리보기에 그대로
+        page.evaluate("""() => {
+          delete window.visualViewport.height;
+          window.visualViewport.dispatchEvent(new Event('resize'));
+        }""")
+        page.wait_for_timeout(160)
+        self.assertEqual(page.evaluate("document.activeElement.id"), 'preview', '초점은 그대로여야 한다')
+        self.assertFalse(page.evaluate(kbd), '키보드가 내려갔으면 kbd-open 을 푼다')
+        self.assertTrue(page.is_visible('#sms-mobile-bar'), '하단 바가 다시 보인다')
+        self.assertFalse(page.is_visible('#btn-copy'), '카드 안 복사 버튼은 다시 숨는다(중복 방지)')
+        # 다시 다른 칸을 누르면 키보드 상태로 돌아간다
+        page.click('#fields [data-prop="items"][data-idx="0"][data-key="dong"]')
+        page.wait_for_timeout(180)
+        self.assertTrue(page.evaluate(kbd))
+        self.assertEqual(errors, [])
+        ctx.close()
+
+    def test_v1410_widget_never_hides_bottom_bar(self):
+        # 윈도우 위젯(420×760)은 소프트 키보드가 없다 — 초점이 가도 하단 복사 바를 감추지 않는다.
+        ctx = self.browser.new_context(viewport={'width': 420, 'height': 760},
+                                       permissions=['clipboard-read', 'clipboard-write'])
+        ctx.add_init_script("window.__WIDGET__ = true;")
+        page = ctx.new_page()
+        errors = []
+        page.on('pageerror', lambda e: errors.append(str(e)))
+        page.goto(BASE, wait_until='networkidle')
+        page.evaluate('localStorage.clear()')
+        page.reload(wait_until='networkidle')
+        page.wait_for_timeout(220)
+        kbd = "document.body.classList.contains('kbd-open')"
+        self.assertTrue(page.is_visible('#sms-mobile-bar'))
+        page.click('#preview')
+        page.wait_for_timeout(200)
+        self.assertFalse(page.evaluate(kbd), '위젯에서는 초점만으로 kbd-open 을 켜지 않는다')
+        self.assertTrue(page.is_visible('#sms-mobile-bar'), '위젯에서 하단 바가 남아 있다')
+        self.assertGreater(page.evaluate(
+            "() => document.querySelector('#btn-copy2').getBoundingClientRect().height"), 20)
+        page.fill('#preview', '위젯에서 직접 고친 본문')
+        page.click('#btn-copy2')
+        page.wait_for_timeout(260)
+        clip = page.evaluate('navigator.clipboard.readText()')
+        self.assertIn('위젯에서 직접 고친 본문', clip)
+        self.assertEqual(errors, [])
+        ctx.close()
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
