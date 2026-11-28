@@ -1,6 +1,6 @@
 """데스크톱 위젯용 웹 자산 묶음(www)을 만든다.
 
-`projects/sms-helper/` 의 웹 앱(v1.4.11)을 그대로 복사하고, 위젯 창에 필요한
+`projects/sms-helper/` 의 웹 앱(v1.4.12)을 그대로 복사하고, 위젯 창에 필요한
 상단 드래그 바·버튼·브리지 스크립트만 index.html 에 끼워 넣는다. 웹 앱 본체
 (index.html·styles.css·js/)는 한 줄도 고치지 않으므로 웹·폰 화면과 항상 같다.
 
@@ -34,7 +34,7 @@ WEB_DIRS = ("js", "icons", "assets")
 
 WIDGET_BAR = """<div id="wbar" role="banner">
   <div class="wbar-drag pywebview-drag-region" id="wbar-drag">
-    <span class="wbar-mark" data-icon="message" aria-hidden="true"></span>
+    <img class="wbar-mark" src="icons/icon-192.png" alt="" width="15" height="15" aria-hidden="true">
     <span class="wbar-title">문자 도우미</span>
     <span class="wbar-web" id="wbar-web"></span>
   </div>
@@ -50,7 +50,7 @@ WIDGET_SCRIPT = '<script src="widget/widget.js" defer></script>'
 
 
 def web_version(root: str = ROOT) -> str:
-    """sw.js 의 VERSION('v1.4.11')을 읽어 위젯에 묶인 웹 버전을 남긴다."""
+    """sw.js 의 VERSION('v1.4.12')을 읽어 위젯에 묶인 웹 버전을 남긴다."""
     try:
         with open(os.path.join(root, "sw.js"), encoding="utf-8") as fp:
             match = re.search(r"VERSION\s*=\s*['\"]v?([0-9][^'\"]*)['\"]", fp.read())
@@ -113,7 +113,9 @@ def prepare(dest: str, root: str = ROOT) -> str:
     for name in WEB_DIRS:
         src = os.path.join(root, name)
         if os.path.isdir(src):
-            shutil.copytree(src, os.path.join(dest, name))
+            # 아이콘을 만드는 원본·스크립트는 화면에 쓰지 않으니 위젯에 넣지 않는다
+            shutil.copytree(src, os.path.join(dest, name),
+                            ignore=shutil.ignore_patterns("make_icons.py", "icon-source.png"))
 
     widget_src = os.path.join(HERE, "web")
     widget_dest = os.path.join(dest, "widget")

@@ -2,7 +2,7 @@
   "id": "./",
   "name": "마래푸 문자 도우미",
   "short_name": "문자도우미",
-  "description": "마래푸중앙부동산 업무 문자 20종과 중개보수 계산기",
+  "description": "마래푸중앙부동산 업무 문자 17종과 중개보수 계산기",
   "lang": "ko",
   "dir": "ltr",
   "start_url": "./index.html",

@@ -1,6 +1,6 @@
 # 윈도우 미니 위젯 — 마래푸 문자 도우미
 
-`projects/sms-helper` 의 웹 앱(v1.4.11)을 pywebview 창에 그대로 넣은 데스크톱 프로그램입니다.
+`projects/sms-helper` 의 웹 앱(v1.4.12)을 pywebview 창에 그대로 넣은 데스크톱 프로그램입니다.
 필라테스 계산기(`projects/pilates-calculator/`)와 같은 frameless 미니 위젯 방식입니다.
 
 - **창** 420×760 (최소 380×620) · 리사이즈 가능 · 마지막 위치·크기 기억 (`%APPDATA%\MaraepuSmsHelper\state.json`)

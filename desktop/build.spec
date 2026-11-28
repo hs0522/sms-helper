@@ -3,7 +3,7 @@
 
     python -m PyInstaller --noconfirm --clean desktop/build.spec
 
-빌드 직전에 prepare_www 가 웹 앱(v1.4.11)을 desktop/www 로 복사하고
+빌드 직전에 prepare_www 가 웹 앱(v1.4.12)을 desktop/www 로 복사하고
 위젯 상단 바를 주입한다. 산출물: dist/MaraepuSmsHelper/MaraepuSmsHelper.exe
 """
 

@@ -26,9 +26,8 @@ python3 -m http.server 8000
 
 **아이폰** — 웹 주소로 열고 사파리 공유 → **홈 화면에 추가**를 하면 앱처럼 실행됩니다(주소 표시줄 없이 전체 화면).
 
-- 이름은 `문자도우미`, 아이콘은 보라 말풍선(`icons/icon-180.png`), 상태 표시줄은 기본(`default`)
-- `manifest.webmanifest`(standalone · 테마 `#4f46e5` · 192/512/maskable 아이콘)와 애플 메타가 들어 있어 별도 설정 없이 동작합니다
-- 모든 경로가 상대경로(`./`, `icons/…`, `js/…`)이고 외부 CDN·서버가 없어, 나중에 안드로이드 `.apk`(Capacitor/TWA)로 쌀 때 `webDir`에 이 폴더를 그대로 넣으면 됩니다
+- 이름은 `문자도우미`, 아이콘은 핑크 유리 말풍선(`icons/icon-180.png` · iOS 홈 화면용 흰 배경), 상태 표시줄은 기본(`default`)
+- `manifest.webmanifest`(standalone · 테마 `#4f46e5` · 192/512/maskable 아이콘)와 애플 메타가 들어 있어 별도 설정 없이 동작합니다- 모든 경로가 상대경로(`./`, `icons/…`, `js/…`)이고 외부 CDN·서버가 없어, 나중에 안드로이드 `.apk`(Capacitor/TWA)로 쌀 때 `webDir`에 이 폴더를 그대로 넣으면 됩니다
 
 ## 웹 주소 · 설치 (배포됨)
 
@@ -39,12 +38,12 @@ python3 -m http.server 8000
 | **안드로이드** | 아래 `.apk`를 내려받아 설치 (오프라인 내장) |
 
 - 웹: https://hs0522.github.io/sms-helper/ (GitHub Pages · `gh-pages` 브랜치 루트)
-- 안드로이드 설치 파일: https://github.com/hs0522/sms-helper/releases/download/v1.4.11/Maraepu-SMS-Helper-v1.4.11.apk
-- 릴리즈 페이지: https://github.com/hs0522/sms-helper/releases/tag/v1.4.11
+- 안드로이드 설치 파일: https://github.com/hs0522/sms-helper/releases/download/v1.4.12/Maraepu-SMS-Helper-v1.4.12.apk
+- 릴리즈 페이지: https://github.com/hs0522/sms-helper/releases/tag/v1.4.12
 
 ### 윈도우 미니 위젯(.exe)
 
-필라테스 계산기와 같은 방식의 **항상 위 고정 미니 위젯**입니다. 웹 앱(v1.4.11)을 그대로 안에 넣고, 위에서 드래그 이동 · `📌 항상 위` · `—` 최소화 · `×` 닫기 · 새 버전(`widget-v*`)일 때만 뜨는 `업데이트` 버튼을 더합니다. 기본 420×760(최소 380×620), 마지막 위치·크기를 기억합니다.
+필라테스 계산기와 같은 방식의 **항상 위 고정 미니 위젯**입니다. 웹 앱(v1.4.12)을 그대로 안에 넣고, 위에서 드래그 이동 · `📌 항상 위` · `—` 최소화 · `×` 닫기 · 새 버전(`widget-v*`)일 때만 뜨는 `업데이트` 버튼을 더합니다. 기본 420×760(최소 380×620), 마지막 위치·크기를 기억합니다.
 
 ```bash
 python desktop/prepare_www.py                # 웹 앱 사본 + 상단 바 주입(desktop/www)
@@ -324,6 +323,7 @@ projects/sms-helper/
   .github/workflows-disabled/ GitHub Actions APK 빌드 워크플로우(권한 때문에 비활성 위치에 둠)
   tests/test_app.py          자동 테스트 215개
   tests/capture.py           스크린샷 캡처
+  assets/make_icons.py       아이콘 생성 (핑크 유리 말풍선 한 장 → 웹·iOS·안드로이드·윈도우 전부)
   tests/capture_v142.py      v1.4.2 정렬·환산·목록 버튼 검수 스크린샷
   tests/capture_v143.py      v1.4.3 2차 수정본·44명 연락처 검수 스크린샷
   tests/capture_v149.py      v1.4.9 지급 일정 이름·머리글 정렬 검수 스크린샷
@@ -494,6 +494,14 @@ projects/sms-helper/
 > ③ 본문을 직접 고친 상태에서 금액·날짜·시간·동·호수를 바꾸면, **직접 쓴 문장은 그대로 두고 바뀐 값만 본문에서 찾아 바꿉니다**(직전 자동 문구와 새 자동 문구의 차이를 토큰 단위로 비교).
 > 값이 비었다가 생겼거나 본문에서 유일하게 짚을 수 없을 때만 `입력값이 바뀌었어요 · [입력값으로 새로 만들기]` 안내를 띄우고 본문은 건드리지 않습니다.
 > 테스트 215개. 서비스 워커 캐시 `v1.4.11`, 안드로이드 `versionCode 26`, 윈도우 위젯 `widget-v1.0.2`.
+>
+> 2026-11-28 스물두 번째 수정(v1.4.12): **앱 아이콘을 핑크 유리 말풍선으로 전부 바꿨습니다.**
+> ① 웹 파비콘·PWA 아이콘(192 · 512 · maskable)은 **배경을 투명하게 따고**(안티앨리어싱 유지, 흰 테두리 없음) 새 아이콘으로,
+> iOS 홈 화면(`apple-touch-icon 180`)은 투명하면 검게 보이므로 **흰 배경 + 여백**으로 다시 만들었습니다.
+> ② 안드로이드는 `ic_launcher` · `ic_launcher_round` · `ic_launcher_foreground`(적응형 아이콘 안전 영역)를 새로 넣고
+> `mipmap-anydpi-v26` 적응형 아이콘 정의를 더했습니다. 윈도우 위젯은 exe·설치판·바로가기·작업 표시줄·상단 바 로고까지 새 아이콘입니다.
+> ③ 상단 바 로고도 SVG 말풍선 대신 새 아이콘 이미지로 바꿨습니다.
+> 아이콘은 `assets/make_icons.py` 하나로 다시 만들 수 있습니다. 테스트 215개. 서비스 워커 캐시 `v1.4.12`, 안드로이드 `versionCode 27`, 윈도우 위젯 `widget-v1.0.3`.
 >
 > 2026-11-26 열세 번째 수정(v1.1.7): **매물 블록의 거래유형·금액을 한 줄로** — `[매매] [전세] [월세]` 오른쪽이 비어 있고
 > 금액칸이 아래 줄로 내려가던 배치를 고쳤습니다. 이제 버튼 옆 오른쪽 영역이 금액칸 하나(매매·전세)이고,

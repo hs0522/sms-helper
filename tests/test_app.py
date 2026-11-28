@@ -3729,7 +3729,7 @@ class AppTest(unittest.TestCase):
         per_row = self.js("""() => [...document.querySelectorAll('#tpl-list .row')]
             .every(r => !!r.querySelector('.row-icon svg'))""")
         self.assertTrue(per_row)
-        self.assertIsNotNone(self.page.query_selector('.brand-mark svg'), '상단 브랜드 아이콘')
+        self.assertIsNotNone(self.page.query_selector('img.brand-mark, svg.brand-mark, .brand-mark svg'), '상단 브랜드 아이콘')
         self.assertIsNotNone(self.page.query_selector('#btn-copy svg'), '복사 버튼 아이콘')
         self.assertIsNotNone(self.page.query_selector('#btn-settings svg'), '설정 버튼 아이콘')
         # 화면 제목도 아이콘 + 글자
@@ -5039,18 +5039,22 @@ class AppTest(unittest.TestCase):
         m = re.search(r"var VERSION = '(v\d+\.\d+\.\d+)';", sw)
         self.assertIsNotNone(m, 'sw.js에 VERSION이 있다')
         ver = m.group(1)
-        self.assertEqual(ver, 'v1.4.10')
+        self.assertEqual(ver, 'v1.4.12')
         self.assertIn("'js/sync.js'", sw)
         # 새 파일(동호수 타입표)도 오프라인 캐시에 들어간다
         self.assertIn("'js/maraepu-types.js'", sw)
+        # 아이콘도 오프라인 캐시에 들어간다
+        for icon in ('icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png',
+                     'icons/icon-maskable-512.png', 'icons/favicon.ico'):
+            self.assertIn(f"'{icon}'", sw)
         with open(os.path.join(ROOT, 'index.html'), encoding='utf-8') as f:
             html = f.read()
         for f_ in ('icons', 'maraepu-types', 'core', 'templates', 'sync', 'app'):
-            self.assertIn(f'js/{f_}.js?v=1.4.10', html)
-        self.assertIn('styles.css?v=1.4.10', html)
+            self.assertIn(f'js/{f_}.js?v=1.4.12', html)
+        self.assertIn('styles.css?v=1.4.12', html)
         gradle = open(os.path.join(ROOT, 'android/app/build.gradle'), encoding='utf-8').read()
-        self.assertIn('versionCode 25', gradle)
-        self.assertIn("versionName '1.4.10'", gradle)
+        self.assertIn('versionCode 27', gradle)
+        self.assertIn("versionName '1.4.12'", gradle)
 
     def test_t8_deal_combos_and_labels(self):
         # 계약 조건 안내 — 상단 구분(매매 가계약·약정·계약) + 12번과 같은 공통 매물칸

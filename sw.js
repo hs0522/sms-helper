@@ -2,7 +2,7 @@
    GitHub Pages 서브경로(/sms-helper/)에서도 동작하도록 모든 경로를 상대경로로 계산한다. */
 'use strict';
 
-var VERSION = 'v1.4.11';   // 웹 파일을 고칠 때마다 이 값을 올린다 — 폰에 새 버전이 바로 내려간다
+var VERSION = 'v1.4.12';   // 웹 파일을 고칠 때마다 이 값을 올린다 — 폰에 새 버전이 바로 내려간다
 var CACHE = 'sms-helper-' + VERSION;
 
 // 이 파일 위치(sw.js가 있는 폴더)를 기준으로 상대경로를 해석한다
@@ -24,6 +24,7 @@ var PRECACHE = [
   'icons/icon-180.png',
   'icons/icon-192.png',
   'icons/icon-512.png',
+  'icons/favicon.ico',
   'icons/icon-maskable-512.png'
 ].map(u);
 

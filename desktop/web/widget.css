@@ -39,8 +39,7 @@ html body {
   -webkit-app-region: drag;
   cursor: default;
 }
-.wbar-mark { display: inline-flex; color: var(--accent, #5B5FE9); }
-.wbar-mark svg { display: block; }
+.wbar-mark { display: block; width: 15px; height: 15px; object-fit: contain; flex: 0 0 auto; }
 .wbar-title {
   font-size: 12px;
   font-weight: 700;
